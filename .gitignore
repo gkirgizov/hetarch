@@ -30,3 +30,12 @@
 *.exe
 *.out
 *.app
+
+ARM-cmake-build-release
+cmake-build-release
+cmake-build-debug
+
+.idea
+
+disassembler.py
+
