@@ -65,6 +65,15 @@ enum __E_LLVM_IR_CONV {
     __E_LLVM_IR_CONV__to_pointer,
     __E_LLVM_IR_CONV__from_pointer,
 };
+
+struct STATISTICS {
+    static int RValueBaseNonGeneric_moveCtor;
+    static int RValueBaseNonGeneric_copyCtor;
+    static int RValueBaseNonGeneric_dtor;
+    static int ParamT_moveCtor;
+    static void dumpStats();
+};
+
 template<typename Ret>
 struct ICloneable {
     virtual Ret *clone() const = 0;
@@ -123,13 +132,27 @@ template<typename T> struct Param: public RValue<T> {
     Param(): RValue<T>(new EParam<T>("", IRDumper::nextIndStatic()), false) {}
     Param(const std::string &name): RValue<T>(new EParam<T>(name, 0), false) {}
     Param(const Param<T> &src): RValue<T>(src.e ? src.e->clone() : nullptr, false) {}
+    Param(Param<T> &&src): RValue<T>(src.e, false) { src.e = nullptr; STATISTICS::ParamT_moveCtor++; }
     std::string ToString() { return reinterpret_cast<EParam<T>* >(this->e)->GetVarname(); }
 };
 
 struct RValueBaseNonGeneric {
+    RValueBaseNonGeneric(const RValueBaseNonGeneric &src): e(src.e ? src.e->clone() : nullptr) {
+        STATISTICS::RValueBaseNonGeneric_copyCtor++;
+    }
+    RValueBaseNonGeneric(RValueBaseNonGeneric &&src): e(src.e) {
+        //std::cout << "move RValueBaseNonGeneric" << std::endl;
+        STATISTICS::RValueBaseNonGeneric_moveCtor++;
+        src.e = nullptr;
+    }
     virtual std::string ptrreg(IRDumper &dumper) const { return e ? e->ptrreg(dumper) : ""; }
     virtual std::string valreg(IRDumper &dumper) const { return e ? e->valreg(dumper) : ""; }
     virtual void toIR(IRDumper &dumper) const { if (e) { e->toIR(dumper); } }
+    virtual ~RValueBaseNonGeneric() {
+        //std::cout << "~RValueBaseNonGeneric" << std::endl;
+        STATISTICS::RValueBaseNonGeneric_dtor++;
+        if (e) { delete e; }
+    }
 protected:
     ENonGeneric *e;
     RValueBaseNonGeneric(ENonGeneric *_e, bool _unused): e(_e) {}
@@ -138,7 +161,9 @@ protected:
 template<typename T>
 struct RValueBase: public RValueBaseNonGeneric {
     RValueBase(): RValueBaseNonGeneric(nullptr, false) {}
-    RValueBase(const RValueBase<T> &src): RValueBaseNonGeneric(src.e ? src.e->clone() : nullptr, false) {}
+    RValueBase(const RValueBase<T> &src): RValueBaseNonGeneric(src) {}
+    RValueBase(RValueBase<T> &&src):
+            RValueBaseNonGeneric(std::forward<RValueBaseNonGeneric>(static_cast<RValueBaseNonGeneric&&>(src))) {}
 
     void __veryHiddenConstruction(const RValueBase &src) {
         e = src.e ? src.e->clone() : nullptr;
@@ -147,6 +172,9 @@ struct RValueBase: public RValueBaseNonGeneric {
 
     template<typename T2> RValue<T2> then(const RValueBase<T2> &next) const {
         return RValueFromE<T2>(new ESeq<T, T2>(*this, next));
+    }
+    template<typename T2> RValue<T2> then(RValueBase<T2> &&next) const {
+        return RValueFromE<T2>(new ESeq<T, T2>(*this, std::forward<RValueBase<T2> >(next)));
     }
 protected:
     RValueBase(ENonGeneric *_e): RValueBaseNonGeneric(_e, false) {}
@@ -188,18 +216,22 @@ template<typename T> struct RValue: public RValueBase<T> {
 
 template<> struct RValue<void>: public RValueBase<void> {
     RValue(const RValue<void> &src): RValueBase<void>(src) {}
+    RValue(RValue<void> &&src): RValueBase<void>(std::forward<RValueBase<void> >(src)) {}
     RValue(ENonGeneric *_e, bool _unused): RValueBase<void>(_e) {}
 };
 
 #define OPER(oper, t, tr, openc) \
     RValue<tr> operator oper (const RValueBase<t> &b) \
         { return RValueFromE<tr>(new EBin<t, tr>(*this, b, openc)); } \
+    RValue<tr> operator oper (RValueBase<t> &&b) \
+        { return RValueFromE<tr>(new EBin<t, tr>(*this, std::forward<RValueBase<t> >(b), openc)); } \
     RValue<tr> operator oper (t b) \
         { return RValueFromE<tr>(new EBin<t, tr>(*this, RValue<T>(b), openc)); }
 
 template<typename T> struct RValueNumBase: public RValueBase<T> {
     RValueNumBase(T x): RValueBase<T>(new EConst<T>(x)) {}
     RValueNumBase(const RValueNumBase<T> &src): RValueBase<T>(src) {}
+    RValueNumBase(RValueNumBase<T> &&src): RValueBase<T>(std::forward<RValueNumBase<T> >(src)) {}
 
     template<typename TR>
     RValue<TR> Cast() {
@@ -458,6 +490,7 @@ template<typename T> struct EAssign: public E<T> {
     LValue<T> lhs;
     RValueBase<T> rhs;
     EAssign(const LValue<T> &_lhs, const RValueBase<T> &_rhs): lhs(_lhs), rhs(_rhs) {}
+    EAssign(const LValue<T> &_lhs, RValueBase<T> &&_rhs): lhs(_lhs), rhs(std::forward<RValueBase<T> >(_rhs)) {}
     //EAssign(const EAssign<T> &src): lhs(src.lhs), rhs(src.rhs) {}
     PTRREG_OVERRIDE(dumper) { throw "unimplemented"; }
     VALREG_OVERRIDE(dumper) {
@@ -475,6 +508,8 @@ template<typename T> struct EAssign: public E<T> {
 template<typename T>
 struct LValue: public RValue<T> {
     LValue<T> Assign(const RValueBase<T> &val) { return LValueFromE<T>(new EAssign<T>(*this, val)); }
+    LValue<T> Assign(RValueBase<T> &&val) {
+        return LValueFromE<T>(new EAssign<T>(*this, std::forward<RValueBase<T> >(val))); }
     RValue<T*> operator &() const { return RValueFromE<T*>(new EGetAddr<T>(*this)); }
     RValue<T*> GetAddr() const { return RValueFromE<T*>(new EGetAddr<T>(*this)); }
     LValue(ENonGeneric *_e, bool _unused): RValue<T>(_e, false) {}
@@ -483,6 +518,8 @@ struct LValue: public RValue<T> {
 #define INTEGRAL_LVALUE(T) \
 template<> struct LValue<T>: public RValue<T> { \
     LValue<T> Assign(const RValueBase<T> &val) { return LValueFromE<T>(new EAssign<T>(*this, val)); } \
+    LValue<T> Assign(RValueBase<T> &&val) { \
+        return LValueFromE<T>(new EAssign<T>(*this, std::forward<RValueBase<T> >(val))); } \
     LValue<T> Assign(T val) { return LValueFromE<T>(new EAssign<T>(*this, RValue<T>(val))); } \
     RValue<T*> operator &() const { return RValueFromE<T*>(new EGetAddr<T>(*this)); } \
     RValue<T*> GetAddr() const { return RValueFromE<T*>(new EGetAddr<T>(*this)); } \
@@ -749,6 +786,8 @@ template<typename T, typename TR> struct EBin: public E<TR> {
     RValueBase<T> lhs; RValueBase<T> rhs;
     Operations op;
     EBin(const RValueBase<T> &a, const RValueBase<T> &b, Operations _op): lhs(a), rhs(b), op(_op) {}
+    EBin(const RValueBase<T> &a, RValueBase<T> &&b, Operations _op):
+            lhs(a), rhs(std::forward<RValueBase<T> >(b)), op(_op) {}
     TOIR_OVERRIDE(dumper) {
         dumper.appendln("toIR(EBin)");
     }
@@ -876,6 +915,7 @@ template<typename R, typename T>
 struct ESeq: E<T> {
     RValueBase<R> lhs; RValueBase<T> rhs;
     ESeq(const RValueBase<R> &a, const RValueBase<T> &b): lhs(a), rhs(b) {}
+    ESeq(const RValueBase<R> &a, RValueBase<T> &&b): lhs(a), rhs(std::forward<RValueBase<T> >(b)) {}
     PTRREG_OVERRIDE(dumper) { throw "unimplemented"; }
     TOIR_OVERRIDE(dumper) {
         lhs.toIR(dumper);
@@ -896,12 +936,28 @@ template <typename T, typename ...TS> struct select_last<T, TS...>{
     using type = typename select_last<TS...>::type;
 };
 
+/*template<typename T, typename T2>
+T2 Seq(T &&a, T2 &&b) { return a.then(std::forward<T2>(b)); }
+
+template<typename T, typename T2, typename ...TS>
+T2 Seq(T &&a, T2 &&b, TS&& ... tail) {
+    return a.then(Seq2(std::forward<T2>(b), std::forward<TS>(tail)...));
+}*/
+
 template<typename T, typename T2>
 RValue<T2> Seq(const RValueBase<T> &a, const RValueBase<T2> &b) { return a.then(b); }
 
 template<typename T, typename T2, typename ...TS>
 RValue<typename select_last<TS...>::type> Seq(const RValueBase<T> &a, const RValueBase<T2> &b, const RValueBase<TS>& ... tail) {
-    return a.then(Seq(b, tail...));
+    return a.then(Seq(b, (tail)...));
+}
+
+template<typename T, typename T2>
+RValue<void> Seq2(T &&a, T2 &&b) { return a.then(std::forward<T2>(b)); }
+
+template<typename T, typename T2, typename ...TS>
+RValue<void> Seq2(T &&a, T2 &&b, TS&& ... tail) {
+    return a.then(Seq2(std::forward<T2>(b), std::forward<TS>(tail)...));
 }
 
 template<typename T>
@@ -993,11 +1049,14 @@ struct EIf: E<T> {
     RValueBase<T> thenPart;
     RValueBase<T> elsePart;
 
-    EIf(const RValueBase<bool> &_cond, const RValueBase<T> &_then):
-            cond(_cond), thenPart(_then) {}
+    EIf(const RValueBase<bool> &_cond, RValueBase<T> &&_then):
+            cond(_cond),
+            thenPart(std::forward<RValueBase<T> >(_then)) {}
 
-    EIf(const RValueBase<bool> &_cond, const RValueBase<T> &_then, const RValueBase<T> &_else):
-            cond(_cond), thenPart(_then), elsePart(_else) {}
+    EIf(const RValueBase<bool> &_cond, RValueBase<T> &&_then, RValueBase<T> &&_else):
+            cond(_cond),
+            thenPart(std::forward<RValueBase<T> >(_then)),
+            elsePart(std::forward<RValueBase<T> >(_else)) {}
 
     EIf(const EIf<T> &src):
             cond(src.cond), thenPart(src.thenPart), elsePart(src.elsePart) {}
@@ -1062,13 +1121,14 @@ struct EIf: E<T> {
 };
 
 template<typename T>
-RValue<T> If(const RValueBase<bool> &cond, const RValueBase<T> &_then, const RValueBase<T> &_else) {
-    return RValueFromE<T>(new EIf<T>(cond, _then, _else));
+RValue<T> If(const RValueBase<bool> &cond, RValueBase<T> &&_then, RValueBase<T> &&_else) {
+    return RValueFromE<T>(
+            new EIf<T>(cond, std::forward<RValueBase<T> >(_then), std::forward<RValueBase<T> >(_else)));
 }
 
 template<typename T>
-RValue<T> If(const RValueBase<bool> &cond, const RValueBase<T> &_then) {
-    return RValueFromE<T>(new EIf<T>(cond, _then));
+RValue<T> If(const RValueBase<bool> &cond, RValueBase<T> &&_then) {
+    return RValueFromE<T>(new EIf<T>(cond, std::forward<RValueBase<T> >(_then)));
 }
 
 template<std::size_t I = 0, typename... Tp>
@@ -1498,6 +1558,10 @@ public:
         compileIRToBinary(codeGen, memMgr);
     }
     template<typename ... Ts>
+    RValue<Ret> operator()(const RValueBase<Ts> & ... args) {
+        return Call<Ts...>(args...);
+    }
+    template<typename ... Ts>
     RValue<Ret> Call(const RValueBase<Ts> & ... args) {
         E<Ret> *e = nullptr;
         if (this->IsInline()) {
@@ -1523,8 +1587,8 @@ return Function<AddrT, T>(_name, true, std::move(_params), _body);
 }
 
 template<typename AddrT, typename T>
-Function<AddrT, T> MakeFunction(const std::string &_name, FunctionParams &&_params, const RValue<T> &_body) {
-    return Function<AddrT, T>(_name, false, std::move(_params), _body);
+Function<AddrT, T> MakeFunction(const std::string &_name, FunctionParams &&_params, RValue<T> &&_body) {
+    return Function<AddrT, T>(_name, false, std::move(_params), std::forward<RValue<T> >(_body));
 }
 
 template<typename AddrT, typename T>

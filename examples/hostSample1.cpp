@@ -81,6 +81,40 @@ void testBubbleSortPoints(mem::MemMgr<Platform> &memMgr, cg::ICodeGen &codeGen,
     funcs.logger.dumpRecords(conn);
 }
 
+template<typename T> void assertEqual(const std::string &name, T expected, T actual) {
+    if (expected == actual) {
+        std::cout << "OK: " << name << std::endl;
+    }
+    else {
+        std::cout << "FAIL: " << name << ", expected:" << expected << ", actual: " << actual << std::endl;
+    }
+}
+
+void simpleTests(mem::MemMgr<Platform> &memMgr, cg::ICodeGen &codeGen, TCPTestConnection &conn) {
+    auto execute = [&memMgr, &codeGen, &conn](Function<Platform, void> &fn){
+        fn.compile(codeGen, memMgr);
+        fn.Send(conn);
+        conn.Call(fn.Addr());
+    };
+
+    Global<Platform, uint16_t> x(memMgr), y(memMgr);
+    auto tt1 = MakeFunction<Platform, uint16_t>("tt1", Params(), x.Assign(Const<uint16_t>(6)));
+
+    x.Set(conn, 0x27AB); y.Set(conn, 0x1B34);
+    auto test1 = MakeFunction<Platform>("test1", Params(), Seq(x.Assign(x & y), Void()));
+    execute(test1);
+    assertEqual("test1", (uint16_t)(0x27AB & 0x1B34), x.Get<uint16_t>(conn));
+
+    x.Set(conn, 300);
+    auto test2 = MakeFunction<Platform>("test1", Params(),
+            While(x > 0, Seq(
+                x.Assign(x - 1),
+                y.Assign(y + 1)
+            )));
+    execute(test2);
+    assertEqual("test2", (uint16_t)(0x1B34 + 300), y.Get(conn));
+}
+
 int main(int argc, char **argv) {
     log("Start...");
     log("Creating connection...");
@@ -107,7 +141,13 @@ int main(int argc, char **argv) {
 
     testBubbleSortPoints(memMgr, *codeGen, *conn, funcs);
 
+    simpleTests(memMgr, *codeGen, *conn);
+
     conn->Close();
+
+    STATISTICS::dumpStats();
+
+    log("Finishing...");
 
     return 0;
 }

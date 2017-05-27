@@ -31,7 +31,7 @@ class BasicFuncs {
     }
 
     Function<Platform, uint16_t> __getFixedValue() {
-        return MakeFunction<Platform>("getFixedValue", Params(), sum2.Call(RValue<uint16_t>(17), RValue<uint16_t>(3)));
+        return MakeFunction<Platform>("getFixedValue", Params(), sum2(RValue<uint16_t>(17), RValue<uint16_t>(3)));
     }
 
     Function<Platform, uint16_t> __initArray() {
@@ -48,7 +48,7 @@ class BasicFuncs {
         Local<uint16_t> tmp("tmp"), i("i"), j("j");
         return MakeFunction<Platform>("bubbleSort", Params(), Seq(
             // TODO replace Call with operator()
-            logger.logAppend.Call(logger.message("bubbleSort start")),
+            logger.logAppend(logger.message("bubbleSort start")),
             For(i.Assign(0), i < 5, i.Assign(i + 1),
                 For(j.Assign(0), j < 4, j.Assign(j + 1),
                     If(elems[j] > elems[j + 1], Seq(
@@ -58,7 +58,7 @@ class BasicFuncs {
                     ))
                 )
             ),
-            logger.logAppend.Call(logger.message("bubbleSort finished"))
+            logger.logAppend(logger.message("bubbleSort finished"))
         ));
     }
 
@@ -67,17 +67,17 @@ class BasicFuncs {
         Local<Point2D> tmp("tmp");
         auto e = tmp.Assign(points2D[j]);
         return MakeFunction<Platform>("bubbleSortPoints", Params(), Seq(
-                logger.logAppend.Call(logger.message("bubbleSortPoints start")),
+                logger.logAppend(logger.message("bubbleSortPoints start")),
                 For(i.Assign(0), i < 5, i.Assign(i + 1),
                     For(j.Assign(0), j < 4, j.Assign(j + 1),
                         If(Fields(points2D[j]).x > Fields(points2D[j + 1]).x, Seq(
-                                tmp.Assign(points2D[j]),
-                                points2D[j].Assign(points2D[j + 1]),
-                                points2D[j + 1].Assign(tmp)
+                            tmp.Assign(points2D[j]),
+                            points2D[j].Assign(points2D[j + 1]),
+                            points2D[j + 1].Assign(tmp)
                         ))
                     )
                 ),
-                logger.logAppend.Call(logger.message("bubbleSortPoints finished"))
+                logger.logAppend(logger.message("bubbleSortPoints finished"))
         ));
     }
 
