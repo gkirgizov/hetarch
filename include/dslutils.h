@@ -96,6 +96,20 @@ template<typename T> std::string IRTypename() {
     return irtypename_t<T>::value();
 }
 
+class FunctionAddrNotFixedException: public std::exception {
+    virtual const char* what() const throw()
+    {
+        return "FunctionAddrNotFixedException";
+    }
+};
+
+inline std::string trimTrailingComma(const std::string &src) {
+    auto s = src;
+    while (s.length() > 0 && *s.rbegin() == ' ') { s = s.substr(0, s.length() - 1); }
+    while (s.length() > 0 && *s.rbegin() == ',') { s = s.substr(0, s.length() - 1); }
+    return s;
+}
+
 }
 }
 

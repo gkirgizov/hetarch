@@ -6,7 +6,7 @@
 #include <sys/mman.h>
 #include <malloc.h>
 
-#include "../include/dsl.h"
+#include "../include/dsl/base.h"
 #include "../include/MemMgr.h"
 
 #include "../include/cg.h"

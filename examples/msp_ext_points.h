@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <iostream>
 
-#include <dsl.h>
+#include <dsl/base.h>
 #include <conn.h>
 #include "sensor.h"
 
@@ -15,6 +15,15 @@ using namespace hetarch::dsl;
 
 template<typename Platform, unsigned LoggerLength>
 class MspExtensionPoints {
+    void div() {
+        int x = 345, y = 23, t, shift = 1, res = 0;
+        while (x > y) {
+            t = y;
+            while (x >= (t << 1)) { t <<= 1; shift <<= 1; }
+            x -= t;
+            res |= shift;
+        }
+    }
     Function<Platform, void> __receiveHook() {
         return MakeFunction<Platform, void>("receiveHook", Params(), Seq(
                 logger.logAppend.Call(logger.message("In receiveHook")),
@@ -31,6 +40,7 @@ class MspExtensionPoints {
     Function<Platform, void> __mainLoopHook() {
         return MakeFunction<Platform, void>("mainLoopHook", Params(), Seq(
             logger.logAppend.Call(logger.message("In mainLoopHook")),
+            sensor.conversationJAx(),
             If(SingleCallFunction != 0, Seq(
 
 
@@ -39,7 +49,9 @@ class MspExtensionPoints {
                 static_cast<RValueNumBase<uint16_t>*>(std::addressof(SingleCallFunction))->Cast<uint16_t*>().Call<void>(),
 
                 SingleCallFunction.Assign(0), Void()
-            )), Void()
+            )),
+
+            Void()
         ));
     }
     Function<Platform, void> __transmitHook() {
@@ -61,6 +73,7 @@ class MspExtensionPoints {
     }
 public:
     Logger<Platform, LoggerLength> &logger;
+    Sensor<Platform, LoggerLength> &sensor;
 
     Global<Platform, uint16_t> mainLoopHookPtr;
     Global<Platform, uint16_t> receiveHookPtr;
@@ -79,8 +92,9 @@ public:
                        cg::ICodeGen &codeGen,
                        conn::IConnection<Platform> &conn,
                        Logger<Platform, LoggerLength> &_logger,
-                       Sensor<Platform, LoggerLength> &sensor):
+                       Sensor<Platform, LoggerLength> &_sensor):
             logger(_logger),
+            sensor(_sensor),
             mainLoopHookPtr(0x00002f34),
             receiveHookPtr(0x00002f36),
             transmitHookPtr(0x00002f38),
@@ -112,6 +126,24 @@ public:
         mainLoopHookPtr.Set(conn, mainLoopHook.Addr());
         receiveHookPtr.Set(conn, receiveHook.Addr());
         transmitHookPtr.Set(conn, transmitHook.Addr());
+    }
+
+    void ScheduleRegular(const RValue<void> &action) {
+        return MakeFunction<Platform, void>("mainLoopHook", Params(), Seq(
+                logger.logAppend.Call(logger.message("In mainLoopHook")),
+                sensor.conversationJAx(),
+                If(SingleCallFunction != 0, Seq(
+
+
+                        // GCC !!! error: expected primary-expression before ‘*’ token
+                        //   SingleCallFunction.Cast<uint16_t*>().Call<void>()
+                        static_cast<RValueNumBase<uint16_t>*>(std::addressof(SingleCallFunction))->Cast<uint16_t*>().Call<void>(),
+
+                        SingleCallFunction.Assign(0), Void()
+                )),
+
+                Void()
+        ));
     }
 };
 

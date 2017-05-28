@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#include "../include/dsl.h"
+#include "dsl/base.h"
 #include "../include/cg.h"
 #include "../include/MemMgr.h"
 

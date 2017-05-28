@@ -6,11 +6,12 @@
 #include <random>
 
 #include "../include/TCPTestConn.h"
-#include "../include/dsl.h"
+#include "dsl/base.h"
 
 #include "basic.h"
 #include "logger.h"
 #include "example_utils.h"
+#include "arithm.h"
 
 using namespace hetarch;
 using namespace hetarch::dsl;
@@ -113,6 +114,37 @@ void simpleTests(mem::MemMgr<Platform> &memMgr, cg::ICodeGen &codeGen, TCPTestCo
             )));
     execute(test2);
     assertEqual("test2", (uint16_t)(0x1B34 + 300), y.Get(conn));
+
+    x.Set(conn, 2); y.Set(conn, 2);
+    auto test3 = MakeFunction<Platform>("test1", Params(), Seq(
+        If(x > 0 && y > 0, x.Assign(x / y), x.Assign(x - y)), Void()
+    ));
+    execute(test3);
+    assertEqual("test3", (uint16_t)(2 / 2), x.Get(conn));
+
+    Arithmetics<Platform> arithm(memMgr, codeGen, conn);
+
+    Global<Platform, uint32_t> x32(memMgr), y32(memMgr);
+    x.Set(conn, 13921); y.Set(conn, 100);
+    x32.Set(conn, 820); y32.Set(conn, 1312);
+    auto test4 = MakeFunction<Platform>("test4", Params(), Seq(
+        x.Assign(arithm.div16(x, y)),
+        y.Assign(arithm.mul16(x, Const<uint16_t>(98))),
+        x32.Assign(arithm.mul32(x32, y32)),
+        y32.Assign(arithm.div32(x32, Const<uint32_t>(234))), Void()
+    ));
+    execute(test4);
+    assertEqual("test4:1", (uint16_t)(13921 / 100), x.Get(conn));
+    assertEqual("test4:2", (uint16_t)(13921 / 100 * 98), y.Get(conn));
+    assertEqual("test4:3", (uint32_t)(820 * 1312), x32.Get(conn));
+    assertEqual("test4:4", (uint32_t)(820 * 1312 / 234), y32.Get(conn));
+
+    x.Set(conn, 4); y.Set(conn, 8);
+    auto test5 = MakeFunction<Platform>("test5", Params(), Seq(
+            x32.Assign((x * y).Cast<uint32_t>()), Void()
+    ));
+    execute(test5);
+    assertEqual("test5", (uint32_t)(4 * 8), x32.Get(conn));
 }
 
 int main(int argc, char **argv) {
@@ -128,7 +160,7 @@ int main(int argc, char **argv) {
 
     auto codeBufAddr = conn->GetBuff(0);
 
-    memMgr.DefineArea(codeBufAddr, codeBufAddr + 1000, mem::MemClass::ReadWrite);
+    memMgr.DefineArea(codeBufAddr, codeBufAddr + 2000, mem::MemClass::ReadWrite);
     log("codeGen and memMgr initialized...");
 
     Logger<Platform, 50> logger(memMgr, *codeGen, *conn);

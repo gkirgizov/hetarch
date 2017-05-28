@@ -1,7 +1,7 @@
 #ifndef HETARCH_EXAMPLES_LOGGER_H
 #define HETARCH_EXAMPLES_LOGGER_H 1
 
-#include "../include/dsl.h"
+#include "dsl.h"
 #include "../include/conn.h"
 #include "example_utils.h"
 

@@ -4,7 +4,7 @@
 #include <unistd.h>
 
 #include "../include/I2CConnection.h"
-#include "../include/dsl.h"
+#include "dsl/base.h"
 
 #include "basic.h"
 #include "example_utils.h"

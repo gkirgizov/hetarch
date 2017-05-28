@@ -6,10 +6,12 @@
 #include <random>
 
 #include "../include/I2CConnection.h"
-#include "../include/dsl.h"
+#include "dsl/base.h"
 
 #include "basic.h"
 #include "sensor.h"
+#include "msp_utils.h"
+#include "arithm.h"
 #include "msp_ext_points.h"
 
 using namespace hetarch;

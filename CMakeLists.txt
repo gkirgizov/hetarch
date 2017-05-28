@@ -53,7 +53,7 @@ llvm_map_components_to_libnames(llvm_libs1 support core
 target_link_libraries(hetarchcg ${llvm_libs1})
 
 
-add_executable(gensample1 examples/gensample1.cpp lib/tcpTestConn.cpp lib/IRDumper.cpp lib/dsl.cpp)
+add_executable(gensample1 examples/gensample1.cpp lib/tcpTestConn.cpp lib/IRDumper.cpp lib/base.cpp)
 target_link_libraries(gensample1 hetarchcg)
 
 
@@ -62,12 +62,12 @@ target_link_libraries(triksample1 hetarchcg)
 
 
 add_executable(triksample2 examples/triksample2.cpp
-        lib/trikMspI2c.cpp lib/IRDumper.cpp lib/dsl.cpp examples/msp_utils.cpp)
+        lib/trikMspI2c.cpp lib/IRDumper.cpp lib/base.cpp examples/msp_utils.cpp)
 target_link_libraries(triksample2 hetarchcg)
 target_include_directories(triksample2 PUBLIC include)
 
 add_executable(trikSorts1 examples/trikSorts1.cpp
-        lib/trikMspI2c.cpp lib/IRDumper.cpp lib/dsl.cpp examples/msp_utils.cpp ${CMAKE_BINARY_DIR}/geninc/memregmap.cpp)
+        lib/trikMspI2c.cpp lib/IRDumper.cpp lib/base.cpp examples/msp_utils.cpp ${CMAKE_BINARY_DIR}/geninc/memregmap.cpp)
 target_link_libraries(trikSorts1 hetarchcg)
 target_include_directories(trikSorts1 PUBLIC ${CMAKE_BINARY_DIR}/geninc/ include)
 
@@ -77,7 +77,7 @@ target_include_directories(motorsSample PUBLIC ${CMAKE_BINARY_DIR}/geninc/ inclu
 
 
 add_executable(hostSample1 examples/hostSample1.cpp
-         lib/IRDumper.cpp lib/dsl.cpp lib/tcpTestConn.cpp)
+         lib/IRDumper.cpp lib/base.cpp lib/tcpTestConn.cpp)
 target_link_libraries(hostSample1 hetarchcg)
 target_include_directories(hostSample1 PUBLIC include)
 

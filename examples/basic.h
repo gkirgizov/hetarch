@@ -1,7 +1,7 @@
 #ifndef HETARCH_EXAMPLES_BASIC_H
 #define HETARCH_EXAMPLES_BASIC_H 1
 
-#include "../include/dsl.h"
+#include "dsl/base.h"
 #include "logger.h"
 
 using namespace hetarch;
@@ -49,8 +49,8 @@ class BasicFuncs {
         return MakeFunction<Platform>("bubbleSort", Params(), Seq(
             // TODO replace Call with operator()
             logger.logAppend(logger.message("bubbleSort start")),
-            For(i.Assign(0), i < 5, i.Assign(i + 1),
-                For(j.Assign(0), j < 4, j.Assign(j + 1),
+            For(i.Assign(0), i < 5, ++i,
+                For(j.Assign(0), j < 4, ++j,
                     If(elems[j] > elems[j + 1], Seq(
                         tmp.Assign(elems[j]),
                         elems[j].Assign(elems[j + 1]),
@@ -68,8 +68,8 @@ class BasicFuncs {
         auto e = tmp.Assign(points2D[j]);
         return MakeFunction<Platform>("bubbleSortPoints", Params(), Seq(
                 logger.logAppend(logger.message("bubbleSortPoints start")),
-                For(i.Assign(0), i < 5, i.Assign(i + 1),
-                    For(j.Assign(0), j < 4, j.Assign(j + 1),
+                For(i.Assign(0), i < 5, ++i,
+                    For(j.Assign(0), j < 4, ++j,
                         If(Fields(points2D[j]).x > Fields(points2D[j + 1]).x, Seq(
                             tmp.Assign(points2D[j]),
                             points2D[j].Assign(points2D[j + 1]),
@@ -85,7 +85,7 @@ class BasicFuncs {
         Local<uint16_t> x("a"), i("i");
         return MakeFunction<Platform>("getStaticSum", Params(), Seq(
                 x.Assign(0),
-                For(i.Assign(0), i < (uint16_t)7, i.Assign(i + (uint16_t)1), Seq(
+                For(i.Assign(0), i < (uint16_t)7, ++i, Seq(
                         elems[i].Assign(i + (uint16_t)1),
                         x.Assign(x + elems[i])
                 )),
