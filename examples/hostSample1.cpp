@@ -91,6 +91,57 @@ template<typename T> void assertEqual(const std::string &name, T expected, T act
     }
 }
 
+void compositionFuncTest(mem::MemMgr<Platform> &memMgr, cg::ICodeGen &codeGen, TCPTestConnection &conn) {
+    Param<uint32_t> x1;
+    auto sqr = MakeFunction<Platform, uint32_t>("sqr", Params(x1),
+            x1 * x1
+    );
+
+    Local<uint32_t> a1, a2;
+    Param<uint32_t> x2;
+    auto sixth = MakeFunction<Platform, uint32_t>("sixth", Params(x2), Seq(
+            a1.Assign(sqr(x2)),
+            a2.Assign(sqr(a1)),
+            a1 * a2
+    ));
+
+    Param<uint32_t> x3;
+    auto ident = MakeFunction<Platform, uint32_t>("ident", Params(x3),
+            sqr(x3)
+    );
+
+    log(sqr.getFunctionModuleIR());
+    sqr.compile(codeGen, memMgr);
+    sqr.Send(conn);
+//    dumpBufferForDisasm(sqr.Binary(), std::cout);
+
+    log(sixth.getFunctionModuleIR());
+    sixth.compile(codeGen, memMgr);
+    sixth.Send(conn);
+//    dumpBufferForDisasm(sixth.Binary(), std::cout);
+
+    log(ident.getFunctionModuleIR());
+    ident.compile(codeGen, memMgr);
+    ident.Send(conn);
+
+    Global<Platform, uint32_t> x(memMgr), y(memMgr);
+    auto testf = MakeFunction<Platform>("testf", Params(),
+         y.Assign(ident(x))
+    );
+
+    log(testf.getFunctionModuleIR());
+    testf.compile(codeGen, memMgr);
+    testf.Send(conn);
+//    dumpBufferForDisasm(testf.Binary(), std::cout);
+
+    // do I need to send the 'sqr' and 'sixth' funcs also?
+    x.Set(conn, 2);
+    conn.Call(testf.Addr());
+    std::cout << "result: " << y.Get(conn) << std::endl << std::endl;
+//    assertEqual("test composition of funcs", (uint32_t)(64), y.Get(conn));
+
+}
+
 void simpleTests(mem::MemMgr<Platform> &memMgr, cg::ICodeGen &codeGen, TCPTestConnection &conn) {
     auto execute = [&memMgr, &codeGen, &conn](Function<Platform, void> &fn){
         fn.compile(codeGen, memMgr);
@@ -174,6 +225,10 @@ int main(int argc, char **argv) {
     testBubbleSortPoints(memMgr, *codeGen, *conn, funcs);
 
     simpleTests(memMgr, *codeGen, *conn);
+
+    std::cout << std::endl
+              << "ATTENTION! testing composition of function! watch generated IR carefully!" << std::endl << std::endl;
+    compositionFuncTest(memMgr, *codeGen, *conn);
 
     conn->Close();
 
