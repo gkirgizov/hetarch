@@ -7,17 +7,19 @@
 
 
 #include "llvm/IR/Module.h"
+//#include "llvm/ADT/StringRef.h"
 
 #include "llvm/Linker/Linker.h"
 
 
 // For setting target
+//#include "llvm/ADT/Triple.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/CodeGen/CommandFlags.h"
 
 // For passes
-#include "llvm/IR/PassManager.h
+#include "llvm/IR/PassManager.h"
 
 // For compilation
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
@@ -25,11 +27,11 @@
 
 
 
-#include "supportingClasses.h
-#include "MemoryManager.h"
+#include "supportingClasses.h"
+//#include "MemoryManager.h"
 
 // temporary, mock
-#include "IDSLCallable.h"
+//#include "IDSLCallable.h"
 
 
 namespace hetarch {
@@ -49,18 +51,16 @@ public:
     explicit CodeGen(const std::string &targetName);
 
     template<typename RetT, typename... Args>
-    ObjCode<RetT, Args...> compile(const IRModule<RetT, Args...> &irModule);
+    ObjCode<RetT, Args...> compile(IRModule<RetT, Args...> &irModule);
 
 
-    template<typename RetT, typename... Args>
-    static IRModule<RetT, Args...> generateIR(DSLFunction<RetT, Args...> dslFunction);
+//    template<typename RetT, typename... Args>
+//    static IRModule<RetT, Args...> generateIR(DSLFunction<RetT, Args...> dslFunction);
 
-    // todo: change signature to accepting base class
-    template<typename RetT, typename... Args>
-    static bool link(IRModule<RetT, Args...> &dependent);
+    static bool link(IIRModule &dependent);
 
-    template<typename RetT, typename... Args>
-    static bool link(IRModule<RetT, Args...> &dest, std::vector<IIRModule> &sources);
+    static bool link(IIRModule &dest, std::vector<IIRModule> &sources);
+
     CodeGen(const CodeGen &) = delete;
     CodeGen &operator=(const CodeGen &) = delete;
 
@@ -71,27 +71,32 @@ private:
 };
 
 CodeGen::CodeGen(const std::string &targetName)
-: targetName(llvm::Triple::normalize(targetName))
+: targetName(llvm::Triple::normalize(llvm::StringRef(targetName)))
 //, target(std::unique_ptr(llvm::TargetRegistry::lookupTarget(this->targetName, targetLookupError)))
 {
     // Initialise targets
     // todo: optimise somehow? (don't init ALL targets - check how expensive it is)
-    InitializeAllTargetInfos();
-    InitializeAllTargetMCs();
-    InitializeAllAsmPrinters();
-    InitializeAllAsmParsers();
+//    InitializeAllTargetInfos();
+//    InitializeAllTargetMCs();
+//    InitializeAllAsmPrinters();
+//    InitializeAllAsmParsers();
+
+    LLVMInitializeX86TargetInfo();
+    LLVMInitializeX86Target();
+    LLVMInitializeX86TargetMC();
+    LLVMInitializeX86AsmPrinter();
 
     // Initialize default, common passes
-    auto passRegistry = llvm::PassRegistry::getPassRegistry();
-    initializeCore(*passRegistry);
-    initializeCodeGen(*passRegistry);
+//    auto passRegistry = llvm::PassRegistry::getPassRegistry();
+//    initializeCore(*passRegistry);
+//    initializeCodeGen(*passRegistry);
 
 }
 
 
 
 template<typename RetT, typename... Args>
-ObjCode<RetT, Args...> CodeGen::compile(const IRModule<RetT, Args...> &irModule) {
+ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) {
 
     std::string targetLookupError;
     auto target = llvm::TargetRegistry::lookupTarget(this->targetName, targetLookupError);
@@ -126,7 +131,7 @@ ObjCode<RetT, Args...> CodeGen::compile(const IRModule<RetT, Args...> &irModule)
             {
                 // Set Module-specific passes through PassManager
                 // todo: provide debug parameter to constructor
-                auto passManager = llvm::PassManager();
+                auto passManager = llvm::PassManager<llvm::Module>();
             }
 
             auto compiler = llvm::orc::SimpleCompiler(*targetMachine);
@@ -135,9 +140,10 @@ ObjCode<RetT, Args...> CodeGen::compile(const IRModule<RetT, Args...> &irModule)
 //            object::ELFObjectFile
 
             if (objFile.getBinary()) {
-                ; // continue something
+                ;
+                // todo: test: there, IRModule's mainSymbol should resolvable (i.e. the same) in objFile
 
-//                return ObjCode(objFile);
+                return ObjCode<RetT, Args...>(std::move(objFile), irModule.symbol);
             } else {
                 // todo: handle compilation error
             }
@@ -149,12 +155,16 @@ ObjCode<RetT, Args...> CodeGen::compile(const IRModule<RetT, Args...> &irModule)
     }
 }
 
+// test: linking pack
+// test: compilation pack
+//  subtests: different targets
+//  subtests: llvm fuzzer?
+// test: symbols pack
 
 // todo: traverse the dependent modules in __some sane order__ for linking
 //  generally, it is DAG, but it should be checked (look for cycles while traversing)
 bool CodeGen::linkInModules(llvm::Linker &linker, std::vector<IIRModule> &dependencies) {
     for (IIRModule &src : dependencies) {
-
         // currently - DFS without checks for loops
         // note: Passing OverrideSymbols (in flags) as true will have symbols from Src shadow those in the Dest.
         if (bool isSuccess = !linker.linkInModule(std::move(src.m))) {
@@ -164,17 +174,16 @@ bool CodeGen::linkInModules(llvm::Linker &linker, std::vector<IIRModule> &depend
             return isSuccess;
         }
     }
+    return true;  // dependencies is empty; assume link is successfull
 }
 
-template<typename RetT, typename... Args>
-bool CodeGen::link(IRModule<RetT, Args...> &dependent) {
+bool CodeGen::link(IIRModule &dependent) {
     llvm::Linker linker(*dependent.m);
 
     return CodeGen::linkInModules(linker, dependent.m_dependencies);
 }
 
-template<typename RetT, typename... Args>
-bool CodeGen::link(IRModule<RetT, Args...> &dest, std::vector<IIRModule> &sources) {
+bool CodeGen::link(IIRModule &dest, std::vector<IIRModule> &sources) {
     llvm::Linker linker(*dest.m);
 
     if (bool isSuccess = !CodeGen::linkInModules(linker, dest.m_dependencies)) {
