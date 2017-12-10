@@ -11,9 +11,9 @@ class ISignature {
 
 public:
     explicit ISignature(const std::string &symbolName) :
-            m_symbol(symbolName) {}
+            symbol(symbolName) {}
 
-    const std::string m_symbol;
+    const std::string symbol;
 
     const RetT (*m_signature)(Args...) = nullptr; // only types matter
 };
@@ -28,8 +28,13 @@ class ObjCode : public ISignature<RetT, Args...> {
     m_payload_t m_payload;
 
 public:
-    ObjCode(m_payload_t &payload, const std::string &mainSymbol) :
-            m_payload(std::move(payload)), ISignature(mainSymbol) {};
+    ObjCode(m_payload_t payload, const std::string &mainSymbol)
+            : ISignature<RetT, Args...>{mainSymbol}, m_payload{std::move(payload)}
+    {};
+
+    // Move-only type
+    ObjCode(ObjCode&&) noexcept = default;
+    ObjCode &operator=(ObjCode &&) noexcept = default;
 
 };
 
@@ -43,19 +48,14 @@ class IIRModule {
     std::vector<IIRModule> m_dependencies;
 
 public:
-    explicit IIRModule(std::unique_ptr<llvm::Module> m)
-    : m{std::move(m)}, m_dependencies{}
-    {}
-
-//    virtual ~IIRModule() {};
+    explicit IIRModule(std::unique_ptr<llvm::Module> m) : m{std::move(m)} {}
+    virtual ~IIRModule() = default;
 
     // Move-only type
-    IIRModule(const IIRModule &) = delete;
-    IIRModule& operator=(const IIRModule &) = delete;
+    IIRModule(IIRModule &&) noexcept = default;
+    IIRModule &operator=(IIRModule &&) noexcept = default;
 
-    IIRModule(IIRModule &&) = default;
-    IIRModule& operator=(IIRModule &&) = default;
-
+    explicit operator bool() const { return bool(m); }
 };
 
 
@@ -64,7 +64,7 @@ class IRModule : public IIRModule, public ISignature<RetT, Args...> {
 
 public:
     IRModule(std::unique_ptr<llvm::Module> m, const std::string &mainSymbol)
-    : IIRModule{std::move(m)}, ISignature{mainSymbol}
+    : IIRModule{std::move(m)}, ISignature<RetT, Args...>{mainSymbol}
     {};
 
 };
@@ -125,17 +125,6 @@ public:
 ////        return m_signatureHolder.
 ////    }
 //};
-
-
-class Widget {
-    llvm::Module m1;
-    llvm::Module m2;
-    llvm::Module m3;
-public:
-    Widget(llvm::Module m1, llvm::Module &m2, llvm::Module &&m3)
-            : m1(m1), m2(m2), m3(m3)
-    {}
-};
 
 
 }
