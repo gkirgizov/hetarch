@@ -10,16 +10,16 @@ public:
 };
 
 
+template<typename RetT, typename... Args>
 class IDSLCallable {
 
 public:
-    template<typename RetT, typename... Args>
-    virtual IDSLVariable<RetT> call(IDSLVariable<Args...>... args) = 0;
+    virtual IDSLVariable<RetT> call(IDSLVariable<Args>... args) = 0;
 };
 
 
 template<typename RetT, typename... Args>
-class DSLFunction : public IDSLCallable {
+class DSLFunction : public IDSLCallable<RetT, Args...> {
 
 public:
     IDSLVariable<RetT> call(IDSLVariable<Args>... args) override;
