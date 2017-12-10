@@ -1,7 +1,7 @@
-cmake_minimum_required (VERSION 2.8.11)
+cmake_minimum_required (VERSION 3.2)
 project(hetarch-proj)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 if ("$ENV{ARCH}" STREQUAL "arm")
     # BUILDING FOR TRIK
@@ -21,9 +21,11 @@ else()
     message(STATUS "BUILDING FOR LOCAL TESTING ENV($ENV{ARCH}) AddrT:${MY_ADDR_BITS}")
 endif()
 
-set(BASE_DIR /home/hades/projects)
-set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
-find_package(LLVM 3.7 PATHS ${LLVM_DIR} NO_DEFAULT_PATH REQUIRED CONFIG)
+# Find LLVM
+#set(BASE_DIR /home/hades/projects)
+#set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
+#find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
+find_package(LLVM 5.0 REQUIRED)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -102,4 +104,24 @@ target_sources(hetarch_trik
         "${CMAKE_CURRENT_SOURCE_DIR}/include/trikMspI2c.h"
         )
 
+
+#add_library(hetarch_new_mem)
+#target_sources(hetarch_new_mem
+#        PRIVATE
+#        "${CMAKE_CURRENT_SOURCE_DIR}/new/MemoryManager.cpp"
+#        PUBLIC
+#        "${CMAKE_CURRENT_SOURCE_DIR}/new/MemoryManager.h"
+#        )
+#find_package(Boost REQUIRED)
+#target_link_libraries(hetarch_new_mem )
+#message(STATUS "Found Boost ${Boost_Version}")
+#message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+#target_include_directories(hetarch_new_mem PUBLIC new/ ${Boost_INCLUDE_DIRS})
+
+
+add_library(temp_target
+        tests/test_code/test_code.cpp
+        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/IDSLCallable.h new/supportingClasses.h new/CodeLoader.h )
+
 add_subdirectory(examples)
+add_subdirectory(tests)
