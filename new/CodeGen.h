@@ -67,6 +67,7 @@ public:
 private:
     static bool linkInModules(llvm::Linker &linker, std::vector<IIRModule> &dependencies);
 
+    static std::vector<std::string> findUndefinedSymbols(object::OwningBinary<object::ObjectFile> &objFile);
 
 };
 
@@ -94,11 +95,34 @@ CodeGen::CodeGen(const std::string &targetName)
 }
 
 
+std::vector<std::string> CodeGen::findUndefinedSymbols(object::OwningBinary<object::ObjectFile> &objFile) {
+    std::vector<std::string> undefinedSyms;
+    for (const auto &sym : objFile.getBinary()->symbols()) {
+
+//        std::cerr
+//                << "; type: " << sym.getType().get()
+//                << "; flags: 0x" << std::hex << sym.getFlags()
+//                << "; name: '" << sym.getName().get().str() << "'"
+//                << std::endl;
+
+        // we don't care about SF_FormatSpecific (e.g. debug symbols)
+        auto sf = sym.getFlags();
+        if (!(sf & llvm::object::BasicSymbolRef::SF_FormatSpecific)
+            && sf & llvm::object::BasicSymbolRef::SF_Undefined)
+        {
+            undefinedSyms.push_back(sym.getName().get().str());
+        }
+    }
+    return undefinedSyms;
+}
+
 
 template<typename RetT, typename... Args>
 ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) {
 
     std::string targetLookupError;
+    // todo: move at least that to the ctor
+    // todo: make checkable if CodeGen finds target
     auto target = llvm::TargetRegistry::lookupTarget(this->targetName, targetLookupError);
     if (target) {
 
@@ -136,17 +160,27 @@ ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) {
 
             auto compiler = llvm::orc::SimpleCompiler(*targetMachine);
             // seems, specific ObjectFile type (e.g. ELF32) and endianness are determined from TargetMachine
+            // todo: shouldn't there be irModule.m.release()? no.
             object::OwningBinary<object::ObjectFile> objFile = compiler(*irModule.m);
-//            object::ELFObjectFile
 
             if (objFile.getBinary()) {
-                ;
                 // todo: test: there, IRModule's mainSymbol should resolvable (i.e. the same) in objFile
+                auto undefinedSyms = findUndefinedSymbols(objFile);
+                if (undefinedSyms.empty()) {
+                    return ObjCode<RetT, Args...>(std::move(objFile), irModule.symbol);
 
-                return ObjCode<RetT, Args...>(std::move(objFile), irModule.symbol);
+                } else {
+                    // todo: handle undefined symbols error
+                    // just return meaningful description; this error is easily resolved and can't be solved at runtime
+
+                    return ObjCode<RetT, Args...>();
+                }
+
             } else {
                 // todo: handle compilation error
+                return ObjCode<RetT, Args...>();
             }
+
         } else {
             // todo: handle TargetMachine creation error
         }
@@ -163,18 +197,20 @@ ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) {
 
 // todo: traverse the dependent modules in __some sane order__ for linking
 //  generally, it is DAG, but it should be checked (look for cycles while traversing)
+// returns false on error
 bool CodeGen::linkInModules(llvm::Linker &linker, std::vector<IIRModule> &dependencies) {
     for (IIRModule &src : dependencies) {
         // currently - DFS without checks for loops
         // note: Passing OverrideSymbols (in flags) as true will have symbols from Src shadow those in the Dest.
-        if (bool isSuccess = !linker.linkInModule(std::move(src.m))) {
-            return CodeGen::linkInModules(linker, src.m_dependencies);
-        } else {
-            // todo: handle link errors (if possible), propagate otherwise
-            return isSuccess;
+        if (!linker.linkInModule(std::move(src.m))) {
+            if (CodeGen::linkInModules(linker, src.m_dependencies)) {
+                continue;
+            };
         }
+        // todo: handle link errors (if possible), propagate otherwise
+        return false;
     }
-    return true;  // dependencies is empty; assume link is successfull
+    return true;
 }
 
 bool CodeGen::link(IIRModule &dependent) {
@@ -186,7 +222,7 @@ bool CodeGen::link(IIRModule &dependent) {
 bool CodeGen::link(IIRModule &dest, std::vector<IIRModule> &sources) {
     llvm::Linker linker(*dest.m);
 
-    if (bool isSuccess = !CodeGen::linkInModules(linker, dest.m_dependencies)) {
+    if (bool isSuccess = CodeGen::linkInModules(linker, dest.m_dependencies)) {
         return CodeGen::linkInModules(linker, sources);
     } else {
         return isSuccess;
