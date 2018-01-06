@@ -10,8 +10,9 @@ template<typename RetT, typename... Args>
 class ISignature {
 
 public:
-    explicit ISignature(const std::string &symbolName) :
-            symbol(symbolName) {}
+    explicit ISignature() = default;
+    explicit ISignature(const std::string &symbolName)
+            : symbol(symbolName) {}
 
     const std::string symbol;
 
@@ -28,13 +29,16 @@ class ObjCode : public ISignature<RetT, Args...> {
     m_payload_t m_payload;
 
 public:
+    explicit ObjCode() = default;
     ObjCode(m_payload_t payload, const std::string &mainSymbol)
             : ISignature<RetT, Args...>{mainSymbol}, m_payload{std::move(payload)}
     {};
 
     // Move-only type
-    ObjCode(ObjCode&&) noexcept = default;
-    ObjCode &operator=(ObjCode &&) noexcept = default;
+    ObjCode(ObjCode&&) = default;
+    ObjCode &operator=(ObjCode &&) = default;
+
+    explicit operator bool() const { return bool(m_payload.getBinary()); }
 
 };
 
@@ -52,8 +56,8 @@ public:
     virtual ~IIRModule() = default;
 
     // Move-only type
-    IIRModule(IIRModule &&) noexcept = default;
-    IIRModule &operator=(IIRModule &&) noexcept = default;
+    IIRModule(IIRModule &&) = default;
+    IIRModule &operator=(IIRModule &&) = default;
 
     explicit operator bool() const { return bool(m); }
 };
