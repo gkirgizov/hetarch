@@ -19,6 +19,7 @@ set(llvm_target_libs
         LLVMX86CodeGen
         )
 
+add_definitions(-DTESTS_RES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_resources/")
 add_executable(gtests main.cpp
         utils.cpp
         )
