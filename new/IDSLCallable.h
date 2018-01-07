@@ -14,20 +14,20 @@ template<typename RetT, typename... Args>
 class IDSLCallable {
 
 public:
-    virtual IDSLVariable<RetT> call(IDSLVariable<Args>... args) = 0;
+    virtual IDSLVariable<RetT> call(IDSLVariable<Args...>... args) = 0;
 };
 
 
 template<typename RetT, typename... Args>
-class DSLFunction : public IDSLCallable<RetT, Args...> {
+class DSLFunction : public IDSLCallable {
 
 public:
-    IDSLVariable<RetT> call(IDSLVariable<Args>... args) override;
+
+    IDSLVariable<RetT> call(IDSLVariable<Args...>... args) override;
 
     // suppose there's another func which uses __the same__ types
     void specialise(Args... args);
 
 };
-
 
 
