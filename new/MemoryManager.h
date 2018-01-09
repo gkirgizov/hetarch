@@ -56,7 +56,7 @@ public:
     /// Free without any checks. Can be easily misused. Only for the most confident callers who know definetly what they've allocated.
     /// \param memRegion previously allocated region
     /// \return true if memRegion has consistent MemType
-    virtual bool unsafeFree(const MemRegion<AddrT> &memRegion) {
+    virtual bool unsafeFree(const MemRegion<AddrT> &memRegion) = 0;
 
     virtual ~MemManager() = default;
 
