@@ -28,18 +28,34 @@ class ObjCode : public ISignature<RetT, Args...> {
 
     m_payload_t m_payload;
 
+    llvm::object::SymbolRef m_sym;
+
 public:
     explicit ObjCode() = default;
     ObjCode(m_payload_t payload, const std::string &mainSymbol)
-            : ISignature<RetT, Args...>{mainSymbol}, m_payload{std::move(payload)}
-    {};
+            : ISignature<RetT, Args...>{mainSymbol}, m_payload{std::move(payload)}, m_sym{}
+    {
+        for (const auto &sym : m_payload.getBinary()->symbols()) {
+            if (sym.getName().get().str() == mainSymbol) {
+                m_sym = sym;
+            }
+        }
+        // todo: avoid assert and instead kind of produce an error? because it is incorrect state.
+//        assert(!(m_sym == llvm::object::SymbolRef()) && "provided symbol not found");
+    };
 
     // Move-only type
-    ObjCode(ObjCode&&) = default;
+    ObjCode(ObjCode &&) = default;
     ObjCode &operator=(ObjCode &&) = default;
 
     explicit operator bool() const { return bool(m_payload.getBinary()); }
 
+    const llvm::object::ObjectFile *getBinary() const {
+        return m_payload.getBinary();
+    }
+    const llvm::object::SymbolRef &getSymbol() const {
+        return m_sym;
+    }
 };
 
 
