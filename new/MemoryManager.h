@@ -48,7 +48,9 @@ class MemManager {
 public:
     virtual MemRegion<AddrT> alloc(AddrT memSize, MemType memType) = 0;
 
-    // to control memory layout manually -- 'register' memory usage
+    /// Allows to control memory layout manually, i.e. 'register' memory usage
+    /// \param memRegion
+    /// \return true if @param memRegion can be allocated, false otherwise
     virtual bool tryAlloc(const MemRegion<AddrT> &memRegion) = 0;
 
     virtual void free(const MemRegion<AddrT> &memRegion) = 0;
@@ -65,37 +67,42 @@ public:
 
 
 namespace mem_mgr_impl {
-    struct cmp_size_less {
-        template<typename AddrT>
-        bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
-            // small to big: best fit
-            return a.size < b.size;
-        }
-    };
 
-    struct cmp_size_more {
-        template<typename AddrT>
-        bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
-            // big to small: worst fit
-            return a.size > b.size;
-        }
-    };
+struct cmp_size_less {
+    template<typename AddrT>
+    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
+        // small to big: best fit
+        return a.size < b.size;
+    }
+};
 
-    struct cmp_start_less {
-        template<typename AddrT>
-        bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
-            // natural ordering
-            return a.start < b.start;
-        }
-    };
+struct cmp_size_more {
+    template<typename AddrT>
+    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
+        // big to small: worst fit
+        return a.size > b.size;
+    }
+};
+
+struct cmp_start_less {
+    template<typename AddrT>
+    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
+        // natural ordering
+        return a.start < b.start;
+    }
+};
+
+using best_fit = cmp_size_less;
+//using worst_fit = cmp_size_more;
+using seq_fit = cmp_start_less;
 
 }
 
 
 template<typename AddrT>
-class MemManagerSequentialFit: public MemManager<AddrT> {
+class MemManagerBestFit: public MemManager<AddrT> {
 
-    using impl_cont_t = std::multiset<MemRegion, mem_mgr_impl::cmp_size_less>;
+    using impl_cont_t = std::multiset<MemRegion, mem_mgr_impl::best_fit>;
 
     std::unordered_map<MemType, impl_cont_t> freeRegions{};
 
@@ -105,31 +112,30 @@ class MemManagerSequentialFit: public MemManager<AddrT> {
     }
 
 public:
-    explicit MemManagerSequentialFit(MemRegion<AddrT> availableMem) {
+    explicit MemManagerBestFit(MemRegion<AddrT> availableMem) {
         freeRegions[availableMem.memType].insert(std::move(availableMem));
     }
 
-    explicit MemManagerSequentialFit(const std::vector<MemRegion<AddrT>> &availableMem) {
+    explicit MemManagerBestFit(const std::vector<MemRegion<AddrT>> &availableMem) {
         for (MemRegion<AddrT> memRegion : availableMem) {
             freeRegions[memRegion.memType].insert(std::move(memRegion));
         }
     }
 
     MemRegion<AddrT> alloc(AddrT memSize, MemType memType) override {
-        // todo: if there's no memory of such type, then fallback to less-restrictive memType
-        // don't forget to rewrite memType
+        // todo: if there's no memory of such type, then fallback to less-restrictive memType (don't forget to rewrite memType)
         auto regions = freeRegions[memType];
 
-        // todo: not the most efficient; for best-fit, worst-fit etc. can search better than linear
-        for (auto it = std::begin(regions); it != std::end(regions); ++it) {
-            if (memSize <= it->size) {
-                regions.erase(it);
-                MemRegion<AddrT> splittedRegion(it->start + memSize, it->size - memSize, memType);
-                insertRegion(splittedRegion, regions);
-                MemRegion<AddrT> foundRegion(it->start, memSize, memType);
-                return foundRegion;
-            }
+        MemRegion<AddrT> tempRegion(0, memSize, memType);
+        auto it = regions.upper_bound(tempRegion);
+        if (it != std::end(regions)) {
+            regions.erase(it);
+            MemRegion<AddrT> splittedRegion(it->start + memSize, it->size - memSize, memType);
+            insertRegion(splittedRegion, regions);
+            MemRegion<AddrT> foundRegion(it->start, memSize, memType);
+            return foundRegion;
         }
+
         return MemRegion<AddrT>();
     }
 
@@ -137,17 +143,25 @@ public:
         auto memType = memRegion.memType;
         auto regions = freeRegions[memType];
 
-        // todo: not the most efficient; for best-fit, worst-fit etc. can fail earlier
         for (auto it = std::begin(regions); it != std::end(regions); ++it) {
-            if (memRegion.start >= it->start && memRegion.end <= it->end) {
-                regions.erase(it);
-                if (memRegion.start > it->start) {
-                    regions.insert(MemRegion<AddrT>(it->start, memRegion.start - it->start, memType));
+            auto ms = memRegion.start, me = memRegion.end;
+            auto is = it->start, ie = it->end;
+
+            // if there is any intersection then it's impossible to find fitting block
+            if (ms >= is) {
+                if (me <= ie) {
+                    regions.erase(it);
+                    if (ms > is) {
+                        regions.insert(MemRegion<AddrT>(is, ms - is, memType));
+                    }
+                    if (me < ie) {
+                        regions.insert(MemRegion<AddrT>(me, ie - me, memType));
+                    }
+                    return true;
                 }
-                if (memRegion.end < it->end) {
-                    regions.insert(MemRegion<AddrT>(memRegion.end, it->end - memRegion.end));
-                }
-                return true;
+                return false;
+            } else if (me > is) {
+                return false;
             }
         }
         return false;
@@ -172,7 +186,6 @@ public:
             return false;
         }
     }
-
 };
 
 
