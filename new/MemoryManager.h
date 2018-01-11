@@ -13,6 +13,7 @@ namespace mem {
 
 // maybe do something like bitmask?
 enum class MemType {
+    Undefined,
     ReadOnly,
     ReadPreferred,
     ReadWrite,
@@ -21,9 +22,10 @@ enum class MemType {
 
 template<typename AddrT>
 struct MemRegion {
-    explicit MemRegion() = default;  // for constructing false-y value
+    explicit MemRegion() : size{0}, start{0}, end{0}, memType{MemType::Undefined} {};  // for constructing false-y value
+
     MemRegion(const AddrT start, const AddrT size, const MemType memType)
-    : size(size), start(start), end(start+size), memType(memType)
+    : size{size}, start{start}, end{start+size}, memType{memType}
     {}
 
     const AddrT size;
@@ -31,7 +33,7 @@ struct MemRegion {
     const AddrT end;
     const MemType memType;
 
-    explicit operator bool() const { return size == 0; }
+    explicit operator bool() const { return size != 0; }
 };
 
 
@@ -48,11 +50,16 @@ public:
     const AddrT defaultAlignment;
 
     static inline bool aligned(AddrT x, AddrT alignment) { return x % alignment == 0; }
-    static inline bool alignUp(AddrT x, AddrT alignment) { return x - x % alignment + alignment; }
-    static inline bool alignDown(AddrT x, AddrT alignment) { return x - x % alignment; }
+    static inline AddrT alignDown(AddrT x, AddrT alignment) { return x - x % alignment; }
+    static inline AddrT alignUp(AddrT x, AddrT alignment) {
+        auto r = x % alignment;
+        return r != 0 ? x - r + alignment : x;
+    }
 
 public:
-    explicit MemManager(const AddrT defaultAlignment) : defaultAlignment{defaultAlignment} {}
+    explicit MemManager(const AddrT defaultAlignment) : defaultAlignment{defaultAlignment} {
+        assert(defaultAlignment % 2 == 0 || defaultAlignment == 1);
+    }
 
     virtual MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) = 0;
     MemRegion<AddrT> alloc(AddrT memSize, MemType memType) {
@@ -79,7 +86,6 @@ public:
     virtual ~MemManager() = default;
 
 };
-
 
 
 namespace mem_mgr_impl {
@@ -118,8 +124,7 @@ using seq_fit = cmp_start_less;
 template<typename AddrT>
 class MemManagerBestFit: public MemManager<AddrT> {
 
-    using impl_cont_t = std::multiset<MemRegion, mem_mgr_impl::best_fit>;
-
+    using impl_cont_t = std::multiset<MemRegion<AddrT>, mem_mgr_impl::best_fit>;
     std::unordered_map<MemType, impl_cont_t> freeRegions{};
 
     // todo: coalesce blocks when natural (by-address) ordering
@@ -132,44 +137,48 @@ public:
     MemManagerBestFit(const MemManagerBestFit &) = delete;
     MemManagerBestFit &operator=(MemManagerBestFit &) = delete;
 
-    explicit MemManagerBestFit(MemRegion<AddrT> availableMem, AddrT defaultAlignment = sizeof(AddrT)) : MemManager{defaultAlignment} {
+    explicit MemManagerBestFit(MemRegion<AddrT> availableMem, AddrT defaultAlignment = sizeof(AddrT)) : MemManager<AddrT>{defaultAlignment} {
         freeRegions[availableMem.memType].insert(std::move(availableMem));
     }
 
-    explicit MemManagerBestFit(const std::vector<MemRegion<AddrT>> &availableMem, AddrT defaultAlignment = sizeof(AddrT)) : MemManager{defaultAlignment} {
+    explicit MemManagerBestFit(const std::vector<MemRegion<AddrT>> &availableMem, AddrT defaultAlignment = sizeof(AddrT)) : MemManager<AddrT>{defaultAlignment} {
         for (MemRegion<AddrT> memRegion : availableMem) {
             freeRegions[memRegion.memType].insert(std::move(memRegion));
         }
     }
 
+    using MemManager<AddrT>::alloc;
     MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) override {
         // todo: if there's no memory of such type, then fallback to less-restrictive memType (don't forget to rewrite memType)
-        auto regions = freeRegions[memType];
+        auto& regions = freeRegions[memType];
 
-        memSize = MemManager::alignUp(memSize, alignment);
+        memSize = this->alignUp(memSize, alignment);
 
         MemRegion<AddrT> tempRegion(0, memSize, memType);
-        if (auto it = regions.upper_bound(tempRegion) != std::end(regions)) {
-            regions.erase(it);
+        auto it = regions.lower_bound(tempRegion);
+        if (it != std::end(regions)) {
             MemRegion<AddrT> splittedRegion(it->start + memSize, it->size - memSize, memType);
-            insertRegion(splittedRegion, regions);
             MemRegion<AddrT> foundRegion(it->start, memSize, memType);
+            regions.erase(it);
+            regions.insert(splittedRegion);
+//            insertRegion(splittedRegion, regions);
             return foundRegion;
         }
 
         return MemRegion<AddrT>();
     }
 
+    using MemManager<AddrT>::tryAlloc;
     MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion, AddrT alignment) override {
         // todo: BIG TODO: there're already several types of error. (OutOfMem; non-aligned memRegion). exceptions can be bad. what about error codes? is it bad in any sense?
-        if (!aligned(memRegion.start, alignment)) {
+        if (!this->aligned(memRegion.start, alignment)) {
             return MemRegion<AddrT>{};
         }
 
         auto memType = memRegion.memType;
-        auto regions = freeRegions[memType];
+        auto& regions = freeRegions[memType];
 
-        MemRegion<AddrT> actualMemRegion{memRegion.start, alignUp(memRegion.size, alignment), memType};
+        MemRegion<AddrT> actualMemRegion{memRegion.start, this->alignUp(memRegion.size, alignment), memType};
 
         auto ms = actualMemRegion.start, me = actualMemRegion.end;
         for (auto it = std::begin(regions); it != std::end(regions); ++it) {
@@ -195,23 +204,41 @@ public:
         return MemRegion<AddrT>{};
     }
 
+    // todo: maybe somehow disallow freeing arbitrary memRegions? only the ones which were allocated.
     void free(const MemRegion<AddrT> &memRegion) override {
         // find ALL overlapped blocks
         // among them find 2 'border' blocks
         // find overlaps with them
         // split them correspondingly
-        // erase ALL except last two overlapped blocks from freeregions
+        // erase ALL except last two overlapped blocks from freeRegions
         // erase these 2 smaller overlaps
         // insert memRegion to freeRegions
+
+        unsafeFree(memRegion); // temporary
     }
 
     bool unsafeFree(const MemRegion<AddrT> &memRegion) override {
         try {
-            auto regions = freeRegions.at(memRegion.memType);
+            auto& regions = freeRegions.at(memRegion.memType);
             regions.insert(memRegion);
             return true;
         } catch(const std::out_of_range &e) {
             return false;
+        }
+    }
+
+    void printMemRegions(std::ostream &stream) const {
+        for (auto kv : freeRegions) {
+            auto memType = kv.first;
+            int i = 0;
+            for (auto mr : kv.second) {
+                stream << "n:" << i++
+                       << " memType:" << static_cast<int>(memType)
+                       << " st:" << mr.start
+                       << " end:" << mr.end
+                       << " sz:" << mr.size
+                       << std::endl;
+            }
         }
     }
 };
