@@ -44,15 +44,31 @@ class MemManager {
     // to address its (different machine's) memory.
     // So, this assert states exactly this.
     static_assert(sizeof(void_ptr) >= sizeof(AddrT));
+public:
+    const AddrT defaultAlignment;
+
+    static inline bool aligned(AddrT x, AddrT alignment) { return x % alignment == 0; }
+    static inline bool alignUp(AddrT x, AddrT alignment) { return x - x % alignment + alignment; }
+    static inline bool alignDown(AddrT x, AddrT alignment) { return x - x % alignment; }
 
 public:
-    virtual MemRegion<AddrT> alloc(AddrT memSize, MemType memType) = 0;
+    explicit MemManager(const AddrT defaultAlignment) : defaultAlignment{defaultAlignment} {}
+
+    virtual MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) = 0;
+    MemRegion<AddrT> alloc(AddrT memSize, MemType memType) {
+        return alloc(memSize, memType, defaultAlignment);
+    }
 
     /// Allows to control memory layout manually, i.e. 'register' memory usage
     /// \param memRegion
-    /// \return true if @param memRegion can be allocated, false otherwise
-    virtual bool tryAlloc(const MemRegion<AddrT> &memRegion) = 0;
+    /// \param alignment
+    /// \return actually allocated region (takes @param alignment into consideration)
+    virtual MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion, AddrT alignment) = 0;
+    MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion) {
+        return tryAlloc(memRegion, defaultAlignment);
+    }
 
+    // todo: what to do with alignment here?
     virtual void free(const MemRegion<AddrT> &memRegion) = 0;
 
     /// Free without any checks. Can be easily misused. Only for the most confident callers who know definetly what they've allocated.
@@ -112,23 +128,28 @@ class MemManagerBestFit: public MemManager<AddrT> {
     }
 
 public:
-    explicit MemManagerBestFit(MemRegion<AddrT> availableMem) {
+    // move-only type
+    MemManagerBestFit(const MemManagerBestFit &) = delete;
+    MemManagerBestFit &operator=(MemManagerBestFit &) = delete;
+
+    explicit MemManagerBestFit(MemRegion<AddrT> availableMem, AddrT defaultAlignment = sizeof(AddrT)) : MemManager{defaultAlignment} {
         freeRegions[availableMem.memType].insert(std::move(availableMem));
     }
 
-    explicit MemManagerBestFit(const std::vector<MemRegion<AddrT>> &availableMem) {
+    explicit MemManagerBestFit(const std::vector<MemRegion<AddrT>> &availableMem, AddrT defaultAlignment = sizeof(AddrT)) : MemManager{defaultAlignment} {
         for (MemRegion<AddrT> memRegion : availableMem) {
             freeRegions[memRegion.memType].insert(std::move(memRegion));
         }
     }
 
-    MemRegion<AddrT> alloc(AddrT memSize, MemType memType) override {
+    MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) override {
         // todo: if there's no memory of such type, then fallback to less-restrictive memType (don't forget to rewrite memType)
         auto regions = freeRegions[memType];
 
+        memSize = MemManager::alignUp(memSize, alignment);
+
         MemRegion<AddrT> tempRegion(0, memSize, memType);
-        auto it = regions.upper_bound(tempRegion);
-        if (it != std::end(regions)) {
+        if (auto it = regions.upper_bound(tempRegion) != std::end(regions)) {
             regions.erase(it);
             MemRegion<AddrT> splittedRegion(it->start + memSize, it->size - memSize, memType);
             insertRegion(splittedRegion, regions);
@@ -139,15 +160,22 @@ public:
         return MemRegion<AddrT>();
     }
 
-    bool tryAlloc(const MemRegion<AddrT> &memRegion) override {
+    MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion, AddrT alignment) override {
+        // todo: BIG TODO: there're already several types of error. (OutOfMem; non-aligned memRegion). exceptions can be bad. what about error codes? is it bad in any sense?
+        if (!aligned(memRegion.start, alignment)) {
+            return MemRegion<AddrT>{};
+        }
+
         auto memType = memRegion.memType;
         auto regions = freeRegions[memType];
 
+        MemRegion<AddrT> actualMemRegion{memRegion.start, alignUp(memRegion.size, alignment), memType};
+
+        auto ms = actualMemRegion.start, me = actualMemRegion.end;
         for (auto it = std::begin(regions); it != std::end(regions); ++it) {
-            auto ms = memRegion.start, me = memRegion.end;
             auto is = it->start, ie = it->end;
 
-            // if there is any intersection then it's impossible to find fitting block
+            // if there is any intersection then it's impossible to find fitting block, hence additional checks
             if (ms >= is) {
                 if (me <= ie) {
                     regions.erase(it);
@@ -157,14 +185,14 @@ public:
                     if (me < ie) {
                         regions.insert(MemRegion<AddrT>(me, ie - me, memType));
                     }
-                    return true;
+                    return actualMemRegion;
                 }
-                return false;
+                return MemRegion<AddrT>{};
             } else if (me > is) {
-                return false;
+                return MemRegion<AddrT>{};
             }
         }
-        return false;
+        return MemRegion<AddrT>{};
     }
 
     void free(const MemRegion<AddrT> &memRegion) override {
