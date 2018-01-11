@@ -7,7 +7,7 @@ target triple = "x86_64-unknown-linux-gnu"
 @important_data = external global i32, align 4
 
 ; Function Attrs: noinline optnone sspstrong uwtable
-define i32 @_Z9pow_smartij(i32, i32) #0 {
+define i32 @pow_smart(i32, i32) #0 {
   %3 = alloca i32, align 4
   %4 = alloca i32, align 4
   %5 = alloca i32, align 4
@@ -29,10 +29,10 @@ define i32 @_Z9pow_smartij(i32, i32) #0 {
 
 ; <label>:13:                                     ; preds = %9
   %14 = load i32, i32* %4, align 4
-  %15 = call i32 @_Z6squarei(i32 %14)
+  %15 = call i32 @square(i32 %14)
   %16 = load i32, i32* %5, align 4
   %17 = udiv i32 %16, 2
-  %18 = call i32 @_Z9pow_smartij(i32 %15, i32 %17)
+  %18 = call i32 @pow_smart(i32 %15, i32 %17)
   store i32 %18, i32* %3, align 4
   br label %26
 
@@ -41,7 +41,7 @@ define i32 @_Z9pow_smartij(i32, i32) #0 {
   %21 = load i32, i32* %4, align 4
   %22 = load i32, i32* %5, align 4
   %23 = sub i32 %22, 1
-  %24 = call i32 @_Z9pow_smartij(i32 %21, i32 %23)
+  %24 = call i32 @pow_smart(i32 %21, i32 %23)
   %25 = mul nsw i32 %20, %24
   store i32 %25, i32* %3, align 4
   br label %26
@@ -51,12 +51,12 @@ define i32 @_Z9pow_smartij(i32, i32) #0 {
   ret i32 %27
 }
 
-declare i32 @_Z6squarei(i32) #1
+declare i32 @square(i32) #1
 
 ; Function Attrs: noinline optnone sspstrong uwtable
-define void @_Z7try_powv() #0 {
+define void @try_pow() #0 {
   %1 = load i32, i32* @important_data, align 4
-  %2 = call i32 @_Z9pow_smartij(i32 %1, i32 5)
+  %2 = call i32 @pow_smart(i32 %1, i32 5)
   store i32 %2, i32* @important_result, align 4
   ret void
 }
@@ -69,4 +69,4 @@ attributes #1 = { "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{!"clang version 5.0.0 (tags/RELEASE_500/final)"}
+!2 = !{!"clang version 5.0.1 (tags/RELEASE_501/final)"}

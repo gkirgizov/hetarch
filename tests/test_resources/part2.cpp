@@ -1,12 +1,13 @@
 
 
 extern int important_data;
-extern int square(int);
+extern "C" int square(int);
 
 
 int important_result;
 
 
+extern "C"
 int pow_smart(int base, unsigned int power) {
     if (power == 0) {
         return 1;
@@ -20,6 +21,7 @@ int pow_smart(int base, unsigned int power) {
 }
 
 
+extern "C"
 void try_pow() {
     important_result = pow_smart(important_data, 5);
 }

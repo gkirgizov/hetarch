@@ -62,4 +62,4 @@ attributes #0 = { noinline nounwind optnone sspstrong uwtable "correctly-rounded
 
 !0 = !{i32 1, !"wchar_size", i32 4}
 !1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{!"clang version 5.0.0 (tags/RELEASE_500/final)"}
+!2 = !{!"clang version 5.0.1 (tags/RELEASE_501/final)"}

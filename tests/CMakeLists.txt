@@ -22,5 +22,5 @@ set(llvm_target_libs
 add_definitions(-DTESTS_RES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_resources/")
 add_executable(gtests main.cpp
         utils.cpp
-        )
+        mocks.h)
 target_link_libraries(gtests gtest ${llvm_libs2} ${llvm_target_libs})
