@@ -2,6 +2,8 @@
 
 #include <fstream>
 
+#include <boost/format.hpp>
+
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
@@ -39,6 +41,41 @@ std::unique_ptr<llvm::Module> loadModule(std::string &fileName, llvm::LLVMContex
 
     return loadModule(ir_stream, context);
 }
+
+
+void dumpSections(const llvm::object::ObjectFile &objFile) {
+    for (const auto &section : objFile.sections()) {
+        llvm::StringRef sectionName;
+        std::string id;
+        auto err_code = section.getName(sectionName);
+        id = err_code ? "error #" + std::to_string(err_code.value()) : sectionName.str();
+
+        std::cerr
+                << boost::format("addr: %x; size: %d; index: %d; name: %s")
+                   % section.getAddress() % section.getSize() % section.getIndex() % id
+                << std::endl;
+    }
+}
+
+void dumpSymbols(const llvm::object::ObjectFile &objFile) {
+
+    for (const auto &sym : objFile.symbols()) {
+        llvm::StringRef sectionName{"error"};
+        if (auto section = sym.getSection()) {
+            auto err_code = section.get()->getName(sectionName);
+        }
+
+        std::cerr
+                << "; type: " << sym.getType().get()
+                << "; flags: 0x" << std::hex << sym.getFlags()
+                << "; addr: 0x" << std::hex << sym.getAddress().get()
+                << "; value: 0x" << std::hex << sym.getValue()
+                << "; name: " << sym.getName().get().str()
+                << "; section: " << sectionName.str()
+                << std::endl;
+    }
+}
+
 
 }
 }
