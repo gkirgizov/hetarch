@@ -61,29 +61,43 @@ public:
         assert(defaultAlignment % 2 == 0 || defaultAlignment == 1);
     }
 
-    virtual MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) = 0;
+    MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) {
+        return allocImpl(memSize, memType, alignment);
+    };
     MemRegion<AddrT> alloc(AddrT memSize, MemType memType) {
-        return alloc(memSize, memType, defaultAlignment);
+        return allocImpl(memSize, memType, defaultAlignment);
     }
 
     /// Allows to control memory layout manually, i.e. 'register' memory usage
     /// \param memRegion
     /// \param alignment
     /// \return actually allocated region (takes @param alignment into consideration)
-    virtual MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion, AddrT alignment) = 0;
+    MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion, AddrT alignment) {
+        return tryAllocImpl(memRegion, alignment);
+    }
     MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion) {
-        return tryAlloc(memRegion, defaultAlignment);
+        return tryAllocImpl(memRegion, defaultAlignment);
     }
 
     // todo: what to do with alignment here?
-    virtual void free(const MemRegion<AddrT> &memRegion) = 0;
+    void free(const MemRegion<AddrT> &memRegion) {
+        freeImpl(memRegion);
+    };
 
     /// Free without any checks. Can be easily misused. Only for the most confident callers who know definetly what they've allocated.
     /// \param memRegion previously allocated region
     /// \return true if memRegion has consistent MemType
-    virtual bool unsafeFree(const MemRegion<AddrT> &memRegion) = 0;
+    bool unsafeFree(const MemRegion<AddrT> &memRegion) {
+        return unsafeFreeImpl(memRegion);
+    }
 
     virtual ~MemManager() = default;
+
+private:
+    virtual MemRegion<AddrT> allocImpl(AddrT memSize, MemType memType, AddrT alignment) = 0;
+    virtual MemRegion<AddrT> tryAllocImpl(const MemRegion<AddrT> &memRegion, AddrT alignment) = 0;
+    virtual void freeImpl(const MemRegion<AddrT> &memRegion) = 0;
+    virtual bool unsafeFreeImpl(const MemRegion<AddrT> &memRegion) = 0;
 
 };
 
@@ -147,8 +161,23 @@ public:
         }
     }
 
-    using MemManager<AddrT>::alloc;
-    MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) override {
+    void printMemRegions(std::ostream &stream) const {
+        for (auto kv : freeRegions) {
+            auto memType = kv.first;
+            int i = 0;
+            for (auto mr : kv.second) {
+                stream << "n:" << i++
+                       << " memType:" << static_cast<int>(memType)
+                       << " st:" << mr.start
+                       << " end:" << mr.end
+                       << " sz:" << mr.size
+                       << std::endl;
+            }
+        }
+    }
+
+private:
+    MemRegion<AddrT> allocImpl(AddrT memSize, MemType memType, AddrT alignment) override {
         // todo: if there's no memory of such type, then fallback to less-restrictive memType (don't forget to rewrite memType)
         auto& regions = freeRegions[memType];
 
@@ -168,8 +197,7 @@ public:
         return MemRegion<AddrT>();
     }
 
-    using MemManager<AddrT>::tryAlloc;
-    MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion, AddrT alignment) override {
+    MemRegion<AddrT> tryAllocImpl(const MemRegion<AddrT> &memRegion, AddrT alignment) override {
         // todo: BIG TODO: there're already several types of error. (OutOfMem; non-aligned memRegion). exceptions can be bad. what about error codes? is it bad in any sense?
         if (!this->aligned(memRegion.start, alignment)) {
             return MemRegion<AddrT>{};
@@ -205,7 +233,7 @@ public:
     }
 
     // todo: maybe somehow disallow freeing arbitrary memRegions? only the ones which were allocated.
-    void free(const MemRegion<AddrT> &memRegion) override {
+    void freeImpl(const MemRegion<AddrT> &memRegion) override {
         // find ALL overlapped blocks
         // among them find 2 'border' blocks
         // find overlaps with them
@@ -214,10 +242,10 @@ public:
         // erase these 2 smaller overlaps
         // insert memRegion to freeRegions
 
-        unsafeFree(memRegion); // temporary
+        unsafeFreeImpl(memRegion); // temporary
     }
 
-    bool unsafeFree(const MemRegion<AddrT> &memRegion) override {
+    bool unsafeFreeImpl(const MemRegion<AddrT> &memRegion) override {
         try {
             auto& regions = freeRegions.at(memRegion.memType);
             regions.insert(memRegion);
@@ -227,20 +255,6 @@ public:
         }
     }
 
-    void printMemRegions(std::ostream &stream) const {
-        for (auto kv : freeRegions) {
-            auto memType = kv.first;
-            int i = 0;
-            for (auto mr : kv.second) {
-                stream << "n:" << i++
-                       << " memType:" << static_cast<int>(memType)
-                       << " st:" << mr.start
-                       << " end:" << mr.end
-                       << " sz:" << mr.size
-                       << std::endl;
-            }
-        }
-    }
 };
 
 

@@ -35,19 +35,20 @@ class MockMemManager : public mem::MemManager<AddrT> {
 public:
     explicit MockMemManager(const AddrT defaultAlignment = sizeof(AddrT)) : mem::MemManager<AddrT>(defaultAlignment) {}
 
-    mem::MemRegion<AddrT> alloc(AddrT memSize, mem::MemType memType, AddrT alignment) override {
+private:
+    mem::MemRegion<AddrT> allocImpl(AddrT memSize, mem::MemType memType, AddrT alignment) override {
         return mem::MemRegion<AddrT>(0, memSize, memType);
     }
 
-    mem::MemRegion<AddrT> tryAlloc(const mem::MemRegion<AddrT> &memRegion, AddrT alignment) override {
+    mem::MemRegion<AddrT> tryAllocImpl(const mem::MemRegion<AddrT> &memRegion, AddrT alignment) override {
         return memRegion;
     }
 
-    void free(const mem::MemRegion<AddrT> &memRegion) override {
+    void freeImpl(const mem::MemRegion<AddrT> &memRegion) override {
     }
 
 
-    bool unsafeFree(const mem::MemRegion<AddrT> &memRegion) override {
+    bool unsafeFreeImpl(const mem::MemRegion<AddrT> &memRegion) override {
         return true;
     }
 
