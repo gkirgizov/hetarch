@@ -7,6 +7,8 @@
 
 
 #include "llvm/IR/Module.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/IRBuilder.h"
 //#include "llvm/ADT/StringRef.h"
 
 #include "llvm/Linker/Linker.h"
@@ -26,12 +28,9 @@
 #include "llvm/Object/ObjectFile.h"
 
 
-
 #include "supportingClasses.h"
 //#include "MemoryManager.h"
-
-// temporary, mock
-//#include "IDSLCallable.h"
+#include "dsl/IDSLCallable.h"
 
 
 namespace hetarch {
@@ -54,8 +53,9 @@ public:
     ObjCode<RetT, Args...> compile(IRModule<RetT, Args...> &irModule);
 
 
-//    template<typename RetT, typename... Args>
-//    static IRModule<RetT, Args...> generateIR(DSLFunction<RetT, Args...> dslFunction);
+    template<typename RetT, typename... Args>
+    static IRModule<RetT, Args...> generateIR(const DSLFunction<RetT, Args...> &f);
+
 
     static bool link(IIRModule &dependent);
 
@@ -229,5 +229,33 @@ bool CodeGen::link(IIRModule &dest, std::vector<IIRModule> &sources) {
     }
 }
 
+
+
+template<typename RetT, typename ...Args>
+IRModule<RetT, Args...> CodeGen::generateIR(const DSLFunction<RetT, Args...> &dslFunction) {
+    std::string moduleName{"module"};  // todo: module name
+    const char* const funcName = "func"; // todo: function name (i.e. symbol name)
+
+    llvm::LLVMContext context;
+    auto module = std::make_unique<llvm::Module>(moduleName, context);
+
+    llvm::Type *void_type = llvm::Type::getVoidTy(context);  // todo: somehow translate C++ types to llvm::Type
+    llvm::FunctionType *f_type = llvm::FunctionType::get(void_type, {}, false);
+    llvm::Function *fun = llvm::Function::Create(f_type, llvm::Function::ExternalLinkage, funcName, module.get());
+
+    llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, "entry", fun);
+    llvm::IRBuilder<> b{entry_bb};
+    // that's it. now we have builder and func and module
+
+
+
+
+    // ...
+    // ...
+    return IRModule<RetT, Args...>{std::move(module), funcName};
 }
+
+
+}
+
 
