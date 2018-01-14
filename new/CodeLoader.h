@@ -6,7 +6,7 @@
 #include "MemResident.h"
 
 #include "CodeGen.h"
-#include "IDSLCallable.h"
+#include "dsl/IDSLCallable.h"
 #include "supportingClasses.h"
 
 #include "../tests/utils.h"
