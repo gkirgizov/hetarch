@@ -39,7 +39,7 @@ execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti") // why -fno-rtti?
 add_definitions(-DHETARCH_TARGET_ADDRT=uint${MY_ADDR_BITS}_t ${MY_PLAFORM_SPECIFIC})
 
 
@@ -121,7 +121,7 @@ target_sources(hetarch_trik
 
 add_library(temp_target
         tests/test_code/test_code.cpp
-        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/IDSLCallable.h new/supportingClasses.h new/CodeLoader.h )
+        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/dsl/IDSLCallable.h new/supportingClasses.h new/CodeLoader.h new/IConnection.h new/dsl/dsl_basic.h new/dsl/sequence.h)
 
 add_subdirectory(examples)
 add_subdirectory(tests)
