@@ -6,7 +6,6 @@
 #include <string_view>
 
 
-
 // todo: remove
 template<typename T>
 class IDSLVariable {
@@ -18,13 +17,20 @@ public:
 
 
 class DSLBase;
-class DSLFunction;
+template<typename RetT, typename ...Args> class IDSLCallable;
+template<typename RetT, typename ...Args> class DSLFunction;
+template<typename RetT> class Return;
+template<typename T> class VarBase;
+template<typename T, bool, bool> class Var;
 
-class Seq;
+//template<typename T, bool = false> class Assignable;
 
-class ECall
-class EAssign;
-class EBinOp;
+template<typename T> class Seq;
+
+
+template<typename RetT, typename ...Args> class ECall;
+template<typename T> class EAssign;
+template<typename T> class EBinOp;
 
 
 
@@ -56,8 +62,8 @@ struct DSLBase {
 //    virtual void toIR(const IRGen &gen) const = 0;
 };
 
-/// Allows static polymorphism
-/// (otherwise we lose compile-time type and can't determine needed overload gen::accept)
+/// Allows static polymorphism.
+/// Despite allowing use of Visitor pattern (convenient there), avoids run-time overhead for virtual calls.
 /// \tparam T subclass of DSLBase
 //template<typename T, std::enable_if<std::is_base_of<DSLBase, T>::value>::type>
 template<typename T>
@@ -74,50 +80,6 @@ template<typename T>
 struct Expr : public ExprBase {
 //    using type = T;
 };
-
-
-
-namespace {
-
-template<typename RetT, typename ...Args>
-class ECall : Expr<RetT> {
-    const IDSLCallable<RetT, Args...> &callee;
-    const std::tuple<Expr<Args>...> args;
-public:
-    constexpr ECall(const IDSLCallable<RetT, Args...> &callee, Expr<Args>&&... args)
-            : callee{callee}, args{std::move(args)...} {}
-
-};
-
-template<typename T>
-class EAssign : public Expr<T> {
-    const Assignable<T> &var;
-    const Expr<T> rhs;
-public:
-    constexpr EAssign(const Assignable<T> &var, Expr<T> &&rhs) : var{var}, rhs{std::move(rhs)} {}
-};
-
-
-// maybe it is possible to extend on 2 compatible types T1 and T2
-// todo: enable_if
-// todo: kind of specifier of OP which will somehow enable toIR() specification for each OP
-template<typename T>
-class EBinOp : public Expr<T> {
-    Expr<T> lhs;
-    Expr<T> rhs;
-public:
-    constexpr EBinOp(Expr<T> &&lhs, Expr<T> &&rhs) : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
-
-};
-
-// example of bin op overload
-template<typename T>
-constexpr EBinOp<T> operator+(Expr<T> &&lhs, Expr<T> &&rhs) {
-    return EBinOp<T>{std::move(lhs), std::move(rhs)};
-}
-
-
-} // namespace
 
 
 
@@ -144,16 +106,16 @@ struct VarBase : public DSLBase, public IRConvertible<VarBase<T>> {
         initial_val = std::forward(value);
     }
 
-    constexpr const std::string_view name;
+    const std::string_view name;
 protected:
-    constexpr T initial_val;
+    T initial_val;
 };
 
 // todo: handle virtual inheritance (somewhere...) higher in the hierarchy (VarBase + Assignable (as Expr))
 // cv-qualifiers are part of type signature, so it makes sense to put them here as template parameters
 template<typename T, bool is_const = false, bool is_volatile = false>
 struct Var : public VarBase<T>, public Assignable<T, is_const>, public IRConvertible<Var<T, is_const, is_volatile>> {
-    using VarBase<T>::VarBase<T>;
+    using VarBase<T>::VarBase;
 };
 
 //template<typename T>
@@ -165,21 +127,30 @@ struct Var : public VarBase<T>, public Assignable<T, is_const>, public IRConvert
 template<typename T, bool is_const = false, bool is_volatile = false>
 //using GlobalVar<T, is_const, is_volatile> = Var<T, is_const, is_volatile>;
 struct GlobalVar : public Var<T, is_const, is_volatile>, public Assignable<T, is_const> {
-    using Var<T, is_const, is_volatile>::Var<T, is_const, is_volatile>;
+    using Var<T, is_const, is_volatile>::Var;
 };
 
 
 // because FuncParam should behave exactly in the same way as usual Var does
 template<typename T, bool is_const = false, bool is_volatile = false>
 struct FuncParam : public Var<T, is_const, is_volatile>, public IRConvertible<FuncParam<T, is_const, is_volatile>> {
-    using Var<T, is_const, is_volatile>::Var<T, is_const, is_volatile>;
+    using Var<T, is_const, is_volatile>::Var;
 
     explicit constexpr FuncParam(T &&default_value, const std::string_view &name = "")
-//            : Var<T, is_const, is_volatile>{default_value, name}, defaulted{true}
-            : initial_val{default_value}, name{name}, defaulted{true}
+            : Var<T, is_const, is_volatile>{default_value, name}, defaulted{true}
     {}
 
-    constexpr bool defaulted{false};
+    const bool defaulted{false};
+};
+
+
+// todo: convenient container for FuncParam
+/* cases:
+ * most default case (silliest container)
+ * handy factory
+ */
+template<typename ...Args>
+struct FuncParams {
 };
 
 
@@ -187,7 +158,7 @@ struct FuncParam : public Var<T, is_const, is_volatile>, public IRConvertible<Fu
 // i.e. toIR override { return "return " + x.getIRReferenceName(); }
 template<typename RetT>
 class Return : public DSLBase, public IRConvertible<Return<RetT>> {
-    constexpr const DSLBase &returnee;
+    const DSLBase &returnee;
 public:
     explicit constexpr Return(const VarBase<RetT> &var) : returnee{var} {};
     explicit constexpr Return(const Expr<RetT> &expr) : returnee{expr} {};
@@ -213,29 +184,58 @@ public:
 
     template<typename T>
     constexpr DSLFunction(const FuncParams<Args...> &args, Seq<T> statements, Return<RetT> &&returnSt);
+
     explicit constexpr DSLFunction(const FuncParams<Args...> &args, Seq<RetT> statements);
 
     // suppose there's another func which uses __the same__ types
     void specialise(Args... args);
 
-
 };
 
-// todo: convenient container for FuncParams
-template<typename ...Args>
-struct FuncParams {
-    explicit constexpr FuncParams() {};
-};
 
+
+namespace {
 
 template<typename RetT, typename ...Args>
-static void generateIR(const DSLFunction<RetT, Args...> &f) {
-    int n, test;
-    n, test;
-    n;
-    test;
+class ECall : Expr<RetT> {
+    const IDSLCallable<RetT, Args...> &callee;
+    const std::tuple<Expr<Args>...> args;
+public:
+    constexpr ECall(const IDSLCallable<RetT, Args...> &callee, Expr<Args>&&... args)
+            : callee{callee}, args{std::move(args)...}
+    {}
+
 };
 
+template<typename T>
+class EAssign : public Expr<T> {
+    const Assignable<T> &var;
+    const Expr<T> rhs;
+public:
+    constexpr EAssign(const Assignable<T> &var, Expr<T> &&rhs) : var{var}, rhs{std::move(rhs)} {}
+};
+
+
+// maybe it is possible to extend on 2 compatible types T1 and T2
+// todo: enable_if
+// todo: kind of specifier of OP which will somehow enable toIR() specification for each OP
+template<typename T>
+class EBinOp : public Expr<T> {
+    const Expr<T> lhs;
+    const Expr<T> rhs;
+public:
+    constexpr EBinOp(Expr<T> &&lhs, Expr<T> &&rhs) : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
+
+};
+
+// example of bin op overload
+template<typename T>
+constexpr EBinOp<T> operator+(Expr<T> &&lhs, Expr<T> &&rhs) {
+    return EBinOp<T>{std::move(lhs), std::move(rhs)};
+}
+
+
+} // namespace
 
 
 

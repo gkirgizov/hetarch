@@ -24,7 +24,7 @@ public:
             : MemResident<AddrT>(memManager, memRegion, unloadable), callAddr(callAddr)
     {}
 
-    IDSLVariable<RetT> call(IDSLVariable<Args>... args) override {};
+//    IDSLVariable<RetT> call(IDSLVariable<Args>... args) override {};
 
     const AddrT callAddr;
 
