@@ -53,15 +53,16 @@ public:
 
 
 struct DSLBase {
-    virtual void toIR(const IRGen &gen) const = 0;
+//    virtual void toIR(const IRGen &gen) const = 0;
 };
 
 /// Allows static polymorphism
 /// (otherwise we lose compile-time type and can't determine needed overload gen::accept)
-/// \tparam T conceptually a subclass of DSLBase
+/// \tparam T subclass of DSLBase
+//template<typename T, std::enable_if<std::is_base_of<DSLBase, T>::value>::type>
 template<typename T>
-struct DSLBaseCRTP : public DSLBase {
-    void toIR(const IRGen &gen) const override {
+struct IRConvertible {
+    void toIR(const IRGen &gen) const {
         gen.accept(*static_cast<T*>(this));
     }
 };
@@ -121,66 +122,61 @@ constexpr EBinOp<T> operator+(Expr<T> &&lhs, Expr<T> &&rhs) {
 
 
 // todo: is it Expr?
-template<typename T>
+template<typename T, bool disable = false>
 struct Assignable: public Expr<T> {
+    template<typename std::enable_if<!disable>::type>
     constexpr EAssign<T> operator=(Expr<T> &&rhs) {
         return EAssign<T>{*this, std::move(rhs)};
     }
 };
 
 
-// todo: enable_if only for integral etc.?
-// todo: maybe move is_volatile to c-tor?
-//  --wouldn't be very good. conceptually volatile is a part of type
-//  todo: same about Const. maybe move there?
-template<typename T, bool is_volatile = false>
-struct Var : public DSLBase {
-    explicit constexpr Var() = default;
-    explicit constexpr Var(const std::string_view &name) : initial_val{}, name{name} {}
-    explicit constexpr Var(T &&value, const std::string_view &name = "")
+// todo: enable_if only for integral etc. simple types?
+template<typename T>
+struct VarBase : public DSLBase, public IRConvertible<VarBase<T>> {
+    explicit constexpr VarBase() = default;
+    explicit constexpr VarBase(const std::string_view &name) : initial_val{}, name{name} {}
+    explicit constexpr VarBase(T &&value, const std::string_view &name = "")
             : initial_val{std::forward(value)}, name{name}
     {}
+
+    constexpr void substitute(T &&value) {
+        initial_val = std::forward(value);
+    }
 
     constexpr const std::string_view name;
 protected:
     constexpr T initial_val;
 };
 
-// todo: handle virtual inheritance (somewhere...) higher in the hierarchy
-template<typename T>
-struct LocalVar : public Var<T>, public Assignable<T> {
-    using Var<T>::Var<T>;
+// todo: handle virtual inheritance (somewhere...) higher in the hierarchy (VarBase + Assignable (as Expr))
+// cv-qualifiers are part of type signature, so it makes sense to put them here as template parameters
+template<typename T, bool is_const = false, bool is_volatile = false>
+struct Var : public VarBase<T>, public Assignable<T, is_const>, public IRConvertible<Var<T, is_const, is_volatile>> {
+    using VarBase<T>::VarBase<T>;
 };
 
-// todo: the difference with LocalVar is that it is Loadable
-template<typename T>
-struct GlobalVar : public Var<T>, public Assignable<T> {
-    using Var<T>::Var<T>;
-};
+//template<typename T>
+//struct LocalVar : public VarBase<T>, public Assignable<T> {
+//    using VarBase<T>::VarBase<T>;
+//};
 
-template<typename T>
-struct ConstVar : public Var<T> {
-    using Var<T>::Var<T>;
-
-    constexpr void substitute(T &&value) {
-        initial_val = std::forward(value);
-    }
+// todo: difference with LocalVar is that it GlobalVar is Loadable. implement it.
+template<typename T, bool is_const = false, bool is_volatile = false>
+//using GlobalVar<T, is_const, is_volatile> = Var<T, is_const, is_volatile>;
+struct GlobalVar : public Var<T, is_const, is_volatile>, public Assignable<T, is_const> {
+    using Var<T, is_const, is_volatile>::Var<T, is_const, is_volatile>;
 };
 
 
-//template<typename T, typename std::enable_if<std::is_base_of<Var, T>::value>::type>
-//class FuncParam : public DSLBase
-
-// this elaborate templated inheritance is to mimic the behaviour of Var<T>
 // because FuncParam should behave exactly in the same way as usual Var does
-// todo: doesn't make sense for VarT == GlobalVar
-template<template<typename T> typename VarT,
-        typename std::enable_if<std::is_base_of<Var<T>, VarT<T>>::value>::type>
-struct FuncParam : public VarT<T> {
-    using VarT<T>::VarT<T>;
+template<typename T, bool is_const = false, bool is_volatile = false>
+struct FuncParam : public Var<T, is_const, is_volatile>, public IRConvertible<FuncParam<T, is_const, is_volatile>> {
+    using Var<T, is_const, is_volatile>::Var<T, is_const, is_volatile>;
 
     explicit constexpr FuncParam(T &&default_value, const std::string_view &name = "")
-            : VarT<T>{default_value, name}, defaulted{true}
+//            : Var<T, is_const, is_volatile>{default_value, name}, defaulted{true}
+            : initial_val{default_value}, name{name}, defaulted{true}
     {}
 
     constexpr bool defaulted{false};
@@ -190,15 +186,16 @@ struct FuncParam : public VarT<T> {
 // works well when we can refer to enclosed construct independently of its nature
 // i.e. toIR override { return "return " + x.getIRReferenceName(); }
 template<typename RetT>
-class Return : public DSLBase {
+class Return : public DSLBase, public IRConvertible<Return<RetT>> {
     constexpr const DSLBase &returnee;
 public:
-    explicit constexpr Return(const Var<RetT> &var) : returnee{var} {};
+    explicit constexpr Return(const VarBase<RetT> &var) : returnee{var} {};
     explicit constexpr Return(const Expr<RetT> &expr) : returnee{expr} {};
 
 };
 
 
+// maybe do IRConvertible here if we can query 'the thing to call' independently of subtype... ???
 template<typename RetT, typename... Args>
 struct IDSLCallable {
     constexpr ECall<RetT, Args...> operator()(Expr<Args>... args) {
@@ -216,9 +213,7 @@ public:
 
     template<typename T>
     constexpr DSLFunction(const FuncParams<Args...> &args, Seq<T> statements, Return<RetT> &&returnSt);
-    constexpr DSLFunction(const FuncParams<Args...> &args, Seq<RetT> statements);
-
-//    constexpr IDSLVariable<RetT> call(IDSLVariable<Args>... args) override;
+    explicit constexpr DSLFunction(const FuncParams<Args...> &args, Seq<RetT> statements);
 
     // suppose there's another func which uses __the same__ types
     void specialise(Args... args);
@@ -226,6 +221,7 @@ public:
 
 };
 
+// todo: convenient container for FuncParams
 template<typename ...Args>
 struct FuncParams {
     explicit constexpr FuncParams() {};
