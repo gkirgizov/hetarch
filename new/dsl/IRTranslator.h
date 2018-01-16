@@ -1,5 +1,6 @@
 #pragma once
 
+
 #include "IDSLCallable.h"
 
 
@@ -8,7 +9,7 @@ namespace dsl {
 
 
 // temporary! just to ensure interface
-class IRGen {
+class IRTranslator {
     // state
 
     // out-of-dsl constructs
@@ -35,8 +36,8 @@ public:
 /// \tparam T subclass of DSLBase
 //template<typename T, std::enable_if<std::is_base_of<DSLBase, T>::value>::type>
 template<typename T>
-struct IRConvertible {
-    void toIR(const IRGen &gen) const {
+struct IRTranslatable {
+    void toIR(const IRTranslator &gen) const {
         gen.accept(*static_cast<T*>(this));
     }
 };

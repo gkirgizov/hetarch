@@ -11,8 +11,8 @@ namespace hetarch {
 namespace dsl {
 
 
-class IRGen;
-template<typename T> struct IRConvertible;
+class IRTranslator;
+template<typename T> struct IRTranslatable;
 
 
 class DSLBase;
@@ -32,7 +32,7 @@ template<typename T> class EBinOp;
 
 
 struct DSLBase {
-//    virtual void toIR(const IRGen &gen) const = 0;
+//    virtual void toIR(const IRTranslator &gen) const = 0;
 };
 
 
@@ -81,7 +81,7 @@ protected:
 // todo: handle virtual inheritance (somewhere...) higher in the hierarchy (VarBase + Assignable (as Expr))
 // cv-qualifiers are part of type signature, so it makes sense to put them here as template parameters
 template<typename T, bool is_const = false, bool is_volatile = false>
-struct Var : public VarBase<T>, public Assignable<T, is_const>, public IRConvertible<Var<T, is_const, is_volatile>> {
+struct Var : public VarBase<T>, public Assignable<T, is_const>, public IRTranslatable<Var<T, is_const, is_volatile>> {
     using VarBase<T>::VarBase;  // allow instantiation using same constructors
 };
 
@@ -113,7 +113,7 @@ struct FuncParams {
 // works well when we can refer to enclosed construct independently of its nature
 // i.e. toIR override { return "return " + x.getIRReferenceName(); }
 template<typename RetT>
-class Return : public DSLBase, public IRConvertible<Return<RetT>> {
+class Return : public DSLBase, public IRTranslatable<Return<RetT>> {
     const DSLBase &returnee;
 public:
     explicit constexpr Return() = default;
@@ -121,7 +121,7 @@ public:
     explicit constexpr Return(const VarBase<RetT> &var) : returnee{var} {};
 };
 
-// maybe do IRConvertible here if we can query 'the thing to call' independently of subtype... ???
+// maybe do IRTranslatable here if we can query 'the thing to call' independently of subtype... ???
 template<typename RetT, typename... Args>
 struct IDSLCallable {
     constexpr ECall<RetT, Args...> operator()(Expr<Args>... args) {
@@ -213,7 +213,7 @@ constexpr EBinOp<T> operator+(Expr<T> &&lhs, Expr<T> &&rhs) {
 
 
 // nothing there
-constexpr void test_thing(const IRGen &gen) {
+constexpr void test_thing(const IRTranslator &gen) {
 }
 
 
