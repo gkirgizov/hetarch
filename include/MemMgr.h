@@ -40,7 +40,7 @@ public:
     AddrT End(AddrT newValue) const { return _end = newValue; }
     MemClass::MemClass MemClass() const { return _memClass; }
 
-    void Dump() {
+    std::string Dump() {
         return "MemArea<uint" + std::to_string(sizeof(AddrT) * 8)
                 + "_t>(" + std::to_string(_begin) + ", "
                 + std::to_string(_end) + ")";

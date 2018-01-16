@@ -6,6 +6,7 @@
 #include "dsl/base.h"
 #include "../include/cg.h"
 #include "../include/MemMgr.h"
+#include "../examples/example_utils.h
 
 using namespace hetarch;
 using namespace hetarch::dsl;

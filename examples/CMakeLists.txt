@@ -39,3 +39,4 @@ add_executable(motorsSample motorsSample.cpp
         ${CMAKE_BINARY_DIR}/geninc/memregmap.cpp)
 target_link_libraries(motorsSample hetarchcg)
 target_include_directories(motorsSample PUBLIC ${CMAKE_BINARY_DIR}/geninc/)
+
