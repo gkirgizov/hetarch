@@ -4,6 +4,11 @@
 #include <utility>
 
 #include "IDSLCallable.h"
+#include "IRTranslator.h"
+
+
+namespace hetarch {
+namespace dsl {
 
 
 template<typename ...Ts> struct select_last;
@@ -18,12 +23,11 @@ template<typename T, typename ...Ts> struct select_last<T, Ts...> { using type =
 //};
 
 template<typename T>
-class Seq : public Expr<T>, public IRConvertible<Seq<T>> {
+class Seq : public Expr<T>, public IRTranslatable<Seq<T>> {
     const ExprBase lhs;
     const Expr<T> rhs;
 public:
-    template<typename T0>
-    constexpr Seq(Expr<T0> &&lhs, Expr<T> &&rhs) : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
+    constexpr Seq(ExprBase &&lhs, Expr<T> &&rhs) : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
 
 };
 
@@ -31,3 +35,8 @@ template<typename Tl, typename Tr>
 constexpr Seq<Tr> operator,(Expr<Tl> &&lhs, Expr<Tr> &&rhs) {
     return Seq<Tr>{std::move(lhs), std::move(rhs)};
 }
+
+
+}
+}
+

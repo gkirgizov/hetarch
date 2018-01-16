@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <utility>
 
 
 #include "llvm/IR/Module.h"
@@ -12,6 +13,7 @@
 //#include "llvm/ADT/StringRef.h"
 
 #include "llvm/Linker/Linker.h"
+#include "llvm/Object/ObjectFile.h"
 
 
 // For setting target
@@ -54,7 +56,7 @@ public:
 
 
     template<typename RetT, typename... Args>
-    static IRModule<RetT, Args...> generateIR(const DSLFunction<RetT, Args...> &f);
+    static IRModule<RetT, Args...> generateIR(const dsl::DSLFunction<RetT, Args...> &f);
 
 
     static bool link(IIRModule &dependent);
@@ -232,7 +234,7 @@ bool CodeGen::link(IIRModule &dest, std::vector<IIRModule> &sources) {
 
 
 template<typename RetT, typename ...Args>
-IRModule<RetT, Args...> CodeGen::generateIR(const DSLFunction<RetT, Args...> &dslFunction) {
+IRModule<RetT, Args...> CodeGen::generateIR(const dsl::DSLFunction<RetT, Args...> &dslFunction) {
     std::string moduleName{"module"};  // todo: module name
     const char* const funcName = "func"; // todo: function name (i.e. symbol name)
 

@@ -15,7 +15,7 @@
 namespace hetarch {
 
 template<typename AddrT, typename RetT, typename... Args>
-class ResidentObjCode : public MemResident<AddrT>, public IDSLCallable<RetT, Args...> {
+class ResidentObjCode : public MemResident<AddrT>, public dsl::IDSLCallable<RetT, Args...> {
 
 public:
 
