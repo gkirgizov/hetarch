@@ -6,16 +6,6 @@
 #include <string_view>
 
 
-// todo: remove
-template<typename T>
-class IDSLVariable {
-public:
-    virtual T read() const = 0;
-    virtual void write(T value) = 0;
-};
-
-
-
 class DSLBase;
 template<typename RetT, typename ...Args> class IDSLCallable;
 template<typename RetT, typename ...Args> class DSLFunction;
@@ -36,24 +26,24 @@ template<typename T> class EBinOp;
 
 // temporary! just to ensure interface
 class IRGen {
+    // state
+
+    // out-of-dsl constructs
 public:
-//    template<typename T, typename std::enable_if<std::is_base_of<DSLBase, T>::value>::type>
+    template<typename T, bool is_const, bool is_volatile>
+    void accept(const Var<T, is_const, is_volatile> &var) const {}
 
-    // general template
-//    template<typename T>
-//    void accept(const T &thing) const {}
-//
-    // full specialisation of func template -- this is how actual work will be implemented
-//    template<>
-//    void accept(const ThingType &thing) const {}
-
-    // todo: check is it compiles given other overloads of accept
+    // dsl function and related constructs (function is 'entry' point of ir generation)
+public:
     template<typename RetT, typename ...Args>  // full specialisation of func template -- this is how actual work will be implemented
     void accept(const DSLFunction<RetT, Args...> &func) const {}
 
     // maybe i doesn't even need this if i'll put handling of Return<RetT> in DSLFunction<RetT, Args...>
     template<typename RetT>
     void accept(const Return<RetT> &returnSt) const {}
+
+public:
+
 };
 
 
@@ -85,7 +75,7 @@ struct Expr : public ExprBase {
 
 // todo: is it Expr?
 template<typename T, bool disable = false>
-struct Assignable: public Expr<T> {
+struct Assignable : public Expr<T> {
     template<typename std::enable_if<!disable>::type>
     constexpr EAssign<T> operator=(Expr<T> &&rhs) {
         return EAssign<T>{*this, std::move(rhs)};
@@ -93,37 +83,36 @@ struct Assignable: public Expr<T> {
 };
 
 
+// todo: how to pass string_view parameter
 // todo: enable_if only for integral etc. simple types?
 template<typename T>
-struct VarBase : public DSLBase, public IRConvertible<VarBase<T>> {
-    explicit constexpr VarBase() = default;
-    explicit constexpr VarBase(const std::string_view &name) : initial_val{}, name{name} {}
-    explicit constexpr VarBase(T &&value, const std::string_view &name = "")
-            : initial_val{std::forward(value)}, name{name}
-    {}
-
-    constexpr void substitute(T &&value) {
-        initial_val = std::forward(value);
-    }
-
+struct VarBase : public DSLBase {
     const std::string_view name;
 protected:
-    T initial_val;
+    T initial_val{};
+    bool initialised{false};
+
+    // forbid instantiation of VarBase
+    explicit constexpr VarBase() = default;
+    explicit constexpr VarBase(const std::string_view &name) : name{name} {}
+    explicit constexpr VarBase(T &&value, const std::string_view &name = "")
+            : name{name}, initial_val{std::forward(value)}, initialised{true}
+    {}
+
+    constexpr void initialise(T &&value) {
+        initial_val = std::forward(value);
+        initialised = true;
+    }
 };
 
 // todo: handle virtual inheritance (somewhere...) higher in the hierarchy (VarBase + Assignable (as Expr))
 // cv-qualifiers are part of type signature, so it makes sense to put them here as template parameters
 template<typename T, bool is_const = false, bool is_volatile = false>
 struct Var : public VarBase<T>, public Assignable<T, is_const>, public IRConvertible<Var<T, is_const, is_volatile>> {
-    using VarBase<T>::VarBase;
+    using VarBase<T>::VarBase;  // allow instantiation using same constructors
 };
 
-//template<typename T>
-//struct LocalVar : public VarBase<T>, public Assignable<T> {
-//    using VarBase<T>::VarBase<T>;
-//};
-
-// todo: difference with LocalVar is that it GlobalVar is Loadable. implement it.
+// todo: difference with LocalVar is that GlobalVar is Loadable. implement it.
 template<typename T, bool is_const = false, bool is_volatile = false>
 //using GlobalVar<T, is_const, is_volatile> = Var<T, is_const, is_volatile>;
 struct GlobalVar : public Var<T, is_const, is_volatile>, public Assignable<T, is_const> {
@@ -131,18 +120,13 @@ struct GlobalVar : public Var<T, is_const, is_volatile>, public Assignable<T, is
 };
 
 
-// because FuncParam should behave exactly in the same way as usual Var does
+
+/* Function-related constructs */
+
+template<typename T>
+using ParamBase = VarBase<T>;
 template<typename T, bool is_const = false, bool is_volatile = false>
-struct FuncParam : public Var<T, is_const, is_volatile>, public IRConvertible<FuncParam<T, is_const, is_volatile>> {
-    using Var<T, is_const, is_volatile>::Var;
-
-    explicit constexpr FuncParam(T &&default_value, const std::string_view &name = "")
-            : Var<T, is_const, is_volatile>{default_value, name}, defaulted{true}
-    {}
-
-    const bool defaulted{false};
-};
-
+using Param = Var<T, is_const, is_volatile>;
 
 // todo: convenient container for FuncParam
 /* cases:
@@ -153,18 +137,16 @@ template<typename ...Args>
 struct FuncParams {
 };
 
-
 // works well when we can refer to enclosed construct independently of its nature
 // i.e. toIR override { return "return " + x.getIRReferenceName(); }
 template<typename RetT>
 class Return : public DSLBase, public IRConvertible<Return<RetT>> {
     const DSLBase &returnee;
 public:
-    explicit constexpr Return(const VarBase<RetT> &var) : returnee{var} {};
+    explicit constexpr Return() = default;
     explicit constexpr Return(const Expr<RetT> &expr) : returnee{expr} {};
-
+    explicit constexpr Return(const VarBase<RetT> &var) : returnee{var} {};
 };
-
 
 // maybe do IRConvertible here if we can query 'the thing to call' independently of subtype... ???
 template<typename RetT, typename... Args>
@@ -176,19 +158,38 @@ struct IDSLCallable {
 
 template<typename RetT, typename... Args>
 class DSLFunction : public IDSLCallable<RetT, Args...> {
-//    std::tuple<Args...>
+    const std::tuple<ParamBase<Args>...> params;  // const? hardly.
+    const ExprBase body;
+    const Return<RetT> returnSt;
+//    const Seq<RetT> body;  // alternative; less flexible
 
 public:
-//    template<typename ...Ts>
-//    constexpr explicit DSLFunction(Expr<Ts>&&... statements, Expr<RetT> &&returnSt); // imitates Seq, may even use it
+    const std::string_view name{};
 
-    template<typename T>
-    constexpr DSLFunction(const FuncParams<Args...> &args, Seq<T> statements, Return<RetT> &&returnSt);
 
-    explicit constexpr DSLFunction(const FuncParams<Args...> &args, Seq<RetT> statements);
+    constexpr DSLFunction(const ParamBase<Args>&... params, ExprBase &&body, Return<RetT> &&returnSt)
+            : params{params...}, body{std::move(body)}, returnSt{std::move(returnSt)} {}
+
+    constexpr DSLFunction(const std::string_view &name,
+                          const ParamBase<Args>&... params, ExprBase &&body, Return<RetT> &&returnSt)
+            : params{params...}, body{std::move(body)}, returnSt{std::move(returnSt)}, name{name} {}
+
+
+    /// Specialisation of c-tor for function returning void
+    /// \param params
+    /// \param body
+    template<typename std::enable_if<std::is_void<RetT>::value>::type>
+    explicit constexpr DSLFunction(const ParamBase<Args>&... params, ExprBase &&body)
+            : params{params...}, body{std::move(body)}, returnSt{} {}
+
+    template<typename std::enable_if<std::is_void<RetT>::value>::type>
+    explicit constexpr DSLFunction(const std::string_view &name,
+                                   const ParamBase<Args>&... params, ExprBase &&body)
+            : params{params...}, body{std::move(body)}, returnSt{}, name{name} {}
+
 
     // suppose there's another func which uses __the same__ types
-    void specialise(Args... args);
+//    constexpr void specialise(Args... args);
 
 };
 
@@ -201,9 +202,8 @@ class ECall : Expr<RetT> {
     const IDSLCallable<RetT, Args...> &callee;
     const std::tuple<Expr<Args>...> args;
 public:
-    constexpr ECall(const IDSLCallable<RetT, Args...> &callee, Expr<Args>&&... args)
-            : callee{callee}, args{std::move(args)...}
-    {}
+    explicit constexpr ECall(const IDSLCallable<RetT, Args...> &callee, Expr<Args>&&... args)
+            : callee{callee}, args{std::move(args)...} {}
 
 };
 
@@ -238,4 +238,7 @@ constexpr EBinOp<T> operator+(Expr<T> &&lhs, Expr<T> &&rhs) {
 } // namespace
 
 
+// nothing there
+constexpr void test_thing(const IRGen &gen) {
+}
 
