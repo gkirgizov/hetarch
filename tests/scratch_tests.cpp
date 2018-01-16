@@ -15,12 +15,10 @@ using namespace std;
 //    std::cout << '[' << region.start << ", " << region.end << ", s:" << region.size << ']' << std::endl;
 //}
 
-
-namespace {
-
 class Base;
 class Derived;
 class Derived2;
+
 
 struct Delegator {
     static void accept(const Base &x) {
@@ -94,12 +92,3 @@ TEST(scratchTests, callBaseMethodFromDerived) {
     b2->printType();  // prints Derived2
 
 }
-
-} // namespace
-
-int main(int argc, char *argv[]) {
-    ::testing::InitGoogleTest(&argc, argv);
-
-    return RUN_ALL_TESTS();
-}
-
