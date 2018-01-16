@@ -121,7 +121,7 @@ target_sources(hetarch_trik
 
 add_library(temp_target
         tests/test_code/test_code.cpp
-        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/dsl/IDSLCallable.h new/supportingClasses.h new/CodeLoader.h new/IConnection.h new/dsl/dsl_basic.h new/dsl/sequence.h)
+        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/dsl/IDSLCallable.h new/supportingClasses.h new/CodeLoader.h new/IConnection.h new/dsl/dsl_basic.h new/dsl/sequence.h new/dsl/IRTranslator.h)
 
 add_subdirectory(examples)
 add_subdirectory(tests)
