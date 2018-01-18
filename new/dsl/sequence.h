@@ -23,12 +23,14 @@ template<typename T, typename ...Ts> struct select_last<T, Ts...> { using type =
 //};
 
 template<typename T>
-class Seq : public Expr<T>, public IRTranslatable<Seq<T>> {
-    const ExprBase lhs;
-    const Expr<T> rhs;
+class Seq : public Expr<T> {
+    const ExprBase &lhs;
+    const Expr<T> &rhs;
 public:
     constexpr Seq(ExprBase &&lhs, Expr<T> &&rhs) : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
 
+    friend class IRTranslator;
+    inline void toIR(const IRTranslator &irTranslator) const override { irTranslator.accept(*this); }
 };
 
 template<typename Tl, typename Tr>
