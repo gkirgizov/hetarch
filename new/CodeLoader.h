@@ -7,6 +7,7 @@
 
 #include "CodeGen.h"
 #include "dsl/IDSLCallable.h"
+#include "dsl/ResidentObjCode.h"
 #include "supportingClasses.h"
 
 #include "../tests/utils.h"
@@ -14,30 +15,13 @@
 
 namespace hetarch {
 
-template<typename AddrT, typename RetT, typename... Args>
-class ResidentObjCode : public MemResident<AddrT>, public dsl::IDSLCallable<RetT, Args...> {
-
-public:
-
-    ResidentObjCode(mem::MemManager<AddrT> *memManager, mem::MemRegion<AddrT> memRegion,
-                    AddrT callAddr, bool unloadable)
-            : MemResident<AddrT>(memManager, memRegion, unloadable), callAddr(callAddr)
-    {}
-
-//    IDSLVariable<RetT> call(IDSLVariable<Args>... args) override {};
-
-    const AddrT callAddr;
-
-};
-
-
 // temporary here
 class CodeLoader {
     using content_t = llvm::StringRef;
 
 public:
     template<typename AddrT, typename RetT, typename... Args>
-    static ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT> *conn,
+    static dsl::ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT> *conn,
                                                mem::MemManager<AddrT> *memManager,
                                                mem::MemType memType,
                                                const ObjCode<RetT, Args...> &objCode) {
@@ -64,7 +48,7 @@ public:
             if (auto sectionOffset = objCode.getSymbol().getAddress()) {
                 auto addr = sectionOffset.get();
                 // create unloadable resident
-                return ResidentObjCode<AddrT, RetT, Args...>(memManager, memRegion, addr, true);
+                return dsl::ResidentObjCode<AddrT, RetT, Args...>(memManager, memRegion, addr, true);
 
             } else {
                 // todo: handle some curious thing with unknown address (offset???) of the symbol
@@ -75,7 +59,7 @@ public:
     };
 
     template<typename AddrT, typename RetT, typename... Args>
-    static ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT> *conn,
+    static dsl::ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT> *conn,
                                                mem::MemRegion<AddrT> memRegion,
                                                const ObjCode<RetT, Args...> &objCode) {
         //
@@ -104,7 +88,7 @@ private:
 // todo: this ex. shows that all funcs must have && counterparts \
 // todo: and all util objects must obey move semantics (not clear about copy)
 //template<typename RetT, typename... Args>
-//ResidentObjCode<RetT, Args...> convenientLoad(const DSLFunction<RetT, Args...> &target) {
+//dsl::ResidentObjCode<RetT, Args...> convenientLoad(const DSLFunction<RetT, Args...> &target) {
 //
 //    IRModule<RetT, Args...> irModule = CodeGen::generateIR(target);
 //    if (bool success = CodeGen::link(irModule)) {

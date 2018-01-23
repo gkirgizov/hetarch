@@ -4,7 +4,6 @@
 #include <utility>
 
 #include "IDSLCallable.h"
-#include "IRTranslator.h"
 
 
 namespace hetarch {
@@ -30,7 +29,7 @@ public:
     constexpr Seq(ExprBase &&lhs, Expr<T> &&rhs) : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
 
     friend class IRTranslator;
-    inline void toIR(IRTranslator &irTranslator) const override { irTranslator.accept(*this); }
+    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
 template<typename Tl, typename Tr>

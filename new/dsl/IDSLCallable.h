@@ -18,17 +18,13 @@ class IRTranslator;
 template<typename T> inline void toIRImpl(const T &irTranslatable, IRTranslator &irTranslator);
 
 
-class DSLBase;
+//class DSLBase;
+//class ESBase;
 template<typename RetT, typename ...Args> class IDSLCallable;
 template<typename RetT, typename ...Args> class DSLFunction;
-template<typename RetT, typename ...Args> class ResidentOCode;
 template<typename RetT> class Return;
-template<typename T> class VarBase;
-template<typename T, bool, bool> class Var;
-
-//template<typename T, bool = false> class Assignable;
-
-template<typename T> class Seq;
+//template<typename T> class VarBase;
+//template<typename T, bool, bool> class Var;
 
 //template<typename RetT, typename ...Args> class ECall;
 template<typename T> class EAssign;
@@ -37,16 +33,16 @@ template<typename T> class EBinOp;
 
 struct DSLBase {
     virtual inline void toIR(IRTranslator &irTranslator) const {
-        std::cout << "called base class toIR()" << std::endl;
+        std::cerr << "called base class toIR()" << std::endl;
     }
 };
 
-struct ExprBase : public DSLBase {
-};
+struct ESBase : public DSLBase {}; // Expression or Statement
+
+struct ExprBase : public ESBase {};
 
 template<typename T>
-struct Expr : public ExprBase {
-};
+struct Expr : public ExprBase {};
 
 struct EmptyExpr : public ExprBase {
     inline void toIR(IRTranslator &irTranslator) const override {
@@ -54,6 +50,10 @@ struct EmptyExpr : public ExprBase {
     }
 };
 static constexpr const auto empty_expr = EmptyExpr{};
+
+
+template<typename... Args>
+using expr_tuple = std::tuple<const Expr<Args>&...>;
 
 
 // todo: enable_if only for integral etc. simple types?
@@ -157,7 +157,7 @@ struct FuncParams {
 // works well when we can refer to enclosed construct independently of its nature
 // i.e. toIR override { return "return " + x.getIRReferenceName(); }
 template<typename RetT>
-class Return : public DSLBase {
+class Return : public ESBase {
     const Expr<RetT> &returnee;
 public:
     explicit constexpr Return(Expr<RetT> &&expr) : returnee{std::move(expr)} {};
@@ -167,7 +167,7 @@ public:
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
-template<> class Return<void> : public DSLBase {
+template<> class Return<void> : public ESBase {
     friend class IRTranslator;
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
@@ -179,27 +179,23 @@ template<typename RetT, typename ...Args> struct ECallEmptyBase : public Expr<Re
     }
 };
 
-template<template<typename, typename...> class Tcallable, typename RetT, typename... Args>
-class ECallBase : public ECallEmptyBase<RetT, Args...> {
-    const Tcallable<RetT, Args...> &callee;
-    const std::tuple<const Expr<Args>&...> args;
+template<typename RetT, typename... Args>
+class ECall: public ECallEmptyBase<RetT, Args...> {
+    const DSLFunction<RetT, Args...> &callee;
+    expr_tuple<Args...> args;
 public:
-    explicit constexpr ECallBase(const Tcallable<RetT, Args...> &callee, const Expr<Args>&... args)
+    explicit constexpr ECall(const DSLFunction<RetT, Args...> &callee, const Expr<Args>&... args)
             : callee{callee}, args{args...} {}
-    explicit constexpr ECallBase(const Tcallable<RetT, Args...> &callee, Expr<Args>&&... args)
-            : callee{callee}, args{std::move(args)...} {}
 
     friend class IRTranslator;
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
-template<typename RetT, typename ...Args> using ECall = ECallBase<DSLFunction, RetT, Args...>;
-template<typename RetT, typename ...Args> using ECallLoaded = ECallBase<ResidentOCode, RetT, Args...>;
 
 // todo: do i even need virtual function in this class?
 template<typename RetT, typename... Args>
 struct IDSLCallable : public DSLBase {
-    // TODO: returning by value to EmptyBase Slices object. we don't have overloaded toIR then.
+//     TODO: returning by value to EmptyBase Slices object. we don't have overloaded toIR then.
 //    virtual ECallEmptyBase<RetT, Args...> call(const Expr<Args>&... args) const = 0;
 //    inline ECallEmptyBase<RetT, Args...> operator()(const Expr<Args>&... args) const { return call(args...); };
 
@@ -240,7 +236,7 @@ public:
             : params{params...}, body{std::move(body)}, returnSt{std::move(returnSt)}, name{name} {}
 
     // 'return void' constructors
-    // todo: do class template spesialiation? enablie_if  cannot be used here: compile error
+    // todo: do class template spesialiation? enable_if  cannot be used here: compile error
 /*    template<typename = typename std::enable_if<std::is_void<RetT>::value>::type>
     explicit constexpr DSLFunction(const ParamBase<Args>&... params, ExprBase &&body)
             : params{params...}, body{std::move(body)}, returnSt{} {}
@@ -294,10 +290,12 @@ public:
  * and construct pure EBinOp<T1>{lhs, ecast}.
  *
  * --> what about 'leaf' operator overloads for lvalue-ref VarBase? (or just allow lvalue Expr?)
+ *
  */
 
 // todo: enable_if
 // todo: kind of specifier of OP which will somehow enable toIR() specification for each OP
+//  note: see llvm::Instruction::BinaryOps and IRBuilder::CreateBinOp
 template<typename T>
 class EBinOp : public Expr<T> {
     const Expr<T> &lhs;
@@ -312,14 +310,6 @@ template<typename T>
 constexpr EBinOp<T> operator+(Expr<T> &&lhs, Expr<T> &&rhs) {
     return EBinOp<T>{std::move(lhs), std::move(rhs)};
 }
-
-
-
-// todo: handle default arguments
-//template<typename RetT, typename... Args>
-//constexpr ECall<RetT, Args...> IDSLCallable<RetT, Args...>::call(Expr<Args> &&... args) const {
-//    return ECall<RetT, Args...>(*this, std::move(args)...);
-//}
 
 
 template<typename T, bool is_const, bool is_volatile>
