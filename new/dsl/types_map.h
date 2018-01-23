@@ -34,7 +34,10 @@ using map_t = boost::fusion::map<
         pair<int8_t *, llvm::PointerType*>,
         pair<int16_t*, llvm::PointerType*>,
         pair<int32_t*, llvm::PointerType*>,
-        pair<int64_t*, llvm::PointerType*>
+        pair<int64_t*, llvm::PointerType*>,
+
+        pair<char   , llvm::IntegerType*>,
+        pair<char*  , llvm::PointerType*>
 >;
 
 using boost::fusion::at_key;
@@ -57,8 +60,11 @@ map_t get_map(llvm::LLVMContext &C) {
             make_pair<int8_t *>(llvm::Type::getInt8PtrTy(C)),
             make_pair<int16_t*>(llvm::Type::getInt16PtrTy(C)),
             make_pair<int32_t*>(llvm::Type::getInt32PtrTy(C)),
-            make_pair<int64_t*>(llvm::Type::getInt64PtrTy(C))
+            make_pair<int64_t*>(llvm::Type::getInt64PtrTy(C)),
 //            make_pair<>(llvm::Type::get(C)),
+
+            make_pair<char   >(llvm::Type::getInt8Ty(C)),
+            make_pair<char  *>(llvm::Type::getInt8PtrTy(C))
     };
 };
 
