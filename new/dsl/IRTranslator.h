@@ -97,8 +97,6 @@ public:
 public: // out-of-dsl constructs
     template<typename T, bool is_const, bool is_volatile>
     void accept(const Var<T, is_const, is_volatile> &var) {
-        std::cout << "accept " << typeid(var).name() << std::endl;
-
         llvm::Value* val = nullptr;
         auto known = evaluated.find(static_cast<const ExprBase*>(&var));
         if (known == std::end(evaluated)) {
@@ -147,8 +145,6 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
     // todo: return IRModule
     template<typename RetT, typename ...Args>
     auto translate(const DSLFunction<RetT, Args...> &func) {
-        std::cout << "accept " << typeid(func).name() << std::endl;
-
         // example code
 //        std::apply([this](const auto& ...params){
             // need zeros as toIR returns void; preceding zeros because params can be empty tuple
@@ -228,8 +224,6 @@ private:
 public:
     template<typename T>
     void accept(const Seq<T> &seq) {
-        std::cout << "accept " << typeid(seq).name() << std::endl;
-
         const auto n_vals = val_stack.size();
         seq.lhs.toIR(*this);
         assert(val_stack.size() == n_vals + 1 && "val_stack probably isn't used correctly!"); // hard-testing...
@@ -240,8 +234,6 @@ public:
 
     template<typename T>
     void accept(const IfExpr<T> &e) {
-        std::cout << "accept " << typeid(e).name() << std::endl;
-
         // Evaluate condition
         e.cond.toIR(*this);
         llvm::Value* cond = val_stack.top(); val_stack.pop();
@@ -270,8 +262,6 @@ public:
     }
 
     void accept(const IfElse &e) {
-        std::cout << "accept " << typeid(e).name() << std::endl;
-
         // todo: seems, difference betwenn IfExpr and If statement is that with the latter resulted value popped from the val_stack
         // .... but IfStatement contains not Expr. that is, there is no guarantee that stack will be changed
         // .... need checks on stack size? ensure it to remaing the same at the end of evaluation of If statement?
@@ -279,8 +269,6 @@ public:
 
     template<typename RetT>
     void accept(const Return<RetT> &returnSt) {
-        std::cout << "accept " << typeid(returnSt).name() << std::endl;
-
         returnSt.returnee.toIR(*this);
         cur_builder->CreateRet(val_stack.top());
         val_stack.pop();
@@ -288,8 +276,6 @@ public:
 
     template<typename T>
     void accept(const EAssign<T> &e) {
-        std::cout << "accept " << typeid(e).name() << std::endl;
-
         e.rhs.toIR(*this);
         llvm::Value* rhs = val_stack.top();
         val_stack.pop();
@@ -305,8 +291,6 @@ public:
 
     template<typename RetT, typename ...Args>
     void accept(const ECall<RetT, Args...> &e) {
-        std::cout << "accept " << typeid(e).name() << std::endl;
-
         // If dsl func is not defined (i.e. not translated)
         if (defined_funcs.find(e.callee.name) == std::end(defined_funcs)) {
             e.callee.toIR(*this);
@@ -320,8 +304,6 @@ public:
 
     template<typename AddrT, typename RetT, typename ...Args>
     void accept(const ECallLoaded<AddrT, RetT, Args...> &e) {
-        std::cout << "accept " << typeid(e).name() << std::endl;
-
         llvm::CallInst* inst = cur_builder->CreateCall(
                 get_func_type<RetT, Args...>(),
                 val2llvm(e.callee.callAddr),
@@ -347,8 +329,6 @@ private:
 
 template<>
 void IRTranslator::accept(const Return<void> &returnSt) {
-    std::cout << "accept " << typeid(returnSt).name() << std::endl;
-
     llvm::ReturnInst* inst = cur_builder->CreateRetVoid();
 }
 
@@ -356,6 +336,8 @@ void IRTranslator::accept(const Return<void> &returnSt) {
 
 template<typename T>
 inline void toIRImpl(const T &irTranslatable, IRTranslator &irTranslator) {
+    std::cout << "accept " << typeid(irTranslatable).name() << std::endl;
+
     irTranslator.accept(irTranslatable);
 }
 
