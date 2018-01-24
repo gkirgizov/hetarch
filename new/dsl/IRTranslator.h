@@ -18,6 +18,7 @@
 #include "IDSLCallable.h"
 #include "ResidentObjCode.h"
 #include "sequence.h"
+#include "if_else.h"
 #include "../utils.h"
 #include "types_map.h"
 
@@ -61,20 +62,14 @@ class IRTranslator {
     llvm::LLVMContext context{}; // todo: how to store/constrcut context?? is it completely internal thing?
 
     std::unique_ptr<llvm::Module> cur_module{};
-    llvm::BasicBlock* cur_block{nullptr};
 
-//    llvm::IRBuilderBase* cur_builder{nullptr};
-    // todo: remove raw pointer
-    llvm::IRBuilder<>* cur_builder{nullptr};
+    // todo: remove pointer
+//    llvm::IRBuilder<>* cur_builder{nullptr};
+    std::unique_ptr<llvm::IRBuilder<>> cur_builder{};
 
-    std::stack<llvm::Value*> vals{};
-
-    // todo: clear it after end of translation? definetly.
-//    std::unordered_map<std::string, llvm::Function*> defined_funcs{};
+    // todo: use const DSLBase* as key for funcs (analogous to evaluated map)
     std::unordered_map<std::string_view, llvm::Function*> defined_funcs{};
-
-//    using expr_ref_t = std::reference_wrapper<ExprBase>;
-//    std::unordered_map<expr_ref_t, llvm::Value*> evaluated{};
+    std::stack<llvm::Function*> fun_stack{};
     std::unordered_map<const ExprBase*, llvm::Value*> evaluated{};
     std::stack<llvm::Value*> val_stack{};
 
@@ -82,8 +77,6 @@ class IRTranslator {
 
     template<typename Key>
     inline auto get_type() { return utils::at_key<Key>(type_map); }
-//    template<typename ...Keys>
-//    inline auto get_types() { return { utils::at_key<Keys>(type_map)... }; }
 
     template<typename RetT, typename... Args>
     inline llvm::FunctionType* get_func_type(bool isVarArg = false) {
@@ -94,12 +87,12 @@ class IRTranslator {
 
 
 public:
-    explicit IRTranslator() : context{}, type_map{utils::get_map(context)} {}
-//    explicit IRTranslator(const llvm::LLVMContext &context)
-//    : context{context} {}
+    explicit IRTranslator()
+            : context{}, cur_builder{new llvm::IRBuilder<>{context}}, type_map{utils::get_map(context)} {}
+//    explicit IRTranslator(llvm::LLVMContext &context)
+//            : context{context}, cur_builder{new llvm::IRBuilder<>{context}}, type_map{utils::get_map(context)} {}
 
-//    template<typename T>
-//    void accept(const Expr<T> &expr) {} // dummy overload
+    void accept(const EmptyExpr &) {}
 
 public: // out-of-dsl constructs
     template<typename T, bool is_const, bool is_volatile>
@@ -108,7 +101,6 @@ public: // out-of-dsl constructs
 
         llvm::Value* val = nullptr;
         auto known = evaluated.find(static_cast<const ExprBase*>(&var));
-//        auto known = evaluated.find(&static_cast<ExprBase>(var));
         if (known == std::end(evaluated)) {
             // how can happen that var is used for the first time; in what contexts -- handle all of them
             // todo: CreateWhat?? Alloca, Store, Load??
@@ -120,7 +112,7 @@ public: // out-of-dsl constructs
             // const var -- ??
 
             auto init_val_t = get_type<T>();
-            // default empty name is handled automatically by LLVM (when var.name.data() == "")
+            // Default empty name is handled automatically by LLVM (when var.name.data() == "")
             val = cur_builder->CreateAlloca(init_val_t, nullptr, var.name.data());
             auto init_val = val2llvm(var.initial_val());
             auto initInst = cur_builder->CreateStore(init_val, val, is_volatile);
@@ -157,36 +149,36 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
     auto translate(const DSLFunction<RetT, Args...> &func) {
         std::cout << "accept " << typeid(func).name() << std::endl;
 
-
-        // todo: can func params be handled same as Var?
-        std::apply([this](const auto& ...params){
+        // example code
+//        std::apply([this](const auto& ...params){
             // need zeros as toIR returns void; preceding zeros because params can be empty tuple
-            std::make_tuple(0, (params.toIR(*this), 0)...); // dummy tuple construction
-        }, func.params);
-
-        func.body.toIR(*this);
-        func.returnSt.toIR(*this);
+//            std::make_tuple(0, (params.toIR(*this), 0)...); // dummy tuple construction
+//        }, func.params);
+//        func.body.toIR(*this);
+//        func.returnSt.toIR(*this);
 
         /////////////////////////////////////////////////////////
-//        accept(func);
+
+        const auto moduleName = "module_" + std::string(func.name);
+        cur_module = std::make_unique<llvm::Module>(moduleName, context);
+        func.toIR(*this);
+
 //        return IRModule<RetT, Args...>{std::move(module), funcName};
     }
 
-//    template<typename RetT, typename ...Args>
-//    void accept(const ResidentOCode<RetT, Args...> &func) {
-    // check that func is really loaded?
-//    }
+    // todo: accept Resident? do i need to do anything here?
+    template<typename AddrT, typename RetT, typename ...Args>
+    void accept(const ResidentObjCode<AddrT, RetT, Args...> &func) {
+        // check that func is really loaded?
+    }
 
     template<typename RetT, typename ...Args>
     void accept(const DSLFunction<RetT, Args...> &dslFun) {
         // todo: handle absence of function name; get temp name from IRBuilder???
         std::string funcName{dslFun.name};
-        const auto moduleName = "module_" + funcName;
-
-        cur_module = std::make_unique<llvm::Module>(moduleName, context);
 
         // Define function
-        // ExternalLinkage to be able to call the func outside the module it resides in
+        // ExternalLinkage is to be able to call the func outside the module it resides in
         llvm::Function *fun = llvm::Function::Create(
                 get_func_type<RetT, Args...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
         );
@@ -194,16 +186,18 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         // Handle arguments
         modifyArgs(dslFun, fun);
 
-        const auto blockName = moduleName + "_block" + "_entry";
+        const auto blockName = funcName + "_block" + "_entry";
         llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, blockName, fun);
-        cur_block = entry_bb;
-        cur_builder = new llvm::IRBuilder<>{entry_bb}; // todo: remove raw ref
+        cur_builder->SetInsertPoint(entry_bb);
 
-        // that's it. now we have builder and func and module
+        fun_stack.push(fun);
         dslFun.body.toIR(*this); // todo: is it enough to just call it?
+        dslFun.returnSt.toIR(*this);
+        fun_stack.pop();
 
+        // todo: fail before translation
         bool no_name_conflict = defined_funcs.insert({dslFun.name, fun}).second;
-        // btw: recursive functions ain't handled here
+        // Recursive functions ain't handled here
         assert(no_name_conflict && (funcName + ": dsl function name conflict!").c_str());
     }
 
@@ -237,13 +231,50 @@ public:
         std::cout << "accept " << typeid(seq).name() << std::endl;
 
         const auto n_vals = val_stack.size();
-        // evaluate left expr
         seq.lhs.toIR(*this);
         assert(val_stack.size() == n_vals + 1 && "val_stack probably isn't used correctly!"); // hard-testing...
         // Sequence discards result of evaluation of left expression
         val_stack.pop();
-        // evaluate right expr
         seq.rhs.toIR(*this);
+    }
+
+    template<typename T>
+    void accept(const IfExpr<T> &e) {
+        std::cout << "accept " << typeid(e).name() << std::endl;
+
+        // Evaluate condition
+        e.cond.toIR(*this);
+        llvm::Value* cond = val_stack.top(); val_stack.pop();
+
+        // get ?unique name (or null i think is simpler. why do i even need these names?)
+        llvm::BasicBlock* true_block = llvm::BasicBlock::Create(context, "", fun_stack.top());
+        llvm::BasicBlock* false_block = llvm::BasicBlock::Create(context, "", fun_stack.top());
+
+        llvm::BranchInst* inst = cur_builder->CreateCondBr(cond, true_block, false_block);
+
+        // Create temp value to hold result of the whole expr depending on branch
+        llvm::Value* result = cur_builder->CreateAlloca(get_type<T>());
+        llvm::IRBuilderBase::InsertPoint ip = cur_builder->saveIP();
+
+        cur_builder->SetInsertPoint(true_block);
+        e.then_body.toIR(*this);
+        cur_builder->CreateStore(val_stack.top(), result);
+        val_stack.pop();
+
+        cur_builder->SetInsertPoint(false_block);
+        e.else_body.toIR(*this);
+        cur_builder->CreateStore(val_stack.top(), result);
+        val_stack.pop();
+
+        cur_builder->restoreIP(ip);
+    }
+
+    void accept(const IfElse &e) {
+        std::cout << "accept " << typeid(e).name() << std::endl;
+
+        // todo: seems, difference betwenn IfExpr and If statement is that with the latter resulted value popped from the val_stack
+        // .... but IfStatement contains not Expr. that is, there is no guarantee that stack will be changed
+        // .... need checks on stack size? ensure it to remaing the same at the end of evaluation of If statement?
     }
 
     template<typename RetT>
@@ -251,8 +282,8 @@ public:
         std::cout << "accept " << typeid(returnSt).name() << std::endl;
 
         returnSt.returnee.toIR(*this);
-        auto retInst = cur_builder->CreateRet(vals.top());
-        vals.pop();
+        cur_builder->CreateRet(val_stack.top());
+        val_stack.pop();
     }
 
     template<typename T>
@@ -268,6 +299,7 @@ public:
         val_stack.pop();
 
         // TODO: somehow access is_volatile
+//        llvm::StoreInst* inst = cur_builder->CreateStore(rhs, dest, is_volatile);
         llvm::StoreInst* inst = cur_builder->CreateStore(rhs, dest);
     }
 
@@ -275,13 +307,15 @@ public:
     void accept(const ECall<RetT, Args...> &e) {
         std::cout << "accept " << typeid(e).name() << std::endl;
 
-        // If dsl func is not defined (i.e. translated)
+        // If dsl func is not defined (i.e. not translated)
         if (defined_funcs.find(e.callee.name) == std::end(defined_funcs)) {
             e.callee.toIR(*this);
         }
 
-        llvm::Function* func = defined_funcs.at(e.callee.name);
-        llvm::CallInst* inst = cur_builder->CreateCall(func, eval_func_args(e.args));
+        llvm::CallInst* inst = cur_builder->CreateCall(
+                defined_funcs.at(e.callee.name),
+                eval_func_args(e.args)
+        );
     }
 
     template<typename AddrT, typename RetT, typename ...Args>
@@ -315,7 +349,7 @@ template<>
 void IRTranslator::accept(const Return<void> &returnSt) {
     std::cout << "accept " << typeid(returnSt).name() << std::endl;
 
-    auto retInst = cur_builder->CreateRetVoid();
+    llvm::ReturnInst* inst = cur_builder->CreateRetVoid();
 }
 
 
