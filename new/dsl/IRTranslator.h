@@ -15,7 +15,7 @@
 #include "llvm/IR/IRBuilder.h"
 
 #include "../supportingClasses.h"
-#include "IDSLCallable.h"
+#include "dsl_base.h"
 #include "ResidentObjCode.h"
 #include "sequence.h"
 #include "if_else.h"

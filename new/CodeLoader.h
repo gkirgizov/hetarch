@@ -6,7 +6,7 @@
 #include "MemResident.h"
 
 #include "CodeGen.h"
-#include "dsl/IDSLCallable.h"
+#include "dsl/dsl_base.h"
 #include "dsl/ResidentObjCode.h"
 #include "supportingClasses.h"
 

@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-#include "IDSLCallable.h"
+#include "dsl_base.h"
 #include "var.h"
 #include "../utils.h"
 

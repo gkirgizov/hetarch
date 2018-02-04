@@ -5,7 +5,7 @@
 
 #include <llvm/IR/Instruction.h>
 
-#include "IDSLCallable.h"
+#include "dsl_base.h"
 
 
 namespace hetarch {
