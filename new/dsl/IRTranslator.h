@@ -14,11 +14,13 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/IRBuilder.h"
 
-//#include "../supportingClasses.h"
+#include "../supportingClasses.h"
 #include "IDSLCallable.h"
 #include "ResidentObjCode.h"
 #include "sequence.h"
 #include "if_else.h"
+#include "op.h"
+
 #include "../utils.h"
 #include "types_map.h"
 
@@ -27,38 +29,10 @@ namespace hetarch {
 namespace dsl {
 
 
-/*class IIRTranslator {
-public:
-// out-of-dsl constructs
-
-    template<typename T, bool is_const, bool is_volatile>
-    virtual void accept(const Var<T, is_const, is_volatile> &var) const = 0;
-
-// dsl function and related constructs (function is 'entry' point of ir generation)
-
-    template<typename RetT, typename ...Args>
-    virtual void accept(const DSLFunction<RetT, Args...> &func) const = 0;
-
-// helper classes
-
-    template<typename T>
-    virtual void accept(const Seq<T> &seq) const = 0;
-
-    // maybe i doesn't even need this if i'll put handling of Return<RetT> in DSLFunction<RetT, Args...>
-    template<typename RetT>
-    virtual void accept(const Return<RetT> &returnSt) const = 0;
-
-    template<typename T>
-    virtual void accept(const EAssign<T> &e) const = 0;
-
-    template<typename RetT, typename ...Args>
-    virtual void accept(const ECall<RetT, Args...> &e) const = 0;
-}*/
-
-
-// temporary! just to ensure interface
-//class IRTranslator : public IIRTranslator {
 class IRTranslator {
+    template<typename T>
+    friend void toIRImpl(const T &irTranslatable, IRTranslator &irTranslator);
+
     llvm::LLVMContext context{}; // todo: how to store/constrcut context?? is it completely internal thing?
 
     std::unique_ptr<llvm::Module> cur_module{};
@@ -70,6 +44,8 @@ class IRTranslator {
     // todo: use const DSLBase* as key for funcs (analogous to evaluated map)
     std::unordered_map<std::string_view, llvm::Function*> defined_funcs{};
     std::stack<llvm::Function*> fun_stack{};
+
+    // todo: One global variable context for all functions and scopes allows harsh misuse
     std::unordered_map<const ExprBase*, llvm::Value*> evaluated{};
     std::stack<llvm::Value*> val_stack{};
 
@@ -85,7 +61,6 @@ class IRTranslator {
         );
     }
 
-
 public:
     explicit IRTranslator()
             : context{}, cur_builder{new llvm::IRBuilder<>{context}}, type_map{utils::get_map(context)} {}
@@ -95,32 +70,39 @@ public:
     void accept(const EmptyExpr &) {}
 
 public: // out-of-dsl constructs
+
+    // todo: test Const handling
+    // todo: how to create/use globals
     template<typename T, bool is_const, bool is_volatile>
     void accept(const Var<T, is_const, is_volatile> &var) {
-        llvm::Value* val = nullptr;
+        llvm::Value* val_ptr = nullptr;
+
         auto known = evaluated.find(static_cast<const ExprBase*>(&var));
         if (known == std::end(evaluated)) {
-            // how can happen that var is used for the first time; in what contexts -- handle all of them
-            // todo: CreateWhat?? Alloca, Store, Load??
-            // local var -- alloca + store(init)
-            // arguments -- alloca + store(actual argument value)
-
-            // todo: how to create/use globals and constants
-            // global var -- load
-            // const var -- ??
-
-            auto init_val_t = get_type<T>();
             // Default empty name is handled automatically by LLVM (when var.name.data() == "")
-            val = cur_builder->CreateAlloca(init_val_t, nullptr, var.name.data());
-            auto init_val = val2llvm(var.initial_val());
-            auto initInst = cur_builder->CreateStore(init_val, val, is_volatile);
-
-            evaluated[&var] = val;
-        } else {
-            val = known->second;
+            val_ptr = cur_builder->CreateAlloca(get_type<T>(), nullptr, var.name.data());
+            // When var is used for the first time (this branch) its actual value is its initial value
+            auto init_val = get_llvm_const(var.initial_val());
+            auto initInst = cur_builder->CreateStore(init_val, val_ptr, is_volatile);
+            evaluated[&var] = val_ptr;
+        } else { // Variable usage
+            val_ptr = known->second;
         }
+
+        // todo: maybe return address instead and let users decide what they need: Load or Store?
+        //  this way they must be aware that on the stack is the loaded value -- not val_ptr and pop it if they don't need it
+        // Using SSA: each time we load value again
+        llvm::Value* val = cur_builder->CreateLoad(val_ptr, is_volatile, var.name.data());
         val_stack.push(val);
     }
+
+    // Actually, this specialisation is optional, because non-volatile const case is handled above
+    template<typename T>
+    void accept(const Const<T, false> &var) {
+        // Non-volatile const variables can be directly substitued by its value
+        val_stack.push(get_llvm_const(var.initial_val()));
+    }
+
 
 private:
 //     todo: overload these (also overload for signed/unsigned ints)
@@ -128,41 +110,31 @@ private:
 //            llvm::ConstantInt* init_val = llvm::ConstantInt::getSigned(init_val_t, static_cast<int64_t>(var.initial_val()));
 //            llvm::Constant* init_val = llvm::ConstantFP::get(init_val_t, static_cast<double>(var.initial_val()));
     template<typename T, typename = std::enable_if<std::is_convertible<T, uint64_t>::value>>
-    auto val2llvm(T val, uint64_t type_tag = 0) {
+    auto get_llvm_const(T val, uint64_t type_tag = 0) {
         return llvm::ConstantInt::get(get_type<T>(), static_cast<uint64_t>(val));
     }
 //    template<typename T, typename = std::enable_if<std::is_convertible<T, int64_t>::value>>
-//    auto val2llvm(const VarBase<T> &var, int64_t type_tag = 0) {
+//    auto get_llvm_const(const VarBase<T> &var, int64_t type_tag = 0) {
 //        return llvm::ConstantInt::getSigned(get_type<T>(), static_cast<int64_t>(var.initial_val()));
 //    }
 //    template<typename T, typename = std::enable_if<std::is_convertible<T, double>::value>>
-//    auto val2llvm(const VarBase<T> &var, double type_tag = 0) {
+//    auto get_llvm_const(const VarBase<T> &var, double type_tag = 0) {
 //        return llvm::ConstantFP::get(get_type<T>(), static_cast<double>(var.initial_val()));
 //    }
 
 
 public: // dsl function and related constructs (function is 'entry' point of ir generation)
-    // todo: return IRModule
     template<typename RetT, typename ...Args>
-    auto translate(const DSLFunction<RetT, Args...> &func) {
-        // example code
-//        std::apply([this](const auto& ...params){
-            // need zeros as toIR returns void; preceding zeros because params can be empty tuple
-//            std::make_tuple(0, (params.toIR(*this), 0)...); // dummy tuple construction
-//        }, func.params);
-//        func.body.toIR(*this);
-//        func.returnSt.toIR(*this);
+    auto translate(const DSLFunction<RetT, Args...> &fun) {
 
-        /////////////////////////////////////////////////////////
-
-        const auto moduleName = "module_" + std::string(func.name);
+        const auto moduleName = "module_" + std::string(fun.name);
         cur_module = std::make_unique<llvm::Module>(moduleName, context);
-        func.toIR(*this);
+        fun.toIR(*this);
 
-//        return IRModule<RetT, Args...>{std::move(module), funcName};
+        // todo: some cleanup?
+        return IRModule<RetT, Args...>{std::move(cur_module), fun.name.data()};
     }
 
-    // todo: accept Resident? do i need to do anything here?
     template<typename AddrT, typename RetT, typename ...Args>
     void accept(const ResidentObjCode<AddrT, RetT, Args...> &func) {
         // check that func is really loaded?
@@ -170,7 +142,11 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
 
     template<typename RetT, typename ...Args>
     void accept(const DSLFunction<RetT, Args...> &dslFun) {
-        // todo: handle absence of function name; get temp name from IRBuilder???
+        /* todo: handle absence of function name; get temp name from IRBuilder???
+         * actually,
+         * store functions not by name but by ptr (referential equality)
+         * use names for checks on symbol name conflicts (actually, linker later will anyway do it)
+         */
         std::string funcName{dslFun.name};
 
         // Define function
@@ -184,12 +160,14 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
 
         const auto blockName = funcName + "_block" + "_entry";
         llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, blockName, fun);
-        cur_builder->SetInsertPoint(entry_bb);
+        llvm::IRBuilderBase::InsertPoint ip = cur_builder->saveIP();
 
+        cur_builder->SetInsertPoint(entry_bb);
         fun_stack.push(fun);
-        dslFun.body.toIR(*this); // todo: is it enough to just call it?
+        dslFun.body.toIR(*this);
         dslFun.returnSt.toIR(*this);
         fun_stack.pop();
+        cur_builder->restoreIP(ip);
 
         // todo: fail before translation
         bool no_name_conflict = defined_funcs.insert({dslFun.name, fun}).second;
@@ -224,19 +202,19 @@ private:
 public:
     template<typename T>
     void accept(const Seq<T> &seq) {
-        const auto n_vals = val_stack.size();
         seq.lhs.toIR(*this);
-        assert(val_stack.size() == n_vals + 1 && "val_stack probably isn't used correctly!"); // hard-testing...
         // Sequence discards result of evaluation of left expression
         val_stack.pop();
         seq.rhs.toIR(*this);
+        // And returns result of evaluation of right expression
     }
 
     template<typename T>
     void accept(const IfExpr<T> &e) {
         // Evaluate condition
         e.cond.toIR(*this);
-        llvm::Value* cond = val_stack.top(); val_stack.pop();
+        llvm::Value* cond = val_stack.top();
+        val_stack.pop();
 
         // get ?unique name (or null i think is simpler. why do i even need these names?)
         llvm::BasicBlock* true_block = llvm::BasicBlock::Create(context, "", fun_stack.top());
@@ -259,6 +237,7 @@ public:
         val_stack.pop();
 
         cur_builder->restoreIP(ip);
+        val_stack.push(result);
     }
 
     void accept(const IfElse &e) {
@@ -276,17 +255,20 @@ public:
 
     template<typename T>
     void accept(const EAssign<T> &e) {
+        e.var.toIR(*this);
+        // TODO: but accept(Var) leaves on the stack Loaded value, not ptr to dest!!
+//        llvm::Value* dest = val_stack.top();
+        val_stack.pop();
+        llvm::Value* dest = evaluated.at(&e.var);
+
         e.rhs.toIR(*this);
         llvm::Value* rhs = val_stack.top();
-        val_stack.pop();
+        // assignment returns result of the evaluation of rhs; so don't pop
+        // val_stack.pop();
 
-        e.var.toIR(*this);
-        llvm::Value* dest = val_stack.top();
-        val_stack.pop();
-
-        // TODO: somehow access is_volatile
-//        llvm::StoreInst* inst = cur_builder->CreateStore(rhs, dest, is_volatile);
-        llvm::StoreInst* inst = cur_builder->CreateStore(rhs, dest);
+        // TODO: somehow access is_volatile (refine EAssign for Var (not VarBase))
+//        cur_builder->CreateStore(rhs, dest, is_volatile);
+        cur_builder->CreateStore(rhs, dest);
     }
 
     template<typename RetT, typename ...Args>
@@ -300,18 +282,21 @@ public:
                 defined_funcs.at(e.callee.name),
                 eval_func_args(e.args)
         );
+        val_stack.push(inst);
     }
 
     template<typename AddrT, typename RetT, typename ...Args>
     void accept(const ECallLoaded<AddrT, RetT, Args...> &e) {
         llvm::CallInst* inst = cur_builder->CreateCall(
                 get_func_type<RetT, Args...>(),
-                val2llvm(e.callee.callAddr),
+                get_llvm_const(e.callee.callAddr),
                 eval_func_args(e.args)
         );
+        val_stack.push(inst);
     }
 
 private:
+    // todo: test: empty args; empty init list
     template<typename ...Args>
     llvm::ArrayRef<llvm::Value*> eval_func_args(expr_tuple<Args...> args) {
 
@@ -325,6 +310,40 @@ private:
 
         return evaluated_args;
     }
+
+public: // Operations and Casts
+    template<typename To, typename From>
+    void accept(const ECast<To, From> &e) {
+        e.src.toIR(*this);
+        llvm::Value* src = val_stack.top();
+        val_stack.pop();
+
+        llvm::Value* casted = cur_builder->CreateCast(e.op, src, get_type<To>());
+        val_stack.push(casted);
+    }
+    template<typename To>
+    void accept(const ECast<To, To> &e) {
+        e.src.toIR(*this);
+    }
+
+    template<BinOps bOp, typename T1, typename T2>
+    void accept(const EBinOp<bOp, T1, T2> &e) {
+        e.lhs.toIR(*this);
+        llvm::Value* lhs = val_stack.top();
+        val_stack.pop();
+
+        e.rhs.toIR(*this);
+        llvm::Value* rhs = val_stack.top();
+        val_stack.pop();
+
+        llvm::Value* res = cur_builder->CreateBinOp(bOp, lhs, rhs);
+        val_stack.push(res);
+    }
+
+    // todo: possibly specialise this template for logical ops to evaluate lazily
+//    template<BinOps bOp>
+//    void accept(const EBinOpLogical<bOp> &e) {
+//    }
 };
 
 template<>
@@ -333,13 +352,23 @@ void IRTranslator::accept(const Return<void> &returnSt) {
 }
 
 
-
+// debuggin version
 template<typename T>
-inline void toIRImpl(const T &irTranslatable, IRTranslator &irTranslator) {
+void toIRImpl(const T &irTranslatable, IRTranslator &irt) {
     std::cout << "accept " << typeid(irTranslatable).name() << std::endl;
 
-    irTranslator.accept(irTranslatable);
+    // Checking some invariants
+    const auto n_vals = irt.val_stack.size();
+    const auto n_funs = irt.fun_stack.size();
+
+    irt.accept(irTranslatable);
+
+    // hard-testing...
+//    assert(irt.val_stack.size() == n_vals && "val_stack probably isn't used correctly!");
+//    assert(irt.fun_stack.size() == n_funs && "fun_stack probably isn't used correctly!");
 }
+
+
 
 /// Allows static polymorphism.
 /// Despite allowing use of Visitor pattern (convenient there), avoids run-time overhead for virtual calls.

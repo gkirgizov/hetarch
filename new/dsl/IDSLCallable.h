@@ -5,6 +5,7 @@
 #include <utility>
 #include <type_traits>
 #include <string_view>
+#include <tuple>
 
 #include "../utils.h"
 
@@ -28,7 +29,6 @@ template<typename RetT> class Return;
 
 //template<typename RetT, typename ...Args> class ECall;
 template<typename T> class EAssign;
-template<typename T> class EBinOp;
 
 
 struct DSLBase {
@@ -109,11 +109,9 @@ template<typename T, bool is_const = false, bool is_volatile = false>
 struct Var : public VarBase<T> {
     using VarBase<T>::VarBase;
 
-//    template<typename = typename std::enable_if<!is_const>::type>
     inline constexpr EAssign<T> assign(Expr<T> &&rhs) const;
     inline constexpr EAssign<T> operator=(Expr<T> &&rhs) const { return this->assign(std::move(rhs)); };
 
-//    template<typename = typename std::enable_if<!is_const>::type>
     inline constexpr EAssign<T> assign(const VarBase<T> &rhs) const;
     inline constexpr EAssign<T> operator=(const VarBase<T> &rhs) const { return this->assign(rhs); };
 
@@ -121,6 +119,7 @@ struct Var : public VarBase<T> {
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
+// specialisation for const
 template<typename T, bool is_volatile>
 struct Var<T, true, is_volatile> : public VarBase<T> {
     using VarBase<T>::VarBase;
@@ -128,6 +127,9 @@ struct Var<T, true, is_volatile> : public VarBase<T> {
     friend class IRTranslator;
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
+
+template<typename T, bool is_volatile = false>
+using Const = Var<T, true, is_volatile>;
 
 
 // todo: difference with LocalVar is that GlobalVar is Loadable. implement it.
@@ -165,6 +167,10 @@ public:
 
     friend class IRTranslator;
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+
+    ~Return() {
+        std::cout << "called " << typeid(*this).name() << " destructor" << std::endl;
+    }
 };
 
 template<> class Return<void> : public ESBase {
@@ -189,6 +195,10 @@ public:
 
     friend class IRTranslator;
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+
+    ~ECall() {
+        std::cout << "called " << typeid(*this).name() << " destructor" << std::endl;
+    }
 };
 
 
@@ -213,7 +223,8 @@ class DSLFunction : public IDSLCallable<RetT, Args...> {
 
     const params_t params;
     const ExprBase &body;
-    const Return<RetT> &returnSt;
+//    const Return<RetT> &returnSt;
+    const Return<RetT> returnSt;
 
 public:
     using raw_params_t = std::tuple<Args...>;
@@ -223,9 +234,11 @@ public:
 
     // Empty body constructors
     constexpr DSLFunction(const ParamBase<Args>&... params, Return<RetT> &&returnSt)
+//            : params{params...}, body{empty_expr}, returnSt{returnSt} {}
             : params{params...}, body{empty_expr}, returnSt{std::move(returnSt)} {}
     constexpr DSLFunction(const std::string_view &name,
                           const ParamBase<Args>&... params, Return<RetT> &&returnSt)
+//            : params{params...}, body{empty_expr}, returnSt{returnSt}, name{name}, name{name} {}
             : params{params...}, body{empty_expr}, returnSt{std::move(returnSt)}, name{name} {}
 
     // Ordinary (full) constructors
@@ -269,47 +282,13 @@ public:
     constexpr EAssign(EAssign<T> &&) = default;
     constexpr EAssign<T> &operator=(EAssign<T> &&) = delete;
 
-    constexpr EAssign(const VarBase<T> &var, Expr<T> &&rhs) : var{var}, rhs{std::move(rhs)} {}
+    constexpr EAssign(const VarBase<T> &var, Expr<T> &&rhs) : var{var}, rhs{rhs} {}
     constexpr EAssign(const VarBase<T> &var, const VarBase<T> &rhs) : var{var}, rhs{rhs} {}
 
     friend class IRTranslator;
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
-
-/* OPERATIONS and OPERATORS
- * it is possible to extend on 2 compatible types T1 and T2
- * with result_t = decltype(T1{} + T2{}), for example.
- * with explicit ECast<Torigin, Ttarget>{Torigin &&lhs} (with base Expr<Ttarget>)
- * as Expr<Ttarget> &rhs inside EBinOp.
- *
- * operators will be factory methods accepting 2 different types T1 and T2
- * employing SFINAE for checking existence of c++ operator between original T1 and T2
- * --> need fallback for sfinae? or error? error, i think.
- * if not std::is_same<T1, T2> then construct auxililary ECast<T2, T1> ecast;
- * and construct pure EBinOp<T1>{lhs, ecast}.
- *
- * --> what about 'leaf' operator overloads for lvalue-ref VarBase? (or just allow lvalue Expr?)
- *
- */
-
-// todo: enable_if
-// todo: kind of specifier of OP which will somehow enable toIR() specification for each OP
-//  note: see llvm::Instruction::BinaryOps and IRBuilder::CreateBinOp
-template<typename T>
-class EBinOp : public Expr<T> {
-    const Expr<T> &lhs;
-    const Expr<T> &rhs;
-public:
-    constexpr EBinOp(Expr<T> &&lhs, Expr<T> &&rhs) : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
-
-};
-
-// example of bin op overload
-template<typename T>
-constexpr EBinOp<T> operator+(Expr<T> &&lhs, Expr<T> &&rhs) {
-    return EBinOp<T>{std::move(lhs), std::move(rhs)};
-}
 
 
 template<typename T, bool is_const, bool is_volatile>
