@@ -20,6 +20,8 @@
 #include "sequence.h"
 #include "if_else.h"
 #include "op.h"
+#include "var.h"
+#include "fun.h"
 
 #include "../utils.h"
 #include "types_map.h"

@@ -2,7 +2,8 @@
 
 
 #include "../MemResident.h"
-#include "IDSLCallable.h"
+#include "fun.h"
+//#include "IDSLCallable.h"
 
 
 namespace hetarch {
