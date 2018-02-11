@@ -11,6 +11,7 @@
 namespace hetarch {
 namespace dsl {
 
+using dsl::i_t;
 
 using BinOps = llvm::Instruction::BinaryOps;
 using Casts = llvm::Instruction::CastOps;
@@ -60,90 +61,117 @@ constexpr Casts get_llvm_cast() {
 //template<typename To> constexpr auto get_llvm_cast<To, To>() {};
 
 
-template<typename To, typename From>
+template<typename To, typename TdFrom>
 struct ECast : public Expr<To> {
-    const Expr<From> &src;
+    const TdFrom src;
     const Casts op;
 
-    explicit constexpr ECast(const Expr<From> &src) : src{src}, op{get_llvm_cast<To, From>()} {}
+    explicit constexpr ECast(TdFrom&& src) : src{std::forward<TdFrom>(src)}, op{get_llvm_cast<To, i_t<TdFrom>>()} {}
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
 // empty cast for convenience
-template<typename To>
+/*
+template<typename To, typename TdFrom, typename = typename std::enable_if_t<std::is_same_v<To, i_t<TdFrom>::type>>>
 struct ECast<To, To> : public Expr<To> {
-    const Expr<To> &src;
-    explicit constexpr ECast(const Expr<To> &src) : src{src} {}
+    using type = To;
+
+    const TdFrom src;
+
+    explicit constexpr ECast(TdFrom&& src) : src{std::forward<TdFrom>(src)} {}
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
-
-    ~ECast() {
-        std::cout << "called " << typeid(*this).name() << " destructor" << std::endl;
-    }
 };
+*/
 
-//template<typename To, typename From>
-//constexpr auto cast(const Expr<From> &src) { return ECast<To, From>{src}; };
+template<typename T> using bool_cast = ECast<bool, T>;
 
 
-template<BinOps bOp, typename T1, typename T2 = T1>
-struct EBinOp : public Expr<T1> { // 'preference' for the type of left operand
-    const Expr<T1> &lhs;
-    const Expr<T2> &rhs;
+template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
+        , typename = typename std::enable_if_t<
+                std::is_base_of_v<ExprBase, TdLhs> && std::is_base_of_v<ExprBase, TdRhs>
+        >
+>
+struct EBinOp : public Expr<i_t<TdLhs>> {
+    const TdLhs lhs;
+    const TdRhs rhs;
 
-    constexpr EBinOp(const Expr<T1> &lhs, const Expr<T2> &rhs) : lhs{lhs}, rhs{rhs} {}
-//    constexpr EBinOp(const Expr<T1> &lhs, Expr<T2> &&rhs) : lhs{lhs}, rhs{rhs} {}
-//    constexpr EBinOp(const Expr<T1> &lhs, Expr<T2> &&rhs) : lhs{lhs}, rhs{std::move(rhs)} {}
-
-    void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
-};
-
-template<BinOps bOp>
-struct EBinOpLogical : public EBinOp<bOp, bool> {
-    using EBinOp<bOp, bool>::EBinOp;
+    constexpr EBinOp(TdLhs&& lhs, TdRhs&& rhs) : lhs{std::forward<TdLhs>(lhs)}, rhs{std::forward<TdRhs>(rhs)} {}
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
+template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
+        , typename = typename std::enable_if_t<
+                std::is_same_v<bool, i_t<TdLhs>> && std::is_same_v<bool, i_t<TdRhs>>
+        >
+>
+struct EBinOpLogical : public EBinOp<bOp, TdLhs, TdRhs> {
+//    using type = bool;
+    using EBinOp<bOp, TdLhs, TdRhs>::EBinOp;
 
-
-template<typename T1, typename T2 = T1>
-constexpr auto operator+(const Expr<T1> &lhs, const Expr<T2> &rhs) {
-//    return EBinOp<BinOps::Add, T1>{lhs, rhs};
-//        return EBinOp<BinOps::Add, T1>{lhs, cast<T1, T2>(rhs)};
-    if constexpr (std::is_floating_point<T1>::value) {
-        return EBinOp<BinOps::FAdd, T1>{lhs, ECast<T1, T2>{rhs}};
-    } else {
-        return EBinOp<BinOps::Add, T1>{lhs, ECast<T1, T2>{rhs}};
-    }
-}
-
-template<typename T1, typename T2 = T1>
-constexpr auto operator-(const Expr<T1> &lhs, const Expr<T2> &rhs) {
-    if constexpr (std::is_floating_point<T1>::value) {
-        return EBinOp<BinOps::FSub, T1>{lhs, ECast<T1, T2>{rhs}};
-    } else {
-        return EBinOp<BinOps::Sub, T1>{lhs, ECast<T1, T2>{rhs}};
-    }
-}
-
-template<typename T1, typename T2 = T1>
-constexpr auto operator*(const Expr<T1> &lhs, const Expr<T2> &rhs) {
-    if constexpr (std::is_floating_point<T1>::value) {
-        return EBinOp<BinOps::FMul, T1>{lhs, ECast<T1, T2>{rhs}};
-    } else {
-        return EBinOp<BinOps::Mul, T1>{lhs, ECast<T1, T2>{rhs}};
-    }
-}
-
-template<typename T1, typename T2 = T1>
-constexpr auto operator&&(const Expr<T1> &lhs, const Expr<T2> &rhs) {
-    return EBinOpLogical<BinOps::And>{ECast<bool, T1>{lhs}, ECast<bool, T2>{rhs}};
+    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
-template<typename T1, typename T2 = T1>
-constexpr auto operator||(const Expr<T1> &lhs, const Expr<T2> &rhs) {
-    return EBinOpLogical<BinOps::Or>{ECast<bool, T1>{lhs}, ECast<bool, T2>{rhs}};
+
+
+
+template<typename T1, typename T2 = T1
+        , std::enable_if_t<
+                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
+        >
+>
+constexpr auto operator+(T1&& lhs, T2&& rhs) {
+    using cast_t = ECast<i_t<T1>, T2>;
+    return EBinOp<std::is_floating_point<T1>::value ? BinOps::FAdd : BinOps::Add, T1, cast_t>{
+            std::forward<T1>(lhs),
+            cast_t{rhs}
+    };
+}
+
+
+template<typename T1, typename T2 = T1
+        , std::enable_if_t<
+                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
+        >
+>
+constexpr auto operator-(T1&& lhs, T2&& rhs) {
+    using cast_t = ECast<i_t<T1>, T2>;
+    return EBinOp<std::is_floating_point<T1>::value ? BinOps::FSub: BinOps::Sub, T1, cast_t>{
+            std::forward<T1>(lhs),
+            cast_t{rhs}
+    };
+}
+
+template<typename T1, typename T2 = T1
+        , std::enable_if_t<
+                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
+        >
+>
+constexpr auto operator*(T1&& lhs, T2&& rhs) {
+    using cast_t = ECast<i_t<T1>, T2>;
+    return EBinOp<std::is_floating_point<T1>::value ? BinOps::FMul: BinOps::Mul, T1, cast_t>{
+            std::forward<T1>(lhs),
+            cast_t{rhs}
+    };
+}
+
+template<typename T1, typename T2 = T1
+        , std::enable_if_t<
+                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
+        >
+>
+constexpr auto operator&&(T1&& lhs, T2&& rhs) {
+    return EBinOpLogical<BinOps::And, bool_cast<T1>, bool_cast<T2>>{bool_cast<T1>{lhs}, bool_cast<T2>{rhs}};
+};
+
+template<typename T1, typename T2 = T1
+        , std::enable_if_t<
+                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
+        >
+>
+constexpr auto operator||(T1&& lhs, T2&& rhs) {
+    return EBinOpLogical<BinOps::Or, bool_cast<T1>, bool_cast<T2>>{bool_cast<T1>{lhs}, bool_cast<T2>{rhs}};
 };
 
 //template<typename T1>

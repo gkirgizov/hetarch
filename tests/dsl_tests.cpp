@@ -1,15 +1,17 @@
 #include "gtest/gtest.h"
 
+
+//#include "../new/dsl/IDSLCallable.h"
+#include "../new/dsl/IRTranslator.h"
+
 #include <string_view>
 #include "../new/utils.h"
-
-#include "../new/dsl/IDSLCallable.h"
-#include "../new/dsl/IRTranslator.h"
-#include "../new/dsl/sequence.h"
+#include "utils.h"
 
 
 using namespace hetarch;
 using namespace hetarch::dsl;
+
 
 
 struct IRTranslatorTest: public ::testing::Test {
@@ -22,12 +24,16 @@ struct IRTranslatorTest: public ::testing::Test {
     // variables should have static storage duration to be used later in
     static constexpr Var<char> a{'a', make_bsv("char1")};
     static constexpr Var<char> b{'b', make_bsv("char2")};
-    static constexpr Param<int> x{69}, y{42}, tmp{}; // default parameters
+    static constexpr FunArg<int> x{69}, y{42}, tmp{}; // default parameters
 //    static constexpr Param x(69), y(42), tmp(0); // why auto type deduction doesn't work??
 };
 
 
 TEST_F(IRTranslatorTest, compileTimeDSL) {
+
+//    dsl2::test_something();
+//    return;
+
 //    constexpr std::string_view name2{"some_string"}; // fails!
 //    constexpr std::string_view name = make_bsv("some_string"); // succeeds.
 
@@ -42,25 +48,57 @@ TEST_F(IRTranslatorTest, compileTimeDSL) {
 //    const Expr<int> &seq_expr = seq;
 //    seq.toIR(irt);
 
-    DSLFunction<int, int> pass_through(
-            make_bsv("pass_through"), tmp,
-            Return<int>(tmp)
-    );
-
-    DSLFunction<void, int, int> swap_func(
-            make_bsv("swap"), x, y,
-            (tmp = x, x = y, y = tmp, pass_through(tmp)),
-            Return<void>()
-    );
-
-    auto ecall = swap_func(tmp.assign(x), tmp.assign(y));
-
-//    DSLFunction<void> call_swap_with_args(
-//            swap_func()  // use default parameters
+//    DSLFunction void_fun(
+//            make_bsv("void_fun"),
+//            Return()
 //    );
 
-    std::cout << "translating " << pass_through.name << std::endl;
-    irt.translate(pass_through);
-    std::cout << "translating " << swap_func.name << std::endl;
+    // test type deduction and tuple ctor
+//    std::cout << "tmp  type: " << utils::type_name<decltype(tmp)>() << std::endl;
+//    std::tuple test1{tmp};
+//    FunArgs<int> test2{tmp};
+//    std::cout << "test type: " << utils::type_name<decltype(test1)>() << std::endl;
+//    std::cout << "test type: " << utils::type_name<decltype(test2)>() << std::endl;
+
+
+    std::cout << "pass_through def" << std::endl;
+    constexpr DSLFunction pass_through(
+            FunArgs<int>(tmp),
+            Return(tmp)
+    );
+    pass_through.rename(make_bsv("pass_through"));
+
+    std::cout << "test1 def" << std::endl;
+    DSLFunction test1(
+            FunArgs<int, int, int>(x, y, tmp),
+            tmp = pass_through(x),
+            Return(tmp)
+    );
+    test1.rename("test1");
+
+    DSLFunction swap_func(
+            FunArgs<int,int>(x, y),
+            (tmp = x, x = y, y = tmp, pass_through(tmp)),
+            Return()
+    );
+    swap_func.rename("swap");
+
+
+    std::cout << "end of dsl functions definitions" << std::endl;
+
+
+//    EBinOp<BinOps::Add, int> e1{x, y};
+//    std::cout << &e1.rhs << typeid(e1.rhs).name() << std::endl;
+//    EBinOp<BinOps::Add, int> e2 = x + y;
+//    std::cout << "some " << typeid(e2.rhs).name() << std::endl;
+
+
+//    std::cout << "translating " << pass_through.name() << std::endl;
+//    irt.translate(pass_through);
+    std::cout << "translating " << test1.name() << std::endl;
+    irt.translate(test1);
+    std::cout << "translating " << swap_func.name() << std::endl;
     irt.translate(swap_func);
+
+    std::cout << "end translation" << std::endl;
 }

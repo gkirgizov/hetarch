@@ -11,137 +11,135 @@ namespace hetarch {
 namespace dsl {
 
 
-template<typename RetT, typename ...Args> class IDSLCallable;
-template<typename RetT, typename ...Args> class DSLFunction;
-//template<typename RetT> class Return;
-//template<typename RetT, typename ...Args> class ECall;
+template<typename, typename, typename...> class DSLFunction;
 
-
-template<typename T> using ParamBase = VarBase<T>;
-template<typename T, bool is_const = false, bool is_volatile = false>
-using Param = Var<T, is_const, is_volatile>;
-
-// works well when we can refer to enclosed construct independently of its nature
-// i.e. toIR override { return "return " + x.getIRReferenceName(); }
-template<typename RetT>
-class Return : public ESBase {
-    const Expr<RetT> &returnee;
-
-    //const Td returnee;
-    //
-    //public:
-    //explicit constexpr Return(Td&& expr) : returnee{std::forward(expr)} {};
-public:
-    explicit constexpr Return(Expr<RetT> &&expr) : returnee{std::move(expr)} {};
-    explicit constexpr Return(const VarBase<RetT> &var) : returnee{var} {};
-
-    friend class IRTranslator;
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
-
-    ~Return() {
-        std::cout << "called " << typeid(*this).name() << " destructor" << std::endl;
-    }
-};
-
-template<> class Return<void> : public ESBase {
-    friend class IRTranslator;
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
-};
-
-
-template<typename RetT, typename ...Args> struct ECallEmptyBase : public Expr<RetT> {
-    inline void toIR(IRTranslator &irTranslator) const override {
-        std::cout << "called " << typeid(this).name() << " toIR()" << std::endl;
-    }
-};
 
 template<typename RetT, typename... Args>
-class ECall: public ECallEmptyBase<RetT, Args...> {
-    const DSLFunction<RetT, Args...> &callee;
-    expr_tuple<Args...> args;
-public:
-    explicit constexpr ECall(const DSLFunction<RetT, Args...> &callee, const Expr<Args>&... args)
-            : callee{callee}, args{args...} {}
+struct ECallEmptyBase : public Expr<RetT> {};
 
-    friend class IRTranslator;
+template<typename TdCallable, typename... ArgExprs>
+struct ECall : public Expr<typename TdCallable::ret_t> {
+    static_assert((... && (std::is_base_of_v<ExprBase, remove_cvref_t<ArgExprs>> ||
+                           std::is_base_of_v<ValueBase, remove_cvref_t<ArgExprs>>)
+    ));
+//    static_assert((... && std::is_base_of_v<Expr<i_t<ArgExprs>>, ArgExprs>));
+    static_assert(std::is_same_v< typename TdCallable::args_t, std::tuple<i_t<ArgExprs>...> >);
+
+    using args_t = typename TdCallable::args_t;
+    using ret_t = typename TdCallable::ret_t;
+
+    const TdCallable& callee;
+    std::tuple<const ArgExprs...> args;
+
+    explicit constexpr ECall(const TdCallable& callee, ArgExprs&&... args)
+            : callee{callee}, args{std::forward<ArgExprs>(args)...} {}
+
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+};
 
-    ~ECall() {
-        std::cout << "called " << typeid(*this).name() << " destructor" << std::endl;
+
+//template<typename RetT, typename ...Args> class DSLCallableBase : public DSLBase {
+//    using ret_t = RetT;
+//    using args_t = std::tuple<Args...>;
+//};
+struct CallableBase : public DSLBase {};
+
+template<typename TdCallable>
+//struct DSLCallable : public DSLCallableBase<typename TdCallable::ret_t, typename TdCallable::args_t> {
+//    using ret_t = typename TdCallable::ret_t;
+//    using args_t = typename TdCallable::args_t;
+struct DSLCallable : public CallableBase {
+
+    template<typename... ArgExprs, typename TdCallable_ = TdCallable
+            , typename = typename std::enable_if_t< std::is_same_v<typename TdCallable_::args_t, std::tuple<i_t<ArgExprs>...>> >
+    >
+    inline constexpr auto call(ArgExprs&&... args) const {
+        return ECall<TdCallable, ArgExprs...>{static_cast<const TdCallable&>(*this), std::forward<ArgExprs>(args)...};
     }
+    template<typename... ArgExprs>
+    inline constexpr auto operator()(ArgExprs&&... args) const { return this->call(std::forward<ArgExprs>(args)...); }
 };
 
 
-// todo: do i even need virtual function in this class?
-template<typename RetT, typename... Args>
-struct IDSLCallable : public DSLBase {
-//     TODO: returning by value to EmptyBase Slices object. we don't have overloaded toIR then.
-//    virtual ECallEmptyBase<RetT, Args...> call(const Expr<Args>&... args) const = 0;
-//    inline ECallEmptyBase<RetT, Args...> operator()(const Expr<Args>&... args) const { return call(args...); };
+template<typename Td>
+struct ReturnImpl : public ESBase {
+    using type = i_t<Td>;
 
-    // todo: do I even need this?
-    // todo: uncommenting THIS line lead to sigsegv in dsl_tests.cpp
-//    inline ECallEmptyBase<RetT, Args...> call(Expr<Args>&&... args) const { return call(std::move(args)...); };
-//    inline ECallEmptyBase<RetT, Args...> operator()(Expr<Args>&&... args) const { return call(std::move(args)...); };
+    const Td returnee;
+
+    explicit constexpr ReturnImpl(Td&& r) : returnee{std::forward<Td>(r)} {}
+
+    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
+
+template<typename Td>
+constexpr auto Return(Td&& r) { return ReturnImpl<Td>{std::forward<Td>(r)}; }
+
+constexpr auto Return() { return ReturnImpl<const VoidExpr&>{empty_expr}; }
+
+//template<> struct ReturnImpl<void> : public ESBase {
+//    using type = void;
+//
+//    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+//};
+//constexpr auto Return() { return ReturnImpl<void>{}; }
+
+
+//template<typename T, bool isConst, bool is_volatile>
+//using FunArg = Var<T, isConst, is_volatile>;
+template<typename T> using FunArg = Var<T, false, false>;
+template<typename... Args> using FunArgs = std::tuple<const FunArg<Args>&...>;
+
+template<typename... Args>
+struct FunArgs2 {
+    std::tuple<const FunArg<Args>&...> impl;
+
+    explicit constexpr FunArgs2(const FunArg<Args>&... args) : impl{args...} {
+        static_assert((... && checkDefaultArg(args.initialised())), "arg without default value!");
+    }
+
+private:
+    bool checkDefaultArg(bool defaulted) {
+        default_arg_present |= defaulted;
+        return default_arg_present && !defaulted;
+    }
+    bool default_arg_present{false};
+};
+
 
 // todo: handle default arguments
-// todo: handle empty body
-template<typename RetT, typename... Args>
-class DSLFunction : public IDSLCallable<RetT, Args...> {
-    using params_t = std::tuple<const ParamBase<Args>&...>;
+template<typename TdRet, typename TdBody, typename... Args>
+struct DSLFunction : public DSLCallable<DSLFunction<TdRet, TdBody, Args...>>, public Named {
+    using ret_t = i_t<TdRet>;
+    using args_t = std::tuple<Args...>;
 
-    const params_t params;
-    const ExprBase &body;
-//    const Return<RetT> &returnSt;
-    const Return<RetT> returnSt;
+    const FunArgs<Args...> args;
+    const TdBody body;
+    const ReturnImpl<TdRet> returnSt;
 
-public:
-    using raw_params_t = std::tuple<Args...>;
-
-    const std::string_view name{make_bsv("")};
-
-
+    // No arguments constructors
+    explicit constexpr DSLFunction(ReturnImpl<TdRet>&& returnSt)
+            : args{}, body{empty_expr}, returnSt{std::move(returnSt)} {}
     // Empty body constructors
-    constexpr DSLFunction(const ParamBase<Args>&... params, Return<RetT> &&returnSt)
-//            : params{params...}, body{empty_expr}, returnSt{returnSt} {}
-            : params{params...}, body{empty_expr}, returnSt{std::move(returnSt)} {}
-    constexpr DSLFunction(const std::string_view &name,
-                          const ParamBase<Args>&... params, Return<RetT> &&returnSt)
-//            : params{params...}, body{empty_expr}, returnSt{returnSt}, name{name}, name{name} {}
-            : params{params...}, body{empty_expr}, returnSt{std::move(returnSt)}, name{name} {}
-
+    explicit constexpr DSLFunction(FunArgs<Args...> args, ReturnImpl<TdRet>&& returnSt)
+            : args{args}, body{empty_expr}, returnSt{std::move(returnSt)} {}
     // Ordinary (full) constructors
-    constexpr DSLFunction(const ParamBase<Args>&... params, ExprBase &&body, Return<RetT> &&returnSt)
-            : params{params...}, body{std::move(body)}, returnSt{std::move(returnSt)} {}
-    constexpr DSLFunction(const std::string_view &name,
-                          const ParamBase<Args>&... params, ExprBase &&body, Return<RetT> &&returnSt)
-            : params{params...}, body{std::move(body)}, returnSt{std::move(returnSt)}, name{name} {}
-
-    // 'return void' constructors
-    // todo: do class template spesialiation? enable_if  cannot be used here: compile error
-/*    template<typename = typename std::enable_if<std::is_void<RetT>::value>::type>
-    explicit constexpr DSLFunction(const ParamBase<Args>&... params, ExprBase &&body)
-            : params{params...}, body{std::move(body)}, returnSt{} {}
-
-    template<typename = typename std::enable_if<std::is_void<RetT>::value>::type>
-    explicit constexpr DSLFunction(const std::string_view &name,
-                                   const ParamBase<Args>&... params, ExprBase &&body)
-            : params{params...}, body{std::move(body)}, returnSt{}, name{name} {}*/
-
-
-//    inline ECallEmptyBase<RetT, Args...> call(const Expr<Args>&... args) const override {
-    inline ECall<RetT, Args...> operator()(const Expr<Args>&... args) const { return call(args...); };
-    inline ECall<RetT, Args...> call(const Expr<Args>&... args) const {
-        return ECall<RetT, Args...>(*this, args...);
-    };
+    constexpr DSLFunction(FunArgs<Args...> args, TdBody&& body, ReturnImpl<TdRet>&& returnSt)
+            : args{args}, body{std::move(body)}, returnSt{std::move(returnSt)} {}
 
     // suppose there's another func which uses __the same__ types
 //    constexpr void specialise(Args... args);
 
-    friend class IRTranslator;
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
+
+// Explicit deduction guides for some ctors
+template<typename TdRet>
+DSLFunction(ReturnImpl<TdRet>&& returnSt) -> DSLFunction<TdRet, const VoidExpr>;
+template<typename TdRet, typename... Args>
+DSLFunction(FunArgs<Args...> args, ReturnImpl<TdRet>&& returnSt) -> DSLFunction<TdRet, const VoidExpr, Args...>;
+
+
 
 
 }

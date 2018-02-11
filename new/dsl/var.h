@@ -7,105 +7,86 @@
 namespace hetarch {
 namespace dsl {
 
+using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 
-template<typename T> class EAssign;
+// todo: difference with LocalVar is that GlobalVar is Loadable. implement it.
+//template<typename T, bool isConst = false, bool is_volatile = false>
+//using GlobalVar<T, is_const, is_volatile> = Var<T, isConst, is_volatile>;
+//struct GlobalVar : public Var<T, is_const, is_volatile>, public Assignable<T, isConst> {
+//    using Var<T, isConst, is_volatile>::Var;
+//};
 
 
-// todo: enable_if only for integral etc. simple types?
-template<typename T>
-class VarBase : public Expr<T> {
+// todo: do implicit cast when not exact type match?
+template<typename TdLhs, typename TdRhs
+        , typename = typename std::enable_if_t<std::is_same_v<i_t<TdLhs>, i_t<TdRhs>>>
+>
+struct EAssign : public Expr<i_t<TdRhs>> {
+    const TdLhs& lhs;
+    const TdRhs rhs;
+
+    constexpr EAssign(const TdLhs& lhs, TdRhs&& rhs) : lhs{lhs}, rhs{std::forward<TdRhs>(rhs)} {}
+
+    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+};
+
+//template<typename T, bool, bool> struct Var;
+
+struct ValueBase : public DSLBase {};
+
+template<typename Tw, bool is_const = false, bool is_volatile = false>
+//template<typename Tw, typename T, bool is_const = false, bool is_volatile = false>
+struct Value : public ValueBase {
+    // TODO: impossible to see underlying type here
+//    using type = typename Tw::type;
+
+    constexpr bool isConst() const { return is_const; }
+    constexpr bool isVolatile() const { return is_volatile; }
+
+    template<typename Td, typename Tw_ = Tw
+            , typename = typename std::enable_if_t<std::is_same_v<typename Tw_::type, i_t<Td>>>
+//            , typename = typename std::enable_if_t<std::is_same_v<T, i_t<Td>>>
+    >
+    constexpr auto assign(Td&& rhs) const {
+        return EAssign<Tw, Td>{static_cast<const Tw&>(*this), std::forward<Td>(rhs)};
+    }
+    template<typename Td>
+    constexpr auto operator=(Td&& rhs) const { return this->assign(std::forward<Td>(rhs)); }
+
+};
+
+template<typename Tw, bool is_volatile> struct Value<Tw, true, is_volatile> : public DSLBase { using type = typename Tw::type; };
+template<typename Tw, bool is_volatile = false> using ConstValue = Value<Tw, true, is_volatile>;
+
+
+template<typename T, bool is_const = false, bool is_volatile = false>
+class Var : public Named, public Value<Var<T, is_const, is_volatile>, is_const, is_volatile> {
     T m_initial_val{};
     bool m_initialised{false};
 public:
-    const std::string_view name{make_bsv("")};
+    using type = T;
 
-    constexpr VarBase(VarBase<T> &&) = default;
-    constexpr VarBase(const VarBase<T> &) = default; // TODO: somehow preserve 'identity' among copies
-    constexpr VarBase<T> &operator=(VarBase<T> &&) = delete; // doesn't make much sense to move-assign
-    constexpr VarBase<T> &operator=(VarBase<T> &) = delete; // doesn't make much sense to copy-assign
+    using Value<Var<T, is_const, is_volatile>, is_const, is_volatile>::operator=;
 
-    explicit constexpr VarBase() = default;
-    explicit constexpr VarBase(const std::string_view &name) : name{name} {};
-    explicit constexpr VarBase(T &&value) : m_initial_val{std::forward<T>(value)}, m_initialised{true} {}
-    explicit constexpr VarBase(T &&value, const std::string_view &name)
-            : name{name}, m_initial_val{std::forward<T>(value)}, m_initialised{true} {}
+    explicit constexpr Var() = default;
+    explicit constexpr Var(const std::string_view &name) : Named{name} {};
+    explicit constexpr Var(T value) : m_initial_val{std::move(value)}, m_initialised{true} {}
+    explicit constexpr Var(T value, const std::string_view &name)
+    : Named{name}, m_initial_val{std::move(value)}, m_initialised{true} {}
 
-    constexpr void initialise(T &&value) {
-        m_initial_val = std::forward(value);
+    constexpr void initialise(T value) {
+        m_initial_val = std::move(value);
         m_initialised = true;
     }
     constexpr bool initialised() const { return m_initialised; }
     constexpr T initial_val() const { return m_initial_val; }
-};
 
-
-// cv-qualifiers are part of type signature, so it makes sense to put them here as template parameters
-template<typename T, bool is_const = false, bool is_volatile = false>
-struct Var : public VarBase<T> {
-    using type = T;
-
-    using VarBase<T>::VarBase;
-
-    inline constexpr EAssign<T> assign(Expr<T> &&rhs) const;
-    inline constexpr EAssign<T> operator=(Expr<T> &&rhs) const { return this->assign(std::move(rhs)); };
-
-    inline constexpr EAssign<T> assign(const VarBase<T> &rhs) const;
-    inline constexpr EAssign<T> operator=(const VarBase<T> &rhs) const { return this->assign(rhs); };
-
-    friend class IRTranslator;
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
-};
-
-// specialisation for const
-template<typename T, bool is_volatile>
-struct Var<T, true, is_volatile> : public VarBase<T> {
-    using type = T;
-
-    using VarBase<T>::VarBase;
-
-    friend class IRTranslator;
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
 template<typename T, bool is_volatile = false>
 using Const = Var<T, true, is_volatile>;
 
-
-// todo: difference with LocalVar is that GlobalVar is Loadable. implement it.
-//template<typename T, bool is_const = false, bool is_volatile = false>
-//using GlobalVar<T, is_const, is_volatile> = Var<T, is_const, is_volatile>;
-//struct GlobalVar : public Var<T, is_const, is_volatile>, public Assignable<T, is_const> {
-//    using Var<T, is_const, is_volatile>::Var;
-//};
-
-
-
-template<typename T>
-class EAssign : public Expr<T> {
-    const VarBase<T> &var;
-    const Expr<T> &rhs;
-public:
-    constexpr EAssign(EAssign<T> &&) = default;
-    constexpr EAssign<T> &operator=(EAssign<T> &&) = delete;
-
-    constexpr EAssign(const VarBase<T> &var, Expr<T> &&rhs) : var{var}, rhs{rhs} {}
-    constexpr EAssign(const VarBase<T> &var, const VarBase<T> &rhs) : var{var}, rhs{rhs} {}
-
-    friend class IRTranslator;
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
-};
-
-
-
-template<typename T, bool is_const, bool is_volatile>
-constexpr EAssign<T> Var<T, is_const, is_volatile>::assign(Expr<T> &&rhs) const {
-    return EAssign<T>{*this, std::move(rhs)};
-}
-
-template<typename T, bool is_const, bool is_volatile>
-constexpr EAssign<T> Var<T, is_const, is_volatile>::assign(const VarBase<T> &rhs) const {
-    return EAssign<T>{*this, rhs};
-}
 
 
 }

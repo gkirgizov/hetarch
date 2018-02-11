@@ -1,6 +1,6 @@
 #pragma once
 
-//#include <type_traits>
+#include <type_traits>
 #include <utility>
 
 #include "dsl_base.h"
@@ -9,33 +9,33 @@
 namespace hetarch {
 namespace dsl {
 
-
+/*
 template<typename ...Ts> struct select_last;
 template<typename T> struct select_last<T> { using type = T; };
 template<typename T, typename ...Ts> struct select_last<T, Ts...> { using type = typename select_last<Ts...>::type; };
+*/
 
-//template<typename T, typename ...Ts>
-//class Seq1 : public Expr<T> {
-//    std::tuple<Expr<Ts>..., Expr<T>> seq;
-//public:
-//    constexpr Seq1(Expr<&&e1, ExprBase &&e2, Expr<Ts>&&... es);
-//};
+using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 
-template<typename T>
-class Seq : public Expr<T> {
-    const ExprBase &lhs;
-    const Expr<T> &rhs;
-public:
-    constexpr Seq(ExprBase &&lhs, Expr<T> &&rhs) : lhs{std::move(lhs)}, rhs{std::move(rhs)} {}
+template<typename Td1, typename Td2>
+struct Seq : public Expr<i_t<Td2>> {
+    const Td1 e1;
+    const Td2 e2;
 
-    friend class IRTranslator;
+    constexpr Seq(Td1&& e1, Td2&& e2) : e1{std::forward<Td1>(e1)}, e2{std::forward<Td2>(e2)} {}
+
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
-template<typename Tl, typename Tr>
-constexpr Seq<Tr> operator,(Expr<Tl> &&lhs, Expr<Tr> &&rhs) {
-    return Seq<Tr>{std::move(lhs), std::move(rhs)};
-}
+// disallow mixing C++ constructs with DSL constructs using comma
+template<typename Td1, typename Td2
+        , std::enable_if_t<
+                std::is_base_of_v<ExprBase, Td1> && std::is_base_of_v<ExprBase, Td2>
+        >
+>
+constexpr auto operator,(Td1&& e1, Td2&& e2) {
+    return Seq<Td1, Td2>{std::forward<Td1>(e1), std::forward<Td2>(e2)};
+};
 
 
 }
