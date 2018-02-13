@@ -6,7 +6,7 @@
 
 #include <string_view>
 #include "../new/utils.h"
-#include "utils.h"
+#include "test_utils.h"
 
 
 using namespace hetarch;
@@ -60,9 +60,14 @@ TEST_F(IRTranslatorTest, compileTimeDSL) {
 //    std::cout << "test type: " << utils::type_name<decltype(test1)>() << std::endl;
 //    std::cout << "test type: " << utils::type_name<decltype(test2)>() << std::endl;
 
+    // test in-dsl takeAddr and deref
+    Ptr dsl_ptr = tmp.takeAddr();
+    EDeref derefd = *dsl_ptr;
+    assert(&tmp == &derefd.x);
+
 
     std::cout << "pass_through def" << std::endl;
-    constexpr DSLFunction pass_through(
+    DSLFunction pass_through(
             FunArgs<int>(tmp),
             Return(tmp)
     );
@@ -77,11 +82,21 @@ TEST_F(IRTranslatorTest, compileTimeDSL) {
     test1.rename("test1");
 
     DSLFunction swap_func(
-            FunArgs<int,int>(x, y),
+            FunArgs<int, int>(x, y),
             (tmp = x, x = y, y = tmp, pass_through(tmp)),
-            Return()
+            Return(x + y)
+//            Return()
     );
     swap_func.rename("swap");
+
+    std::array arr_init = {1, 2, 3, 5};
+    Array<int, 4> arr{arr_init};
+    std::cout << "try_arr def" << std::endl;
+    DSLFunction try_arr(
+            FunArgs<int, int>(x, y),
+            Return(arr[x] + arr[y])
+    );
+
 
 
     std::cout << "end of dsl functions definitions" << std::endl;
@@ -99,6 +114,8 @@ TEST_F(IRTranslatorTest, compileTimeDSL) {
     irt.translate(test1);
     std::cout << "translating " << swap_func.name() << std::endl;
     irt.translate(swap_func);
+    std::cout << "translating " << try_arr.name() << std::endl;
+    irt.translate(try_arr);
 
     std::cout << "end translation" << std::endl;
 }

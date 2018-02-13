@@ -1,17 +1,16 @@
 #pragma once
 
 
-#include <type_traits>
-
 #include <llvm/IR/Instruction.h>
 
 #include "dsl_base.h"
+#include "dsl_type_traits.h"
 
 
 namespace hetarch {
 namespace dsl {
 
-using dsl::i_t;
+using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 
 using BinOps = llvm::Instruction::BinaryOps;
 using Casts = llvm::Instruction::CastOps;
@@ -89,9 +88,7 @@ template<typename T> using bool_cast = ECast<bool, T>;
 
 
 template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
-        , typename = typename std::enable_if_t<
-                std::is_base_of_v<ExprBase, TdLhs> && std::is_base_of_v<ExprBase, TdRhs>
-        >
+        , typename = typename std::enable_if_t< is_ev_v<TdLhs, TdRhs> >
 >
 struct EBinOp : public Expr<i_t<TdLhs>> {
     const TdLhs lhs;
@@ -103,12 +100,9 @@ struct EBinOp : public Expr<i_t<TdLhs>> {
 };
 
 template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
-        , typename = typename std::enable_if_t<
-                std::is_same_v<bool, i_t<TdLhs>> && std::is_same_v<bool, i_t<TdRhs>>
-        >
+        , typename = typename std::enable_if_t< is_same_raw_v<bool, TdLhs, TdRhs> >
 >
 struct EBinOpLogical : public EBinOp<bOp, TdLhs, TdRhs> {
-//    using type = bool;
     using EBinOp<bOp, TdLhs, TdRhs>::EBinOp;
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
@@ -117,61 +111,57 @@ struct EBinOpLogical : public EBinOp<bOp, TdLhs, TdRhs> {
 
 
 template<typename T1, typename T2 = T1
-        , std::enable_if_t<
-                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
-        >
+        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
 >
 constexpr auto operator+(T1&& lhs, T2&& rhs) {
     using cast_t = ECast<i_t<T1>, T2>;
     return EBinOp<std::is_floating_point<T1>::value ? BinOps::FAdd : BinOps::Add, T1, cast_t>{
             std::forward<T1>(lhs),
-            cast_t{rhs}
+            cast_t{std::forward<T2>(rhs)}
     };
 }
 
 
 template<typename T1, typename T2 = T1
-        , std::enable_if_t<
-                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
-        >
+        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
 >
 constexpr auto operator-(T1&& lhs, T2&& rhs) {
     using cast_t = ECast<i_t<T1>, T2>;
     return EBinOp<std::is_floating_point<T1>::value ? BinOps::FSub: BinOps::Sub, T1, cast_t>{
             std::forward<T1>(lhs),
-            cast_t{rhs}
+            cast_t{std::forward<T2>(rhs)}
     };
 }
 
 template<typename T1, typename T2 = T1
-        , std::enable_if_t<
-                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
-        >
+        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
 >
 constexpr auto operator*(T1&& lhs, T2&& rhs) {
     using cast_t = ECast<i_t<T1>, T2>;
     return EBinOp<std::is_floating_point<T1>::value ? BinOps::FMul: BinOps::Mul, T1, cast_t>{
             std::forward<T1>(lhs),
-            cast_t{rhs}
+            cast_t{std::forward<T2>(rhs)}
     };
 }
 
 template<typename T1, typename T2 = T1
-        , std::enable_if_t<
-                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
-        >
+        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
 >
 constexpr auto operator&&(T1&& lhs, T2&& rhs) {
-    return EBinOpLogical<BinOps::And, bool_cast<T1>, bool_cast<T2>>{bool_cast<T1>{lhs}, bool_cast<T2>{rhs}};
+    return EBinOpLogical<BinOps::And, bool_cast<T1>, bool_cast<T2>>{
+            bool_cast<T1>{std::forward<T1>(lhs)},
+            bool_cast<T2>{std::forward<T2>(rhs)}
+    };
 };
 
 template<typename T1, typename T2 = T1
-        , std::enable_if_t<
-                std::is_base_of_v<ExprBase, T1> && std::is_base_of_v<ExprBase, T2>
-        >
+        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
 >
 constexpr auto operator||(T1&& lhs, T2&& rhs) {
-    return EBinOpLogical<BinOps::Or, bool_cast<T1>, bool_cast<T2>>{bool_cast<T1>{lhs}, bool_cast<T2>{rhs}};
+    return EBinOpLogical<BinOps::Or, bool_cast<T1>, bool_cast<T2>>{
+            bool_cast<T1>{std::forward<T1>(lhs)},
+            bool_cast<T2>{std::forward<T2>(rhs)}
+    };
 };
 
 //template<typename T1>

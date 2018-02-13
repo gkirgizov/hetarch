@@ -1,13 +1,13 @@
 #pragma once
 
-#include <type_traits>
-
 #include "dsl_base.h"
+#include "dsl_type_traits.h"
 
 
 namespace hetarch {
 namespace dsl {
 
+using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 
 // 'if-else' statement
 /*struct IfElse : public ESBase {
@@ -24,7 +24,7 @@ namespace dsl {
 };*/
 
 
-// todo: should both mranches always have the same underlying ::type?
+// todo: should both branches always have the same underlying ::type?
 template<typename TdCond, typename TdThen, typename TdElse
         , typename = typename std::enable_if_t<
                 std::is_same_v<bool, i_t<TdCond>> && std::is_same_v<i_t<TdThen>, i_t<TdElse>>

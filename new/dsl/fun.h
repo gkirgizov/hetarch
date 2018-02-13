@@ -4,6 +4,7 @@
 
 #include "dsl_base.h"
 #include "var.h"
+#include "dsl_type_traits.h"
 #include "../utils.h"
 
 
@@ -13,16 +14,12 @@ namespace dsl {
 
 template<typename, typename, typename...> class DSLFunction;
 
-
 template<typename RetT, typename... Args>
 struct ECallEmptyBase : public Expr<RetT> {};
 
 template<typename TdCallable, typename... ArgExprs>
 struct ECall : public Expr<typename TdCallable::ret_t> {
-    static_assert((... && (std::is_base_of_v<ExprBase, remove_cvref_t<ArgExprs>> ||
-                           std::is_base_of_v<ValueBase, remove_cvref_t<ArgExprs>>)
-    ));
-//    static_assert((... && std::is_base_of_v<Expr<i_t<ArgExprs>>, ArgExprs>));
+    static_assert(is_ev_v<ArgExprs...>);
     static_assert(std::is_same_v< typename TdCallable::args_t, std::tuple<i_t<ArgExprs>...> >);
 
     using args_t = typename TdCallable::args_t;
@@ -37,12 +34,6 @@ struct ECall : public Expr<typename TdCallable::ret_t> {
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
-
-//template<typename RetT, typename ...Args> class DSLCallableBase : public DSLBase {
-//    using ret_t = RetT;
-//    using args_t = std::tuple<Args...>;
-//};
-struct CallableBase : public DSLBase {};
 
 template<typename TdCallable>
 //struct DSLCallable : public DSLCallableBase<typename TdCallable::ret_t, typename TdCallable::args_t> {

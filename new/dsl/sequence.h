@@ -1,9 +1,9 @@
 #pragma once
 
-#include <type_traits>
 #include <utility>
 
 #include "dsl_base.h"
+#include "dsl_type_traits.h"
 
 
 namespace hetarch {
@@ -29,9 +29,7 @@ struct Seq : public Expr<i_t<Td2>> {
 
 // disallow mixing C++ constructs with DSL constructs using comma
 template<typename Td1, typename Td2
-        , std::enable_if_t<
-                std::is_base_of_v<ExprBase, Td1> && std::is_base_of_v<ExprBase, Td2>
-        >
+        , std::enable_if_t< is_ev_v<Td1, Td2> >
 >
 constexpr auto operator,(Td1&& e1, Td2&& e2) {
     return Seq<Td1, Td2>{std::forward<Td1>(e1), std::forward<Td2>(e2)};

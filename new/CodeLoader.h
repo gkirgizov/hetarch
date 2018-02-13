@@ -10,8 +10,6 @@
 #include "dsl/ResidentObjCode.h"
 #include "supportingClasses.h"
 
-#include "../tests/utils.h"
-
 
 namespace hetarch {
 

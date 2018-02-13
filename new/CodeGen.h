@@ -2,6 +2,7 @@
 
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <memory>
 #include <utility>
@@ -32,7 +33,7 @@
 
 #include "supportingClasses.h"
 //#include "MemoryManager.h"
-#include "dsl/IDSLCallable.h"
+#include "dsl/dsl_base.h"
 
 
 namespace hetarch {
@@ -248,6 +249,8 @@ IRModule<RetT, Args...> CodeGen::generateIR(const dsl::DSLFunction<RetT, Args...
     llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, "entry", fun);
     llvm::IRBuilder<> b{entry_bb};
     // that's it. now we have builder and func and module
+
+//    llvm::Twine name{std::string_view("test_this")}; // just test ctor
 
 
 

@@ -39,24 +39,14 @@ struct VoidExpr : public Expr<void> {
 static const auto empty_expr = VoidExpr{};
 
 
+struct ValueBase : public DSLBase {};
+
+struct CallableBase : public DSLBase {};
+
+
+
 //template<typename... Args>
 //using expr_tuple = std::tuple<const Expr<Args>&...>;
-
-template<typename T>
-struct remove_cvref {
-    using type = std::remove_cv_t<std::remove_reference_t<T>>;
-};
-template<typename T> using remove_cvref_t = typename remove_cvref<T>::type;
-
-
-template<typename Td>
-struct inner_t {
-    static_assert(std::is_base_of_v<DSLBase, remove_cvref_t<Td>>, "provided class isn't derived from DSLBase");
-    using type = typename std::remove_reference_t<Td>::type;
-};
-template<typename Td> using i_t = typename inner_t<Td>::type;
-
-//template<typename Td> using i_t = typename std::remove_reference_t<Td>::type;
 
 
 
