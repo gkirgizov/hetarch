@@ -22,10 +22,13 @@ else()
 endif()
 
 # Find LLVM
-#set(BASE_DIR /home/hades/projects)
+set(BASE_DIR /home/hades/projects)
 #set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
 #find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
-find_package(LLVM 5.0 REQUIRED)
+#find_package(LLVM 5.0 REQUIRED)
+set(LLVM_INSTALL_DIR ${BASE_DIR}/llvms/llvm_50/install_dir)
+set(LLVM_DIR ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
+find_package(LLVM 5.0 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
@@ -121,7 +124,7 @@ target_sources(hetarch_trik
 
 add_library(temp_target
         tests/test_code/test_code.cpp
-        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/dsl/IDSLCallable.h new/supportingClasses.h new/CodeLoader.h new/IConnection.h new/dsl/dsl_basic.h new/dsl/sequence.h new/dsl/IRTranslator.h new/utils.h)
+        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/dsl/dsl_base.h new/supportingClasses.h new/CodeLoader.h new/IConnection.h new/dsl/sequence.h new/dsl/IRTranslator.h new/utils.h new/dsl/types_map.h new/dsl/if_else.h new/dsl/ResidentObjCode.h new/dsl/op.h new/dsl/var.h new/dsl/fun.h new/dsl/dsl_type_traits.h new/dsl/array.h new/dsl/ptr.h new/dsl/loops.h)
 
 add_subdirectory(examples)
 add_subdirectory(tests)
