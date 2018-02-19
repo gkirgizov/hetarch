@@ -1,5 +1,6 @@
-#include "utils.h"
+#include "test_utils.h"
 
+#include <iostream>
 #include <fstream>
 
 #include <boost/format.hpp>
@@ -76,6 +77,18 @@ void dumpSymbols(const llvm::object::ObjectFile &objFile) {
     }
 }
 
+bool verify_module(const llvm::Module& module) {
+    std::string error_str;
+    llvm::raw_string_ostream os{error_str};
+    bool failure = llvm::verifyModule(module, &os);
+    if (failure) {
+        std::cerr << "llvm::verifyModule failed for module '" << module.getName().str() << "' with error:" << std::endl
+                  << error_str << std::endl;
+    }
+    // return true on success; return false on failure
+    return !failure;
+}
 
 }
 }
+
