@@ -18,22 +18,32 @@ template<typename T, typename ...Ts> struct select_last<T, Ts...> { using type =
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 
 template<typename Td1, typename Td2>
-struct Seq : public Expr<i_t<Td2>> {
+struct SeqExpr : public Expr<i_t<Td2>> {
     const Td1 e1;
     const Td2 e2;
 
-    constexpr Seq(Td1&& e1, Td2&& e2) : e1{std::forward<Td1>(e1)}, e2{std::forward<Td2>(e2)} {}
+    constexpr SeqExpr(Td1&& e1, Td2&& e2) : e1{std::forward<Td1>(e1)}, e2{std::forward<Td2>(e2)} {}
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
+
+template<typename Td1, typename Td2
+        , typename = typename std::enable_if_t< is_ev_v<Td1, Td2> >
+>
+constexpr auto Seq(Td1&& e1, Td2&& e2) {
+    return SeqExpr<Td1, Td2>{std::forward<Td1>(e1), std::forward<Td2>(e2)};
+}
+
+
 // disallow mixing C++ constructs with DSL constructs using comma
 template<typename Td1, typename Td2
-        , std::enable_if_t< is_ev_v<Td1, Td2> >
+        , typename = typename std::enable_if_t< is_ev_v<Td1, Td2> >
 >
 constexpr auto operator,(Td1&& e1, Td2&& e2) {
-    return Seq<Td1, Td2>{std::forward<Td1>(e1), std::forward<Td2>(e2)};
+    return SeqExpr<Td1, Td2>{std::forward<Td1>(e1), std::forward<Td2>(e2)};
 };
+
 
 
 }

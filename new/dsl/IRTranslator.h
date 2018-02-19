@@ -19,8 +19,10 @@
 #include "ResidentObjCode.h"
 #include "sequence.h"
 #include "if_else.h"
+#include "loops.h"
 #include "op.h"
 #include "var.h"
+#include "ptr.h"
 #include "array.h"
 #include "fun.h"
 
@@ -78,6 +80,8 @@ class IRTranslator {
         assert((sp != ValSpec::Value) && "trying to pop usual value as address!");
 
         llvm::Value* addr = frame->val_stack.top();
+        assert(addr->getType()->isPointerTy() && "llvm:Type of this llvm::Value is not a llvm::PointerType!");
+
         frame->val_stack.pop();
         bool is_volatile = sp == ValSpec::AddrVol;
         return {addr, is_volatile};
@@ -104,9 +108,24 @@ class IRTranslator {
 
     const utils::map_t type_map;
 
-    // LLVM make no distinction between signed and unsigned (https://stackoverflow.com/a/14723945)
-    template<typename T, typename = typename std::enable_if_t<std::is_arithmetic_v<T>>>
-    inline auto get_type() { return utils::at_key<std::make_signed_t<T>>(type_map); }
+    template<typename T>
+    inline auto get_type() {
+        if constexpr (std::is_void_v<T> || std::is_same_v<bool, T> || std::is_floating_point_v<T>) {
+            return utils::at_key<T>(type_map);
+        } else if constexpr (std::is_integral_v<T>) {
+            // LLVM make no distinction between signed and unsigned (https://stackoverflow.com/a/14723945)
+            return utils::at_key<std::make_signed_t<T>>(type_map);
+        } else if constexpr (std::is_reference_v<T>) {
+            return get_type<std::remove_reference_t<T>>()->getPointerTo();
+        } else if constexpr (std::is_pointer_v<T>) {
+            return get_type<std::remove_pointer_t<T>>()->getPointerTo();
+        } else if constexpr (is_std_array_v<T>) {
+            return llvm::ArrayType::get(get_type<typename T::value_type>(), std::tuple_size<T>::value);
+        } else {
+//            static_assert(false, "Unknown type provided!");
+            static_assert(T::fail_compile, "Unknown type provided!");
+        }
+    }
 
     // multidimensional arrays should be handled
 //    template<typename Array, typename = typename std::enable_if_t<std::is_array_v<Array>>>
@@ -116,24 +135,30 @@ class IRTranslator {
 //        return llvm::ArrayType::get(get_type<X>(), N);
 //    };
 
-    template<typename Array, typename = typename std::enable_if_t< is_std_array_v<Array>> >
-//            std::is_same_v<Array, std::array<typename Array::value_type, std::tuple_size<Array>::value>> >>
-    inline llvm::ArrayType* get_type() {
-        return llvm::ArrayType::get(get_type<typename Array::value_type>(), std::tuple_size<Array>::value);
-    };
-
     template<typename T, std::size_t N>
     inline llvm::ArrayType* get_type() { return llvm::ArrayType::get(get_type<T>(), N); };
 
-    // todo: arrays , structs as arguments?
-    template<typename RetT, typename... Args>
+/*    template<typename RetT, typename... Args>
     inline llvm::FunctionType* get_func_type(bool isVarArg = false) {
         return llvm::FunctionType::get(
                 get_type<RetT>(), { get_type<Args>()... }, isVarArg
         );
+    }*/
+
+    template<typename RetT, typename ArgsTuple
+            , typename Inds = std::make_index_sequence<std::tuple_size_v<ArgsTuple>>
+            , typename = typename std::enable_if_t<is_std_tuple_v<ArgsTuple>> >
+    inline llvm::FunctionType* get_func_type(bool isVarArg = false) {
+        return llvm::FunctionType::get(
+                get_type<RetT>(), get_func_args_type<ArgsTuple>(Inds{}), isVarArg
+        );
+    }
+    template<typename ArgsTuple, std::size_t ...I>
+    inline std::array<llvm::Type*, sizeof...(I)> get_func_args_type(std::index_sequence<I...>) {
+        return { get_type< std::tuple_element_t<I, ArgsTuple> >()... };
     }
 
-
+    // todo: somehow restrict bit width of arithmetic types depending on target platform
     template<typename T, typename = typename std::enable_if_t<std::is_arithmetic_v<T>>>
     auto get_llvm_const(T val) {
         if constexpr (std::is_floating_point_v<T>) {
@@ -188,7 +213,6 @@ public: // out-of-dsl constructs
 
             llvm::Value* array_size = nullptr;
             if constexpr (is_std_array_v<T>) { array_size = get_llvm_const(std::tuple_size<T>::value); }
-//            if constexpr (std::is_array_v<T>) { array_size = get_llvm_const(std::extent_v<T>); }
             // Default empty name is handled automatically by LLVM (when var.name().data() == "")
             val_addr = cur_builder->CreateAlloca(get_type<T>(), array_size, var.name().data());
 
@@ -239,52 +263,89 @@ public: // out-of-dsl constructs
         e.arr.toIR(*this);
         auto arr_addr = pop_addr().first;
 
-        // todo: GEP-concerned: do i need extra 0 index at beginning? to access array by ptr...
-        //      hardly. i have not the ptr, but addr (i.e. ref)
-
-        // todo: specialise for constexpr values
+        // todo: maybe specialise for constexpr values
 //        llvm::Constant* ind = get_llvm_const(e.ind);
-//        auto elt_addr = cur_builder->CreateInBoundsGEP(arr_addr, {ind});
 
         e.ind.toIR(*this);
         llvm::Value* ind = pop_val();
-        auto elt_addr = cur_builder->CreateGEP(arr_addr, {ind});
+        auto zero = get_llvm_const(0); // need extra 0 to access elements of arrays
+        auto elt_addr = cur_builder->CreateInBoundsGEP(arr_addr, {zero, ind});
 
         push_addr(elt_addr, is_volatile);
     };
 
+    template<typename Td, bool is_const>
+    void accept(const Ptr<Td, is_const>& ptr) {
+        ptr.pointee.toIR(*this);
+
+        /*
+        auto addr = pop_addr();
+        llvm::Value* pointee_addr = addr.first;
+        bool is_volatile = addr.second; // todo: do I need it for anything?
+
+        auto ptr_type = pointee_addr->getType()->getPointerTo();
+        auto ptr_var = cur_builder->CreateAlloca(ptr_type, nullptr, "ptr");
+        cur_builder->CreateStore(pointee_addr, ptr_var, false);
+
+        push_addr(ptr_var, false);
+         */
+
+        /*
+         * ? if <anythin (array, global)> is accessed through ptr then I need to do zero-GEP first
+         */
+    };
+
+    template<typename Td>
+    void accept(const ETakeAddr<Td>& e) {
+        // it is enough to just do that -- then on the stack should be addr
+        e.pointee.toIR(*this);
+
+    }
+
+    template<typename Td>
+    void accept(const EDeref<Td>& e) {
+        // it is memory access, isn't it? so, it is DANGEROUS. emit warning when dereferencing unknown Ptr and not ETakeAddr
+        e.x.toIR(*this);
+
+        // ...> i can apply Deref only to PtrBase
+    }
+
 
 public: // dsl function and related constructs (function is 'entry' point of ir generation)
-    template<typename TdRet, typename TdBody, typename... Args>
-    auto translate(const DSLFunction<TdRet, TdBody, Args...> &fun) {
+    template<typename TdRet, typename TdBody, typename... TdArgs>
+    auto translate(const DSLFunction<TdRet, TdBody, TdArgs...> &fun) {
+//        std::cout << "Translating DSLFunction '" << fun.name() << "'" << std::endl;
 
         const auto moduleName = "module_" + std::string(fun.name());
         cur_module = std::make_unique<llvm::Module>(moduleName, context);
         fun.toIR(*this);
 
-        using RetT = typename DSLFunction<TdRet, TdBody, Args...>::ret_t;
-        return clear(), IRModule<RetT, Args...>{std::move(cur_module), fun.name().data()};
+        llvm::Module* m = cur_module.release();
+        clear();
+//        using fun_t = DSLFunction<TdRet, TdBody, TdArgs...>;
+//        using RetT = typename fun_t::ret_t;
+//        using Args = typename fun_t::args_full_t;
+//        return IRModule<RetT, f_t<TdArgs>...>{m, fun.name().data()};
+        return IRModule<TdRet, TdArgs...>{m, fun.name().data()};
+
     }
 
-    template<typename AddrT, typename RetT, typename ...Args>
-    void accept(const ResidentObjCode<AddrT, RetT, Args...> &func) {
+    template<typename AddrT, typename TdRet, typename ...TdArgs>
+    void accept(const ResidentObjCode<AddrT, TdRet, TdArgs...> &func) {
         // check that func is really loaded?
     }
 
-    template<typename TdRet, typename TdBody, typename... Args>
-    void accept(const DSLFunction<TdRet, TdBody, Args...> &dslFun) {
-        using RetT = typename DSLFunction<TdRet, TdBody, Args...>::ret_t;
-        /* todo: handle absence of function name; get temp name from IRBuilder???
-         * actually,
-         * store functions not by name but by ptr (referential equality)
-         * use names for checks on symbol name conflicts (actually, linker later will anyway do it)
-         */
+    template<typename TdRet, typename TdBody, typename... TdArgs>
+    void accept(const DSLFunction<TdRet, TdBody, TdArgs...> &dslFun) {
         std::string funcName{dslFun.name()};
 
         // Define function
         // ExternalLinkage is to be able to call the func outside the module it resides in
+        using ret_t = f_t<TdRet>;
+        using args_t = std::tuple<f_t<TdArgs>...>;
         llvm::Function *fun = llvm::Function::Create(
-                get_func_type<RetT, Args...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
+            get_func_type<ret_t, args_t>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
+//            get_func_type<f_t<TdRet>, f_t<TdArgs>...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
         );
 
         // Handle arguments
@@ -312,33 +373,36 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
 
 private:
     // todo: test modifyArgs
-    template<typename TdRet, typename TdBody, typename... Args
-            , typename Inds = std::index_sequence_for<Args...>>
-    void modifyArgs(const DSLFunction<TdRet, TdBody, Args...> &dslFun, llvm::Function *fun) {
-        std::array<llvm::Argument*, sizeof...(Args)> args;
+    template<typename TdRet, typename TdBody, typename... TdArgs
+            , typename Inds = std::index_sequence_for<TdArgs...>>
+    void modifyArgs(const DSLFunction<TdRet, TdBody, TdArgs...> &dslFun, llvm::Function *fun) {
+        std::array<llvm::Argument*, sizeof...(TdArgs)> args;
         for(llvm::Argument* arg_ptr = fun->arg_begin(); arg_ptr != fun->arg_end(); ++arg_ptr) {
             args[arg_ptr->getArgNo()] = arg_ptr;
         }
         modifyArgsImpl(dslFun, args, Inds{});
     }
 
-    template<typename TdRet, typename TdBody, typename ...Args
+    template<typename TdRet, typename TdBody, typename ...TdArgs
             , std::size_t ...I>
-    void modifyArgsImpl(const DSLFunction<TdRet, TdBody, Args...> &dslFun,
-                        std::array<llvm::Argument*, sizeof...(Args)> &args,
+    void modifyArgsImpl(const DSLFunction<TdRet, TdBody, TdArgs...> &dslFun,
+                        std::array<llvm::Argument*, sizeof...(TdArgs)> &args,
                         std::index_sequence<I...>) {
-        auto dummy = std::make_tuple( 0, (modifyArg(std::get<I>(dslFun.args), *args[I]), 0)... );
+        auto dummy = std::make_tuple( 0, ( modifyArg(std::get<I>(dslFun.args), *args[I]) , 0)... );
     }
 
-    template<typename T>
-    void modifyArg(const FunArg<T> &param, llvm::Argument &arg) {
+    template<typename TdArg>
+    void modifyArg(const TdArg& param, llvm::Argument &arg) {
         arg.setName(param.name().data());
-        // todo: parameter attributes can be added through fun.addParamAttr(unsigned ArgNo, llvm::Attribute)
+        if constexpr (is_byref_v<TdArg>) {
+            // todo: get sizeof in target platform
+            arg.addAttr(llvm::Attribute::getWithDereferenceableBytes(context, sizeof(i_t<TdArg>)));
+        }
     }
 
 public:
     template<typename Td1, typename Td2>
-    void accept(const Seq<Td1, Td2> &seq) {
+    void accept(const SeqExpr<Td1, Td2> &seq) {
         seq.e1.toIR(*this);
         // Sequence discards result of evaluation of left expression
         pop_val();
@@ -348,38 +412,54 @@ public:
 
     template<typename TdCond, typename TdThen, typename TdElse>
     void accept(const IfExpr<TdCond, TdThen, TdElse> &e) {
-        // Evaluate condition
-        e.cond_expr.toIR(*this);
-        llvm::Value* cond = pop_val();
-
-        // get ?unique name (or null i think is simpler. why do i even need these names?)
-        llvm::BasicBlock* true_block = llvm::BasicBlock::Create(context, "", frame->fun);
-        llvm::BasicBlock* false_block = llvm::BasicBlock::Create(context, "", frame->fun);
-
-        llvm::BranchInst* inst = cur_builder->CreateCondBr(cond, true_block, false_block);
+        llvm::BasicBlock* true_block = llvm::BasicBlock::Create(context, "true_block", frame->fun);
+        llvm::BasicBlock* false_block = llvm::BasicBlock::Create(context, "false_block", frame->fun);
+        llvm::BasicBlock* after_block = llvm::BasicBlock::Create(context, "", frame->fun);
 
         // Create temp value to hold result of the whole expr depending on branch
         using T = typename IfExpr<TdCond, TdThen, TdElse>::type;
-        llvm::Value* result = cur_builder->CreateAlloca(get_type<T>());
-        llvm::IRBuilderBase::InsertPoint ip = cur_builder->saveIP();
+        auto result_var = cur_builder->CreateAlloca(get_type<T>());
+
+        // Evaluate condition
+        e.cond_expr.toIR(*this);
+        llvm::Value* cond = pop_val();
+        llvm::BranchInst* inst = cur_builder->CreateCondBr(cond, true_block, false_block);
 
         cur_builder->SetInsertPoint(true_block);
         e.then_expr.toIR(*this);
-        cur_builder->CreateStore(pop_val(), result);
+        cur_builder->CreateStore(pop_val(), result_var);
+        cur_builder->CreateBr(after_block);
 
         cur_builder->SetInsertPoint(false_block);
         e.else_expr.toIR(*this);
-        cur_builder->CreateStore(pop_val(), result);
+        cur_builder->CreateStore(pop_val(), result_var);
+        cur_builder->CreateBr(after_block);
 
-        cur_builder->restoreIP(ip);
+        cur_builder->SetInsertPoint(after_block);
+        llvm::Value* result = cur_builder->CreateLoad(result_var);
         push_val(result);
     }
 
-//    void accept(const IfElse &e) {
-        // todo: seems, difference between IfExpr and If statement is that with the latter resulted value popped from the frame->val_stack
-        // .... but IfStatement contains not Expr. that is, there is no guarantee that stack will be changed
-        // .... need checks on stack size? ensure it to remaing the same at the end of evaluation of If statement?
-//    }
+    template<typename TdCond, typename TdBody>
+    void accept(const WhileExpr<TdCond, TdBody> &e) {
+        llvm::BasicBlock* cond_block = llvm::BasicBlock::Create(context, "cond_block", frame->fun);
+        llvm::BasicBlock* loop_block = llvm::BasicBlock::Create(context, "loop_block", frame->fun);
+        llvm::BasicBlock* after_block = llvm::BasicBlock::Create(context, "", frame->fun);
+
+        cur_builder->CreateBr(cond_block);
+        cur_builder->SetInsertPoint(cond_block);
+        e.cond_expr.toIR(*this);
+        llvm::Value* cond = pop_val();
+        llvm::BranchInst* inst = cur_builder->CreateCondBr(cond, loop_block, after_block);
+
+        cur_builder->SetInsertPoint(loop_block);
+        e.body_expr.toIR(*this);
+        llvm::Value* res = pop_val();
+        cur_builder->CreateBr(cond_block);
+
+        cur_builder->SetInsertPoint(after_block);
+        push_val(res);
+    }
 
     template<typename Td>
     void accept(const ReturnImpl<Td> &returnSt) {
@@ -413,54 +493,84 @@ public:
 
         llvm::CallInst* inst = cur_builder->CreateCall(
                 defined_funcs.at(&e.callee),
-                eval_func_args(e.args)
+                eval_func_args<TdCallable>(e.args)
         );
         push_val(inst);
     }
 
-    template<typename AddrT, typename RetT, typename... ArgExprs>
-    void accept(const ECallLoaded<AddrT, RetT, ArgExprs...> &e) {
-        using call_t = ECallLoaded<AddrT, RetT, ArgExprs...>;
+
+    template<typename TdCallable, typename... ArgExprs
+            , typename = typename std::enable_if_t< is_dsl_loaded_callable_v<TdCallable> >>
+    void accept(const ECall<TdCallable, ArgExprs...>& e) {
+        using ret_t = typename TdCallable::ret_t;
+        using args_t = typename TdCallable::args_t;
+
         llvm::CallInst* inst = cur_builder->CreateCall(
-                get_func_type<typename call_t::ret_t, i_t<ArgExprs>...>(),
+                get_func_type<ret_t, args_t>(),
+                get_llvm_const(e.callee.callAddr),
+                eval_func_args<TdCallable>(e.args)
+        );
+        push_val(inst);
+    }
+
+/*    template<typename AddrT, typename TdRet, typename ...ArgExprs>
+    void accept(const ECallLoaded<AddrT, TdRet, ArgExprs...> &e) {
+        llvm::CallInst* inst = cur_builder->CreateCall(
+                get_func_type<f_t<TdRet>, f_t<TdArgs>...>(),
                 get_llvm_const(e.callee.callAddr),
                 eval_func_args(e.args)
         );
         push_val(inst);
-    }
+    }*/
 
 private:
-    // todo: test: empty args; empty init list
-    template<typename ...ArgExprs>
-//    llvm::ArrayRef<llvm::Value*> eval_func_args(const ArgExprs&... args) {
-    llvm::ArrayRef<llvm::Value*> eval_func_args(std::tuple<const ArgExprs&...> args) {
-
-        // Evaluate arguments in left-to-right order
-        auto evaluated_args = std::apply([this](const ArgExprs&... args){
-            return llvm::ArrayRef({ (args.toIR(*this), pop_val())... });
-        }, args);
-
-        // Clear stack from evaluated arguments
-//        for (auto i = 0; i < sizeof...(ArgExprs); ++i) { frame->val_stack.pop(); }
-
-        return evaluated_args;
+    template<typename TdCallable, typename ArgExprsTuple
+            , typename Inds = std::make_index_sequence<std::tuple_size_v<ArgExprsTuple>>>
+    auto eval_func_args(const ArgExprsTuple& args) {
+        return eval_func_args_impl<TdCallable>(args, Inds{});
+    }
+    template<typename TdCallable, typename ArgExprsTuple, std::size_t ...I>
+    std::array<llvm::Value*, sizeof...(I)> eval_func_args_impl(
+            const ArgExprsTuple& args,
+            std::index_sequence<I...>) {
+        return { eval_func_arg< std::tuple_element_t<I, typename TdCallable::dsl_args_t> >( std::get<I>(args) )... };
     }
 
-public: // Operations and Casts
-    template<typename To, typename TdFrom>
-    void accept(const ECast<To, TdFrom> &e) {
-        e.src.toIR(*this);
-        llvm::Value* src = pop_val();
+    template<typename TdArg, typename ArgExpr>
+    llvm::Value* eval_func_arg(const ArgExpr& e) {
+        e.toIR(*this);
+        if constexpr (is_byval_v<TdArg>) {
+            return pop_val();
+        } else if constexpr (is_val_v<ArgExpr>) {
+            return pop_addr().first;
+        } else { // ArgExpr is Expr
+            // ArgExpr represents temporary value; allocate space for it
+            llvm::Value* val = pop_val();
+            llvm::AllocaInst* val_addr = cur_builder->CreateAlloca(val->getType());
+            cur_builder->CreateStore(val, val_addr);
+            return val_addr;
+        }
+    };
 
-        llvm::Value* casted = cur_builder->CreateCast(e.op, src, get_type<To>());
-        push_val(casted);
+public: // Operations and Casts
+    template<typename TdTo, typename TdFrom, Casts Op>
+    void accept(const ECast<TdTo, TdFrom, Op> &e) {
+        e.src.toIR(*this);
+
+        using To = typename ECast<TdTo, TdFrom>::To;
+        using From = typename ECast<TdTo, TdFrom>::From;
+        // Cast only if necessary
+        if constexpr (!std::is_same_v<To, From>) {
+            llvm::Value* src = pop_val();
+            llvm::Value* casted = cur_builder->CreateCast(Op, src, get_type<To>());
+            push_val(casted);
+        }
     }
 
     template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs>
     void accept(const EBinOp<bOp, TdLhs, TdRhs> &e) {
         e.lhs.toIR(*this);
         llvm::Value* lhs = pop_val();
-
         e.rhs.toIR(*this);
         llvm::Value* rhs = pop_val();
 
@@ -472,6 +582,27 @@ public: // Operations and Casts
 //    template<BinOps bOp>
 //    void accept(const EBinOpLogical<bOp> &e) {
 //    }
+
+    template<OtherOps Op, Predicate P, typename TdLhs, typename TdRhs>
+    void accept(const EBinCmp<Op, P, TdLhs, TdRhs>& e) {
+        e.lhs.toIR(*this);
+        llvm::Value* lhs = pop_val();
+        e.rhs.toIR(*this);
+        llvm::Value* rhs = pop_val();
+
+        llvm::Value* res = nullptr;
+        if constexpr (Op == OtherOps::FCmp) {
+            res = cur_builder->CreateFCmp(P, lhs, rhs);
+        } else if constexpr (Op == OtherOps::ICmp) {
+            res = cur_builder->CreateICmp(P, lhs, rhs);
+        } else {
+            std::cout << "FCmp==" << OtherOps::FCmp << std::endl;
+            std::cout << "ICmp==" << OtherOps::ICmp << std::endl;
+            std::cout << "Op  ==" << Op << std::endl;
+//            static_assert(false, "Unknown CmpInst kind!");
+        }
+        push_val(res);
+    };
 };
 
 
@@ -494,8 +625,6 @@ void toIRImpl(const T &irTranslatable, IRTranslator &irt) {
 
 
 
-/// Allows static polymorphism.
-/// Despite allowing use of Visitor pattern (convenient there), avoids run-time overhead for virtual calls.
 /// \tparam T subclass of DSLBase
 //template<typename T, std::enable_if<std::is_base_of<DSLBase, T>::value>::type>
 /*template<typename T>
@@ -504,13 +633,6 @@ struct IRTranslatable : virtual public DSLBase {
         gen.accept(*static_cast<const T*>(this));
     }
 };*/
-
-//template<template<typename T> class Tdsl, typename T>
-//struct IRTranslatable1 : public Expr<T> {
-//    inline void toIR(const IRTranslator &gen) const override {
-//        gen.accept(*static_cast<const Tdsl<T>*>(this));
-//    }
-//};
 
 
 }

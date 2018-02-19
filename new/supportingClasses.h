@@ -59,15 +59,14 @@ public:
 
 
 class IIRModule {
+    friend class CodeGen; // no need to expose non-const getters for this->m because they're needed only for CodeGen
 
-    friend class CodeGen; // no need to expose getters for this->m because they're needed only for CodeGen
-
-//protected:
     std::unique_ptr<llvm::Module> m;
     std::vector<IIRModule> m_dependencies;
 
 public:
     explicit IIRModule(std::unique_ptr<llvm::Module> m) : m{std::move(m)} {}
+    explicit IIRModule(llvm::Module* m) : m{m} {}
     virtual ~IIRModule() = default;
 
     // Move-only type
@@ -75,6 +74,8 @@ public:
     IIRModule &operator=(IIRModule &&) = default;
 
     explicit operator bool() const { return bool(m); }
+
+    const llvm::Module& get() const { return *m; }
 };
 
 
@@ -83,8 +84,10 @@ class IRModule : public IIRModule, public ISignature<RetT, Args...> {
 
 public:
     IRModule(std::unique_ptr<llvm::Module> m, const std::string &mainSymbol)
-    : IIRModule{std::move(m)}, ISignature<RetT, Args...>{mainSymbol}
-    {};
+            : IIRModule{std::move(m)}, ISignature<RetT, Args...>{mainSymbol} {};
+
+    IRModule(llvm::Module* m, const std::string &mainSymbol)
+            : IIRModule{m}, ISignature<RetT, Args...>{mainSymbol} {};
 
 };
 

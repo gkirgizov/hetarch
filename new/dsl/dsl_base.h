@@ -44,20 +44,20 @@ struct ValueBase : public DSLBase {};
 struct CallableBase : public DSLBase {};
 
 
-
 //template<typename... Args>
 //using expr_tuple = std::tuple<const Expr<Args>&...>;
 
 
 
 class Named {
-    const std::string_view m_name;
+    std::string_view m_name;
 public:
     explicit constexpr Named() : m_name{make_bsv("")} {};
     explicit constexpr Named(const std::string_view &name) : m_name{name} {};
+    explicit constexpr Named(const char* str) : m_name{make_bsv(str)} {};
 
     constexpr auto name() const { return m_name; }
-    constexpr void rename(std::string_view name) { name = name; }
+    constexpr void rename(std::string_view name) { m_name = name; }
 };
 
 

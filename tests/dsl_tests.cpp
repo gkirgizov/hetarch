@@ -24,98 +24,126 @@ struct IRTranslatorTest: public ::testing::Test {
     // variables should have static storage duration to be used later in
     static constexpr Var<char> a{'a', make_bsv("char1")};
     static constexpr Var<char> b{'b', make_bsv("char2")};
-    static constexpr FunArg<int> x{69}, y{42}, tmp{}; // default parameters
-//    static constexpr Param x(69), y(42), tmp(0); // why auto type deduction doesn't work??
+    static constexpr Var<int> x{69, make_bsv("la-la")}, y{42}, tmp{};
 };
 
 
-TEST_F(IRTranslatorTest, compileTimeDSL) {
+template<typename TdRet, typename TdBody, typename... Args>
+bool translate_verify(IRTranslator& irt, const DSLFunction<TdRet, TdBody, Args...> &f) {
+    std::cout << "Translating DSLFunction: " << f.name() << std::endl;
+    auto module = irt.translate(f);
 
-//    dsl2::test_something();
-//    return;
+    bool verified_ok = utils::verify_module(module);
+    std::cout << "verified: " << f.name() << ": " << std::boolalpha << verified_ok << std::endl;
+    module.get().dump();
+    return verified_ok;
+}
+
+
+TEST_F(IRTranslatorTest, compileDSLCommon) {
 
 //    constexpr std::string_view name2{"some_string"}; // fails!
 //    constexpr std::string_view name = make_bsv("some_string"); // succeeds.
 
-    constexpr const Var<char>& a_ref = a; // fails when 'a' has non-static storage duration
-
-//    constexpr auto eassign1 = b.assign(a); // move-construct
-//    constexpr auto eassign2 = tmp.assign(x);
-//    constexpr auto eassign3{std::move(eassign2)}; // fail to copy-construct
-
-//    auto seq0 = (tmp.assign(tmp.assign(x)), x.assign(y), y.assign(tmp));
-//    Seq seq = (tmp = tmp = x, x = y, y = tmp);
-//    const Expr<int> &seq_expr = seq;
-//    seq.toIR(irt);
-
-//    DSLFunction void_fun(
-//            make_bsv("void_fun"),
-//            Return()
-//    );
-
-    // test type deduction and tuple ctor
-//    std::cout << "tmp  type: " << utils::type_name<decltype(tmp)>() << std::endl;
-//    std::tuple test1{tmp};
-//    FunArgs<int> test2{tmp};
-//    std::cout << "test type: " << utils::type_name<decltype(test1)>() << std::endl;
-//    std::cout << "test type: " << utils::type_name<decltype(test2)>() << std::endl;
-
     // test in-dsl takeAddr and deref
-    Ptr dsl_ptr = tmp.takeAddr();
-    EDeref derefd = *dsl_ptr;
-    assert(&tmp == &derefd.x);
+//    Ptr dsl_ptr = tmp.takeAddr();
+//    EDeref derefd = *dsl_ptr;
+//    assert(&tmp == &derefd.x);
 
+    DSLFunction empty_test(
+            "empty",
+            Return()
+    );
 
-    std::cout << "pass_through def" << std::endl;
     DSLFunction pass_through(
-            FunArgs<int>(tmp),
+            "pass_through",
+            MakeFunArgs(tmp),
             Return(tmp)
     );
-    pass_through.rename(make_bsv("pass_through"));
 
-    std::cout << "test1 def" << std::endl;
-    DSLFunction test1(
-            FunArgs<int, int, int>(x, y, tmp),
+    DSLFunction assign_test(
+            "swap",
+            MakeFunArgs(x, y),
+            (tmp = x, x = y, y = tmp),
+            Return()
+    );
+
+    DSLFunction call_test(
+            "call_thing",
+            MakeFunArgs(x),
             tmp = pass_through(x),
             Return(tmp)
     );
-    test1.rename("test1");
 
-    DSLFunction swap_func(
-            FunArgs<int, int>(x, y),
-            (tmp = x, x = y, y = tmp, pass_through(tmp)),
+    EXPECT_TRUE(translate_verify(irt, empty_test));
+    EXPECT_TRUE(translate_verify(irt, pass_through));
+    EXPECT_TRUE(translate_verify(irt, assign_test));
+    EXPECT_TRUE(translate_verify(irt, call_test));
+}
+
+
+TEST_F(IRTranslatorTest, compileDSLOperations) {
+    Var xi{1}, yi{3};
+    Var xf{2.0}, yf{4.0};
+
+    DSLFunction simple_add_test(
+            "add2",
+            MakeFunArgs(x, y),
             Return(x + y)
-//            Return()
     );
-    swap_func.rename("swap");
 
+    DSLFunction cmp_test(
+            "",
+            MakeFunArgs(x, y),
+            (
+                    xi == yi, xi == yf, xf == yi, xf == yf,
+                    xi < yi, xi < yf, xf < yi, xf < yf
+            ),
+            Return()
+    );
+
+
+    EXPECT_TRUE(translate_verify(irt, simple_add_test));
+    EXPECT_TRUE(translate_verify(irt, cmp_test));
+}
+
+
+TEST_F(IRTranslatorTest, compileDSLArray) {
     std::array arr_init = {1, 2, 3, 5};
     Array<int, 4> arr{arr_init};
-    std::cout << "try_arr def" << std::endl;
-    DSLFunction try_arr(
-            FunArgs<int, int>(x, y),
-            Return(arr[x] + arr[y])
+
+    DSLFunction array_access_test(
+            "try_arr",
+            MakeFunArgs(x, y),
+            tmp = arr[x] + arr[y],
+            Return(tmp)
     );
 
+    EXPECT_TRUE(translate_verify(irt, array_access_test));
+}
 
 
-    std::cout << "end of dsl functions definitions" << std::endl;
+TEST_F(IRTranslatorTest, compileDSLControlFlow) {
+    Var<bool> cond{false};
+    Var<const int> zero{0};
+    Var<const int> one{1};
 
+    DSLFunction if_else_test(
+            "max",
+            MakeFunArgs(x, y),
+            tmp = If(cond, x, y),
+            Return(tmp)
+    );
 
-//    EBinOp<BinOps::Add, int> e1{x, y};
-//    std::cout << &e1.rhs << typeid(e1.rhs).name() << std::endl;
-//    EBinOp<BinOps::Add, int> e2 = x + y;
-//    std::cout << "some " << typeid(e2.rhs).name() << std::endl;
+    DSLFunction while_test(
+            "count",
+            MakeFunArgs(x, y),
+            While(x == zero,
+                  x = x - one
+            ),
+            Return()
+    );
 
-
-//    std::cout << "translating " << pass_through.name() << std::endl;
-//    irt.translate(pass_through);
-    std::cout << "translating " << test1.name() << std::endl;
-    irt.translate(test1);
-    std::cout << "translating " << swap_func.name() << std::endl;
-    irt.translate(swap_func);
-    std::cout << "translating " << try_arr.name() << std::endl;
-    irt.translate(try_arr);
-
-    std::cout << "end translation" << std::endl;
+    EXPECT_TRUE(translate_verify(irt, if_else_test));
+    EXPECT_TRUE(translate_verify(irt, while_test));
 }

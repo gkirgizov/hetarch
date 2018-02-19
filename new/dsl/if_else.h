@@ -8,6 +8,7 @@ namespace hetarch {
 namespace dsl {
 
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
+using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
 // 'if-else' statement
 /*struct IfElse : public ESBase {
@@ -30,7 +31,7 @@ template<typename TdCond, typename TdThen, typename TdElse
                 std::is_same_v<bool, i_t<TdCond>> && std::is_same_v<i_t<TdThen>, i_t<TdElse>>
         >
 >
-struct IfExpr : public Expr<i_t<TdThen>> {
+struct IfExpr : public Expr<f_t<TdThen>> {
     const TdCond cond_expr;
     const TdThen then_expr;
     const TdElse else_expr;
@@ -43,6 +44,14 @@ struct IfExpr : public Expr<i_t<TdThen>> {
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
+template<typename TdCond, typename TdThen, typename TdElse>
+constexpr auto If(TdCond&& cond_expr, TdThen&& then_expr, TdElse&& else_expr) {
+        return IfExpr<TdCond, TdThen, TdElse>{
+                std::forward<TdCond>(cond_expr),
+                std::forward<TdThen>(then_expr),
+                std::forward<TdElse>(else_expr)
+        };
+};
 
 }
 }

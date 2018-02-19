@@ -19,10 +19,6 @@ template<typename T, std::size_t N, bool is_const, bool is_volatile> class Array
 template<typename TdInd, typename T, std::size_t N, bool is_const, bool is_volatile
         , typename = typename std::enable_if_t< std::is_integral_v<i_t<TdInd>> >>
 struct EArrayAccess : Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, is_const> {
-//struct EArrayAccess : std::conditional_t<is_const,
-//        Expr<T>, // don't enable assignment
-//        Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, is_const> // derive from Value to allow assignment
-//> {
     using type = T;
     using arr_t = Array<T, N, is_const, is_volatile>;
 
@@ -39,9 +35,14 @@ struct EArrayAccess : Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, is
 //template<typename T, std::size_t N, bool is_const, bool is_volatile>
 //using EConstArrayAccess = EArrayAccess<std::size_t, T, N, is_const, is_volatile>;
 
-template<typename T, std::size_t N, bool is_const = false, bool is_volatile = false>
+
+template<typename T, std::size_t N, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T>
+//        , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
+>
 struct Array : public Var<std::array<T, N>, is_const, is_volatile> {
     using Var<std::array<T, N>, is_const, is_volatile>::Var;
+
+    using value_t = T;
 
     // todo: allow indexing by const int
 //    constexpr auto operator[](const std::size_t I) const {
