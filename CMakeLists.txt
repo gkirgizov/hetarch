@@ -2,6 +2,7 @@ cmake_minimum_required (VERSION 3.2)
 project(hetarch-proj)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if ("$ENV{ARCH}" STREQUAL "arm")
     # BUILDING FOR TRIK
@@ -42,7 +43,13 @@ execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti") // why -fno-rtti?
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti") # why -fno-rtti?
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
+endif()
+message(STATUS "using compiler: ${CMAKE_CXX_COMPILER_ID}")
 add_definitions(-DHETARCH_TARGET_ADDRT=uint${MY_ADDR_BITS}_t ${MY_PLAFORM_SPECIFIC})
 
 
@@ -124,7 +131,7 @@ target_sources(hetarch_trik
 
 add_library(temp_target
         tests/test_code/test_code.cpp
-        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/dsl/dsl_base.h new/supportingClasses.h new/CodeLoader.h new/IConnection.h new/dsl/sequence.h new/dsl/IRTranslator.h new/utils.h new/dsl/types_map.h new/dsl/if_else.h new/dsl/ResidentObjCode.h new/dsl/op.h new/dsl/var.h new/dsl/fun.h new/dsl/dsl_type_traits.h new/dsl/array.h new/dsl/ptr.h new/dsl/loops.h)
+        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/dsl/dsl_base.h new/supportingClasses.h new/CodeLoader.h new/IConnection.h new/dsl/sequence.h new/dsl/IRTranslator.h new/utils.h new/dsl/types_map.h new/dsl/if_else.h new/dsl/ResidentObjCode.h new/dsl/op.h new/dsl/var.h new/dsl/fun.h new/dsl/dsl_type_traits.h new/dsl/array.h new/dsl/ptr.h new/dsl/loops.h new/dsl.h)
 
 add_subdirectory(examples)
 add_subdirectory(tests)
