@@ -66,12 +66,17 @@ void dumpSymbols(const llvm::object::ObjectFile &objFile) {
             auto err_code = section.get()->getName(sectionName);
         }
 
+        const auto err_msg = "--err in expected--";
+        auto type = sym.getType();
+        auto addr = sym.getAddress();
+        auto name = sym.getName();
+
         std::cerr
-                << "; type: " << sym.getType().get()
+                << "; type: " << (type ? type.get() : -1)
                 << "; flags: 0x" << std::hex << sym.getFlags()
-                << "; addr: 0x" << std::hex << sym.getAddress().get()
+                << "; addr: 0x" << std::hex << (addr ? addr.get() : 0)
                 << "; value: 0x" << std::hex << sym.getValue()
-                << "; name: " << sym.getName().get().str()
+                << "; name: " << (name ? name.get().str() : err_msg)
                 << "; section: " << sectionName.str()
                 << std::endl;
     }

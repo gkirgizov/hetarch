@@ -13,6 +13,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/GlobalVariable.h"
 
 #include "../supportingClasses.h"
 #include "dsl_base.h"
@@ -312,6 +313,26 @@ public: // out-of-dsl constructs
 
 
 public: // dsl function and related constructs (function is 'entry' point of ir generation)
+    // todo: make static (make get_type and get_llvm_const static and... context? do i need same context?)
+    template<typename Td>
+    auto translate(const DSLGlobal<Td>& g) {
+        const auto g_name = std::string(g.x.name());
+        const auto moduleName = "module_for_global_" + g_name;
+        auto g_module = new llvm::Module(moduleName, context);
+
+        llvm::GlobalVariable g_var{
+                g_module,
+                get_type<f_t<Td>>(),
+                Td::const_q,
+                llvm::GlobalValue::LinkageTypes::ExternalLinkage,
+                g.x.initialised() ? get_llvm_const(g.x.initial_val()) : nullptr,
+                g_name
+        };
+
+//        return IIRModule{g_module};
+        return IRModule<Td>{g_module, g_name};
+    }
+
     template<typename TdRet, typename TdBody, typename... TdArgs>
     auto translate(const DSLFunction<TdRet, TdBody, TdArgs...> &fun) {
 //        std::cout << "Translating DSLFunction '" << fun.name() << "'" << std::endl;

@@ -11,7 +11,7 @@ namespace hetarch {
 namespace dsl {
 
 
-using dsl::i_t; // by some reasons CLion can't resolve it automatically.
+using ::hetarch::dsl::i_t; // by some reasons CLion can't resolve it automatically.
 
 
 template<typename T, std::size_t N, bool is_const, bool is_volatile> class Array;
@@ -26,6 +26,9 @@ struct EArrayAccess : Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, is
     const TdInd ind;
 
     constexpr EArrayAccess(const arr_t& arr, TdInd&& ind) : arr{arr}, ind{std::forward<TdInd>(ind)} {}
+
+//    void operator=(EArrayAccess<TdInd, T, N, is_const, is_volatile>&) = delete;
+    using Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, is_const>::operator=;
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };

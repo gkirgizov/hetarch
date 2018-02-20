@@ -18,13 +18,21 @@ struct DSLConst : public Expr<T> {
     constexpr DSLConst(T val) : val{val} {}
 };
 
+//template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
+//constexpr auto operator"" _dsl (T val) { return DSLConst<T>{val}; };
 
-// todo: difference with LocalVar is that GlobalVar is Loadable. implement it.
-//template<typename T, bool isConst = false, bool is_volatile = false>
-//using GlobalVar<T, is_const, is_volatile> = Var<T, isConst, is_volatile>;
-//struct GlobalVar : public Var<T, is_const, is_volatile>, public Assignable<T, isConst> {
-//    using Var<T, isConst, is_volatile>::Var;
-//};
+
+template<typename Td, typename = typename std::enable_if_t< is_val_v<Td> >>
+struct DSLGlobal {
+    const Td x;
+
+    // only rvalues allowed
+    explicit constexpr DSLGlobal(Td&& x) : x{x} {}
+
+//    inline constexpr auto name() const { return x.name(); }
+
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+};
 
 
 // todo: do implicit cast when not exact type match?
@@ -45,6 +53,8 @@ struct EAssign : public Expr<i_t<TdRhs>> {
 //template<typename Tw, typename T, bool is_const = false, bool is_volatile = false>
 template<typename Tw, bool is_const = false>
 struct Value : public ValueBase {
+    void operator=(Value<Tw, is_const>&) = delete; // delete copy assignment to avoid ambigious operator=
+
     template<typename Td, typename Tw_ = Tw
             , typename = typename std::enable_if_t< std::is_same_v<i_t<Tw_>, i_t<Td>> && !is_const >
     >

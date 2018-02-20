@@ -35,5 +35,18 @@ struct is_dsl_loaded_callable<ResidentObjCode<AddrT, TdRet, TdArgs...>> : public
 template<typename T>
 inline constexpr bool is_dsl_loaded_callable_v = is_dsl_loaded_callable<T>::value;
 
+
+template<typename AddrT, typename Td>
+struct ResidentGlobal : public MemResident<AddrT> {
+    using MemResident<AddrT>::MemResident;
+
+    const AddrT addr;
+
+    ResidentGlobal(mem::MemManager<AddrT> *memManager, mem::MemRegion<AddrT> memRegion, bool unloadable)
+            : MemResident<AddrT>{memManager, memRegion, unloadable}, addr{memRegion.start} {}
+
+};
+
+
 }
 }

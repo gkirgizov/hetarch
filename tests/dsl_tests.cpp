@@ -83,7 +83,8 @@ TEST_F(IRTranslatorTest, compileDSLCommon) {
 
 
 TEST_F(IRTranslatorTest, compileDSLOperations) {
-    Var xi{1}, yi{3};
+    Var<int32_t> xi{1}, yi{3};
+    Var<uint64_t> xui{1}, yui{3};
     Var xf{2.0}, yf{4.0};
 
     DSLFunction simple_add_test(
@@ -96,8 +97,9 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
             "",
             MakeFunArgs(x, y),
             (
-                    xi == yi, xi == yf, xf == yi, xf == yf,
-                    xi < yi, xi < yf, xf < yi, xf < yf
+//                    xi == yi, xi == yf, xf == yi, xf == yf,
+                    xui == yi, xi == yui, xf == yui, xf == yf
+//                    xi < yi, xi < yf, xf < yi, xf < yf
             ),
             Return()
     );
@@ -114,12 +116,20 @@ TEST_F(IRTranslatorTest, compileDSLArray) {
 
     DSLFunction array_access_test(
             "try_arr",
+            MakeFunArgs(x, y), (
+                tmp = arr[x] + arr[y]
+            ), Return(tmp)
+    );
+
+    DSLFunction array_assign_test(
+            "try_arr",
             MakeFunArgs(x, y),
-            tmp = arr[x] + arr[y],
-            Return(tmp)
+            arr[x] = arr[y]
+            , Return()
     );
 
     EXPECT_TRUE(translate_verify(irt, array_access_test));
+    EXPECT_TRUE(translate_verify(irt, array_assign_test));
 }
 
 
