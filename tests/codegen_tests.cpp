@@ -12,7 +12,9 @@
 #include "../new/CodeGen.h"
 #include "../new/CodeLoader.h"
 
-#include "utils.h"
+#include "../new/dsl.h"
+
+#include "test_utils.h"
 #include "mocks.h"
 
 
@@ -20,6 +22,7 @@ using namespace std;
 using namespace llvm;
 using namespace hetarch;
 using namespace hetarch::mem;
+using namespace hetarch::dsl;
 
 
 using addr_t = HETARCH_TARGET_ADDRT;
@@ -66,10 +69,10 @@ public:
 
     LLVMContext ctx{};
 //    IIRModule main_entry;
-    IRModule<void> main_entry;
-    IRModule<int, int, int> self_sufficient;
-    IRModule<int, int> part1;
-    IRModule<int, int, unsigned int> part2;
+    IRModule<VoidExpr> main_entry;
+    IRModule<Var<int>, Var<int>, Var<int>> self_sufficient;
+    IRModule<Var<int>, Var<int>> part1;
+    IRModule<Var<int>, Var<int>, Var<unsigned int>> part2;
 
     CodeGen codeGen;
 

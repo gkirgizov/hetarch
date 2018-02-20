@@ -34,6 +34,7 @@
 #include "supportingClasses.h"
 //#include "MemoryManager.h"
 #include "dsl/dsl_base.h"
+#include "dsl/fun.h"
 
 
 namespace hetarch {
@@ -43,22 +44,15 @@ class CodeGen {
 
     const std::string targetName;
 
-//    std::string targetLookupError;
-
     // todo: do i need to (resource-)manage this?
-//    llvm::Target *target{nullptr};
+    const llvm::Target *target{nullptr};
 //    const std::unique_ptr<llvm::Target> target;
 public:
 
     explicit CodeGen(const std::string &targetName);
 
     template<typename RetT, typename... Args>
-    ObjCode<RetT, Args...> compile(IRModule<RetT, Args...> &irModule);
-
-
-    template<typename RetT, typename... Args>
-    static IRModule<RetT, Args...> generateIR(const dsl::DSLFunction<RetT, Args...> &f);
-
+    ObjCode<RetT, Args...> compile(IRModule<RetT, Args...> &irModule) const;
 
     static bool link(IIRModule &dependent);
 
@@ -72,12 +66,19 @@ private:
 
     static std::vector<std::string> findUndefinedSymbols(object::OwningBinary<object::ObjectFile> &objFile);
 
+    static const llvm::Target* initTarget(const std::string& targetName);
+
 };
 
+
 CodeGen::CodeGen(const std::string &targetName)
-: targetName(llvm::Triple::normalize(llvm::StringRef(targetName)))
-//, target(std::unique_ptr(llvm::TargetRegistry::lookupTarget(this->targetName, targetLookupError)))
-{
+        : targetName(llvm::Triple::normalize(llvm::StringRef(targetName)))
+          , target(initTarget(this->targetName))
+{}
+
+
+const llvm::Target* CodeGen::initTarget(const std::string &targetName) {
+
     // Initialise targets
     // todo: optimise somehow? (don't init ALL targets - check how expensive it is)
 //    InitializeAllTargetInfos();
@@ -89,6 +90,15 @@ CodeGen::CodeGen(const std::string &targetName)
     LLVMInitializeX86Target();
     LLVMInitializeX86TargetMC();
     LLVMInitializeX86AsmPrinter();
+
+    std::string targetLookupError;
+    // todo: move at least that to the ctor
+    // todo: make checkable if CodeGen finds target
+    auto target = llvm::TargetRegistry::lookupTarget(targetName, targetLookupError);
+    if (!target) {
+        // todo: handle error: target not found (err message in 'err')
+        return nullptr;
+    }
 
     // Initialize default, common passes
 //    auto passRegistry = llvm::PassRegistry::getPassRegistry();
@@ -113,82 +123,73 @@ std::vector<std::string> CodeGen::findUndefinedSymbols(object::OwningBinary<obje
         if (!(sf & llvm::object::BasicSymbolRef::SF_FormatSpecific)
             && sf & llvm::object::BasicSymbolRef::SF_Undefined)
         {
-            undefinedSyms.push_back(sym.getName().get().str());
+            if (auto name = sym.getName()) {
+                undefinedSyms.push_back(name.get().str());
+            }
         }
     }
     return undefinedSyms;
 }
 
 
+
 template<typename RetT, typename... Args>
-ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) {
+ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) const {
+    // CPU
+    std::string cpuStr = "generic";
+    std::string featuresStr = "";
 
-    std::string targetLookupError;
-    // todo: move at least that to the ctor
-    // todo: make checkable if CodeGen finds target
-    auto target = llvm::TargetRegistry::lookupTarget(this->targetName, targetLookupError);
-    if (target) {
+    // todo: do something with options
+    llvm::TargetOptions options = InitTargetOptionsFromCodeGenFlags();
 
-        // CPU
-        std::string cpuStr = "generic";
-        std::string featuresStr = "";
-
-        // todo: do something with options
-        llvm::TargetOptions options = InitTargetOptionsFromCodeGenFlags();
-
-        llvm::Reloc::Model relocModel = llvm::Reloc::PIC_;
+    llvm::Reloc::Model relocModel = llvm::Reloc::PIC_;
 //        auto codeModel = llvm::CodeModel::Default;
-
 //        auto optLevel = llvm::CodeGenOpt::Default;
 
-        auto targetMachine = target->createTargetMachine(
-                this->targetName,
-                cpuStr,
-                featuresStr,
-                options,
-                relocModel
-        );
+    auto targetMachine = target->createTargetMachine(
+            this->targetName,
+            cpuStr,
+            featuresStr,
+            options,
+            relocModel
+    );
 
-        if (targetMachine) {
-            // todo: violating constness of irModule???
-            irModule.m->setDataLayout(targetMachine->createDataLayout());
-            irModule.m->setTargetTriple(this->targetName);
+    if (targetMachine) {
+        irModule.m->setDataLayout(targetMachine->createDataLayout());
+        irModule.m->setTargetTriple(this->targetName);
 
-            // There go various Passes with PassManager
-            {
-                // Set Module-specific passes through PassManager
-                // todo: provide debug parameter to constructor
-                auto passManager = llvm::PassManager<llvm::Module>();
-            }
+        // There go various Passes with PassManager
+        {
+            // Set Module-specific passes through PassManager
+            // todo: provide debug parameter to constructor
+            auto passManager = llvm::PassManager<llvm::Module>();
+        }
 
-            auto compiler = llvm::orc::SimpleCompiler(*targetMachine);
-            // seems, specific ObjectFile type (e.g. ELF32) and endianness are determined from TargetMachine
-            // todo: shouldn't there be irModule.m.release()? no.
-            object::OwningBinary<object::ObjectFile> objFile = compiler(*irModule.m);
+        auto compiler = llvm::orc::SimpleCompiler(*targetMachine);
+        // seems, specific ObjectFile type (e.g. ELF32) and endianness are determined from TargetMachine
+        // todo: shouldn't there be irModule.m.release()? no.
+        object::OwningBinary<object::ObjectFile> objFile = compiler(*irModule.m);
 
-            if (objFile.getBinary()) {
-                // todo: test: there, IRModule's mainSymbol should resolvable (i.e. the same) in objFile
-                auto undefinedSyms = findUndefinedSymbols(objFile);
-                if (undefinedSyms.empty()) {
-                    return ObjCode<RetT, Args...>(std::move(objFile), irModule.symbol);
+        if (objFile.getBinary()) {
+            // todo: test: there, IRModule's mainSymbol should resolvable (i.e. the same) in objFile
+            auto undefinedSyms = findUndefinedSymbols(objFile);
+            if (undefinedSyms.empty()) {
+                return ObjCode<RetT, Args...>(std::move(objFile), irModule.symbol);
 
-                } else {
-                    // todo: handle undefined symbols error
-                    // just return meaningful description; this error is easily resolved and can't be solved at runtime
-
-                    return ObjCode<RetT, Args...>();
-                }
 
             } else {
-                // todo: handle compilation error
+                // todo: handle undefined symbols error
+                // just return meaningful description; this error is easily resolved and can't be solved at runtime
                 return ObjCode<RetT, Args...>();
             }
 
         } else {
-            // todo: handle TargetMachine creation error
+            // todo: handle compilation error
+            return ObjCode<RetT, Args...>();
         }
+
     } else {
-        // todo: handle error: target not found (err message in 'err')
+        // todo: handle TargetMachine creation error
     }
 }
 
@@ -230,34 +231,6 @@ bool CodeGen::link(IIRModule &dest, std::vector<IIRModule> &sources) {
     } else {
         return isSuccess;
     }
-}
-
-
-
-template<typename RetT, typename ...Args>
-IRModule<RetT, Args...> CodeGen::generateIR(const dsl::DSLFunction<RetT, Args...> &dslFunction) {
-    std::string moduleName{"module"};  // todo: module name
-    const char* const funcName = "func"; // todo: function name (i.e. symbol name)
-
-    llvm::LLVMContext context;
-    auto module = std::make_unique<llvm::Module>(moduleName, context);
-
-    llvm::Type *void_type = llvm::Type::getVoidTy(context);  // todo: somehow translate C++ types to llvm::Type
-    llvm::FunctionType *f_type = llvm::FunctionType::get(void_type, {}, false);
-    llvm::Function *fun = llvm::Function::Create(f_type, llvm::Function::ExternalLinkage, funcName, module.get());
-
-    llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, "entry", fun);
-    llvm::IRBuilder<> b{entry_bb};
-    // that's it. now we have builder and func and module
-
-//    llvm::Twine name{std::string_view("test_this")}; // just test ctor
-
-
-
-
-    // ...
-    // ...
-    return IRModule<RetT, Args...>{std::move(module), funcName};
 }
 
 

@@ -6,18 +6,65 @@
 #include "MemResident.h"
 
 #include "CodeGen.h"
+#include "supportingClasses.h"
 #include "dsl/dsl_base.h"
 #include "dsl/ResidentObjCode.h"
-#include "supportingClasses.h"
+#include "dsl/IRTranslator.h"
+
+#include "../tests/test_utils.h"
 
 
 namespace hetarch {
+
 
 // temporary here
 class CodeLoader {
     using content_t = llvm::StringRef;
 
 public:
+    template<typename AddrT, typename Td>
+    static dsl::ResidentGlobal<AddrT, Td> load(conn::IConnection<AddrT>* conn,
+                                               mem::MemManager<AddrT> *memManager,
+                                               mem::MemType memType,
+                                               dsl::IRTranslator& irt,
+                                               const CodeGen& cg,
+                                               const dsl::DSLGlobal<Td>& g) {
+
+        IRModule<Td> g_module = irt.translate(g);
+        ObjCode<Td> g_binary = cg.compile(g_module);
+
+//        auto contents = getContents(g_binary);
+        // todo: ?? g_binary.getCommonSymbolSize()
+
+        // log for debug
+        utils::dumpSections(*g_binary.getBinary());
+        utils::dumpSymbols(*g_binary.getBinary());
+
+        const llvm::object::SymbolRef& symbol = g_binary.getSymbol();
+//        for (const auto& section_exp : symbol.getSection()) {
+        if(auto it_exp = symbol.getSection()) {
+            const llvm::object::SectionRef& section = *it_exp.get();
+
+            assert(g.x.initialised() && section.isData() || !g.x.initialised() && section.isBSS());
+
+            llvm::StringRef contents;
+            auto err_code = section.getContents(contents);
+            if (!err_code) {
+
+                const AddrT contentsSize = section.getSize();
+                auto memRegion = memManager->alloc(contentsSize, memType);
+
+                conn->write(memRegion.start, contentsSize, contents.data());
+                return dsl::ResidentGlobal<AddrT, Td>{memManager, memRegion, true};
+
+            } else {
+                // todo: handle err_code
+            }
+        } else {
+            // todo: handle section error
+        }
+    }
+
     template<typename AddrT, typename RetT, typename... Args>
     static dsl::ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT> *conn,
                                                mem::MemManager<AddrT> *memManager,
@@ -43,8 +90,8 @@ public:
 
             // todo: load only '.text' section. otherwise need to implement relocations and all the stuff here
             // get offset of needed symbol
-            if (auto sectionOffset = objCode.getSymbol().getAddress()) {
-                auto addr = sectionOffset.get();
+            if (auto offsetInSection = objCode.getSymbol().getAddress()) {
+                auto addr = offsetInSection.get();
                 // create unloadable resident
                 return dsl::ResidentObjCode<AddrT, RetT, Args...>(memManager, memRegion, addr, true);
 
@@ -76,6 +123,18 @@ private:
         // strip ObjCode from all extra things and
         // return actual contents
         return objCode.getBinary()->getData();
+    };
+
+    template<typename RetT, typename... Args>
+    static auto getSection(const ObjCode<RetT, Args...> &objCode, const std::string& sectionName) {
+        for (const auto& section : objCode.getBinary()->sections()) {
+            llvm::StringRef name;
+            std::string id;
+            auto err_code = section.getName(name);
+            if (!err_code && name.str() == sectionName) {
+                return section;
+            }
+        }
     };
 
 };
