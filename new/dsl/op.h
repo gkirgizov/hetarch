@@ -115,6 +115,22 @@ using EBinFCmp = EBinCmp<OtherOps::FCmp, P, TdLhs, TdRhs>;
 template<Predicate P, typename TdLhs, typename TdRhs>
 using EBinICmp = EBinCmp<OtherOps::ICmp, P, TdLhs, TdRhs>;
 
+
+#define UNARY_OP(SYM, OP) \
+template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >> \
+constexpr auto operator SYM (T1&& lhs) { \
+    using t1 = i_t<T1>; \
+    using const_t = DSLConst<t1>; \
+    constexpr bool is_fp = std::is_floating_point_v<t1>; \
+    return EBinOp<(is_fp ? BinOps::F##OP: BinOps:: OP), const_t, T1>{ \
+            const_t{0}, \
+            std::forward<T1>(lhs) \
+    }; \
+}
+
+UNARY_OP(+, Add)
+UNARY_OP(-, Sub)
+
 /// Binary plus
 template<typename T1, typename T2 = T1
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
@@ -127,17 +143,6 @@ constexpr auto operator+(T1&& lhs, T2&& rhs) {
     };
 }
 
-/// Unary plus
-template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >>
-constexpr auto operator+(T1&& lhs) {
-    using const_t = DSLConst<i_t<T1>>;
-    return EBinOp<(std::is_floating_point_v<i_t<T1>> ? BinOps::FAdd: BinOps::Add), const_t, T1>{
-            const_t{0},
-            std::forward<T1>(lhs)
-    };
-}
-
-
 /// Binary minus
 template<typename T1, typename T2 = T1
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
@@ -149,17 +154,6 @@ constexpr auto operator-(T1&& lhs, T2&& rhs) {
             cast_t{std::forward<T2>(rhs)}
     };
 }
-
-/// Unary minus
-template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >>
-constexpr auto operator-(T1&& lhs) {
-    using const_t = DSLConst<i_t<T1>>;
-    return EBinOp<(std::is_floating_point_v<i_t<T1>> ? BinOps::FSub: BinOps::Sub), const_t, T1>{
-            const_t{0},
-            std::forward<T1>(lhs)
-    };
-}
-
 
 /// Multiplication
 template<typename T1, typename T2 = T1
@@ -176,8 +170,25 @@ constexpr auto operator*(T1&& lhs, T2&& rhs) {
 
 
 // todo: type conversions in bitwise operations?
+#define BITWISE_OP(SYM, OP) \
+template<typename T1, typename T2 \
+        , typename = typename std::enable_if_t< is_ev_v<T1, T2> > \
+> \
+constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
+    static_assert(std::is_integral_v<i_t<T1>> && std::is_integral_v<i_t<T2>>, "Bitwise operations expect integral types!"); \
+    static_assert(std::is_same_v<i_t<T1>, i_t<T2>>, "Bitwise operations expect same integral type!"); \
+    return EBinOp<BinOps:: OP , T1, T2>{ \
+            std::forward<T1>(lhs), \
+            std::forward<T2>(rhs) \
+    }; \
+};
 
-/// Bitwise And
+
+BITWISE_OP(&, And)
+BITWISE_OP(|, Or)
+BITWISE_OP(^, Xor)
+
+/*/// Bitwise And
 template<typename T1, typename T2
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
 >
@@ -211,7 +222,7 @@ constexpr auto operator^(T1&& lhs, T2&& rhs) {
             std::forward<T1>(lhs),
             std::forward<T2>(rhs)
     };
-};
+};*/
 
 
 
@@ -248,100 +259,64 @@ constexpr auto operator||(T1&& lhs, T2&& rhs) {
 };
 
 
-template<typename T1, typename T2
-        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
->
-constexpr auto operator==(T1&& lhs, T2&& rhs) {
-    using t1 = i_t<T1>;
-    using t2 = i_t<T2>;
-    static_assert(std::is_arithmetic_v<t1> && std::is_arithmetic_v<t2>, "Expected arithmetic types in comparison");
-
-    constexpr bool t1_fp = std::is_floating_point_v<t1>;
-    constexpr bool t2_fp = std::is_floating_point_v<t2>;
-//    constexpr bool t1_u = std::is_unsigned_v<t1>;
-//    constexpr bool t2_u = std::is_unsigned_v<t2>;
-
-    // if one of the operands is float, then convert other to the float
-    if constexpr (t1_fp && t2_fp) {
-        return EBinFCmp<Predicate::FCMP_OEQ, T1, T2>{
-                std::forward<T1>(lhs),
-                std::forward<T2>(rhs)
-        };
-    // todo: emit warning: losing precision
-    } else if constexpr (t1_fp && !t2_fp) {
-        using cast_t = ECast<T1, T2>;
-        return EBinFCmp<Predicate::FCMP_OEQ, T1, cast_t>{
-                std::forward<T1>(lhs),
-                cast_t{std::forward<T2>(rhs)}
-        };
-    } else if constexpr (!t1_fp && t2_fp) {
-        using cast_t = ECast<T2, T1>;
-        return EBinFCmp<Predicate::FCMP_OEQ, cast_t, T2>{
-                cast_t{std::forward<T1>(lhs)},
-                std::forward<T2>(rhs)
-        };
-    } else {
-        // todo: do i need cast if not the same types?
-        return EBinICmp<Predicate::ICMP_EQ, T1, T2>{
-                std::forward<T1>(lhs),
-                std::forward<T2>(rhs)
-        };
-    }
+// todo: emit warning: losing precision when cast float to int
+// todo: handle unordered floats comparisons
+#define CMP_OPERATOR(SYM, F_OP, S_OP, U_OP) \
+template<typename T1, typename T2, typename = typename std::enable_if_t< is_ev_v<T1, T2> >> \
+constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
+    using t1 = i_t<T1>; \
+    using t2 = i_t<T2>; \
+    static_assert(std::is_arithmetic_v<t1> && std::is_arithmetic_v<t2>, "Expected arithmetic types in comparison"); \
+ \
+    constexpr bool t1_fp = std::is_floating_point_v<t1>; \
+    constexpr bool t2_fp = std::is_floating_point_v<t2>; \
+    constexpr bool t1_u = std::is_unsigned_v<t1>; \
+    constexpr bool t2_u = std::is_unsigned_v<t2>; \
+ \
+    if constexpr (t1_fp && t2_fp) { \
+        return EBinFCmp<Predicate::FCMP_O##F_OP, T1, T2>{ \
+                std::forward<T1>(lhs), \
+                std::forward<T2>(rhs) \
+        }; \
+    } else if constexpr (t1_fp) { \
+        using cast_t = ECast<T1, T2>; \
+        return EBinFCmp<Predicate::FCMP_O##F_OP, T1, cast_t>{ \
+                std::forward<T1>(lhs), \
+                cast_t{std::forward<T2>(rhs)} \
+        }; \
+    } else if constexpr (t2_fp) { \
+        using cast_t = ECast<T2, T1>; \
+        return EBinFCmp<Predicate::FCMP_O##F_OP, cast_t, T2>{ \
+                cast_t{std::forward<T1>(lhs)}, \
+                std::forward<T2>(rhs) \
+        }; \
+    } else if constexpr (t1_u && t2_u) { \
+        return EBinICmp<Predicate::ICMP_##U_OP, T1, T2>{ \
+                std::forward<T1>(lhs), \
+                std::forward<T2>(rhs) \
+        }; \
+    } else if constexpr (!t1_u) { \
+        using cast_t = ECast<T1, T2>; \
+        return EBinICmp<Predicate::ICMP_##S_OP, T1, cast_t>{ \
+                std::forward<T1>(lhs), \
+                cast_t{std::forward<T2>(rhs)} \
+        }; \
+    } else if constexpr (!t2_u) { \
+        using cast_t = ECast<T2, T1>; \
+        return EBinICmp<Predicate::ICMP_##S_OP, cast_t, T2>{ \
+                cast_t{std::forward<T1>(lhs)}, \
+                std::forward<T2>(rhs) \
+        }; \
+    } \
 };
 
+CMP_OPERATOR(==, EQ, EQ,  EQ)
+CMP_OPERATOR(!=, EQ, EQ,  EQ)
+CMP_OPERATOR(<,  LT, ULT, SLT)
+CMP_OPERATOR(<=, LE, ULE, SLE)
+CMP_OPERATOR(>,  GT, UGT, SGT)
+CMP_OPERATOR(>=, GE, UGE, SGE)
 
-template<typename T1, typename T2
-        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
->
-constexpr auto operator<(T1&& lhs, T2&& rhs) {
-    using t1 = i_t<T1>;
-    using t2 = i_t<T2>;
-    static_assert(std::is_arithmetic_v<t1> && std::is_arithmetic_v<t2>, "Expected arithmetic types in comparison");
-
-    constexpr bool t1_fp = std::is_floating_point_v<t1>;
-    constexpr bool t2_fp = std::is_floating_point_v<t2>;
-    constexpr bool t1_u = std::is_unsigned_v<t1>;
-    constexpr bool t2_u = std::is_unsigned_v<t2>;
-
-    if constexpr (t1_fp && t2_fp) {
-        return EBinFCmp<Predicate::FCMP_OLT, T1, T2>{
-                std::forward<T1>(lhs),
-                std::forward<T2>(rhs)
-        };
-    // todo: emit warning: losing precision
-    // if one of the operands is float, then convert other to the float
-    } else if constexpr (t1_fp) {
-        using cast_t = ECast<T1, T2>;
-        return EBinFCmp<Predicate::FCMP_OLT, T1, cast_t>{
-                std::forward<T1>(lhs),
-                cast_t{std::forward<T2>(rhs)}
-        };
-    } else if constexpr (t2_fp) {
-        using cast_t = ECast<T2, T1>;
-        return EBinFCmp<Predicate::FCMP_OLT, cast_t, T2>{
-                cast_t{std::forward<T1>(lhs)},
-                std::forward<T2>(rhs)
-        };
-    } else if constexpr (t1_u && t2_u) {
-        return EBinICmp<Predicate::ICMP_ULT, T1, T2>{
-                std::forward<T1>(lhs),
-                std::forward<T2>(rhs)
-        };
-    // if one of the operand is signed, then convert other to signed
-    } else if constexpr (!t1_u) {
-        using cast_t = ECast<T1, T2>;
-        return EBinICmp<Predicate::ICMP_SLT, T1, cast_t>{
-                std::forward<T1>(lhs),
-                cast_t{std::forward<T2>(rhs)}
-        };
-    } else if constexpr (!t2_u) { // one of the types is signed
-        using cast_t = ECast<T2, T1>;
-        return EBinICmp<Predicate::ICMP_SLT, cast_t, T2>{
-                cast_t{std::forward<T1>(lhs)},
-                std::forward<T2>(rhs)
-        };
-    }
-};
 
 //template<typename T1>
 //struct Operand : public Expr<T1> {
