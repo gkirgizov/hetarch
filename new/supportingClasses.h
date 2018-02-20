@@ -35,8 +35,10 @@ public:
             : ISignature<RetT, Args...>{mainSymbol}, m_payload{std::move(payload)}, m_sym{}
     {
         for (const auto &sym : m_payload.getBinary()->symbols()) {
-            if (sym.getName().get().str() == mainSymbol) {
-                m_sym = sym;
+            if (auto name = sym.getName()) {
+                if (name.get().str() == mainSymbol) {
+                    m_sym = sym;
+                }
             }
         }
         // todo: avoid assert and instead kind of produce an error? because it is incorrect state.
