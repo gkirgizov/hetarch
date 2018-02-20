@@ -16,16 +16,13 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/Object/ObjectFile.h"
 
-
 // For setting target
 //#include "llvm/ADT/Triple.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/CodeGen/CommandFlags.h"
-
 // For passes
 #include "llvm/IR/PassManager.h"
-
 // For compilation
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 #include "llvm/Object/ObjectFile.h"
@@ -73,7 +70,7 @@ private:
 
 CodeGen::CodeGen(const std::string &targetName)
         : targetName(llvm::Triple::normalize(llvm::StringRef(targetName)))
-          , target(initTarget(this->targetName))
+        , target(initTarget(this->targetName))
 {}
 
 
@@ -99,6 +96,7 @@ const llvm::Target* CodeGen::initTarget(const std::string &targetName) {
         // todo: handle error: target not found (err message in 'err')
         return nullptr;
     }
+    return target;
 
     // Initialize default, common passes
 //    auto passRegistry = llvm::PassRegistry::getPassRegistry();
@@ -190,6 +188,7 @@ ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) const
 
     } else {
         // todo: handle TargetMachine creation error
+        return ObjCode<RetT, Args...>();
     }
 }
 
