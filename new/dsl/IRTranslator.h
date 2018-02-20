@@ -10,14 +10,16 @@
 #include <memory>
 #include <utility>
 
-#include "llvm/IR/Module.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/GlobalVariable.h"
+#include <llvm/IR/Module.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/GlobalVariable.h>
+
+#include "./types_map.h"
+#include "../utils.h"
 
 #include "../supportingClasses.h"
 #include "dsl_base.h"
-#include "ResidentObjCode.h"
 #include "sequence.h"
 #include "if_else.h"
 #include "loops.h"
@@ -26,9 +28,7 @@
 #include "ptr.h"
 #include "array.h"
 #include "fun.h"
-
-#include "../utils.h"
-#include "types_map.h"
+#include "ResidentObjCode.h"
 
 
 namespace hetarch {
@@ -45,8 +45,6 @@ class IRTranslator {
         AddrNonVol,
         AddrVol
     };
-
-    struct State {};
 
     struct Frame {
         llvm::Function* fun;
@@ -106,86 +104,11 @@ class IRTranslator {
     std::unique_ptr<llvm::Module> cur_module{};
     std::unique_ptr<llvm::IRBuilder<>> cur_builder{};
 
-
-    const utils::map_t type_map;
-
-    template<typename T>
-    inline auto get_type() {
-        if constexpr (std::is_void_v<T> || std::is_same_v<bool, T> || std::is_floating_point_v<T>) {
-            return utils::at_key<T>(type_map);
-        } else if constexpr (std::is_integral_v<T>) {
-            // LLVM make no distinction between signed and unsigned (https://stackoverflow.com/a/14723945)
-            return utils::at_key<std::make_signed_t<T>>(type_map);
-        } else if constexpr (std::is_reference_v<T>) {
-            return get_type<std::remove_reference_t<T>>()->getPointerTo();
-        } else if constexpr (std::is_pointer_v<T>) {
-            return get_type<std::remove_pointer_t<T>>()->getPointerTo();
-        } else if constexpr (is_std_array_v<T>) {
-            return llvm::ArrayType::get(get_type<typename T::value_type>(), std::tuple_size<T>::value);
-        } else {
-//            static_assert(false, "Unknown type provided!");
-            static_assert(T::fail_compile, "Unknown type provided!");
-        }
-    }
-
-    // multidimensional arrays should be handled
-//    template<typename Array, typename = typename std::enable_if_t<std::is_array_v<Array>>>
-//    inline llvm::ArrayType* get_type() {
-//        std::size_t N = std::extent_v<Array>;
-//        using X = std::remove_extent_t<Array>;
-//        return llvm::ArrayType::get(get_type<X>(), N);
-//    };
-
-    template<typename T, std::size_t N>
-    inline llvm::ArrayType* get_type() { return llvm::ArrayType::get(get_type<T>(), N); };
-
-/*    template<typename RetT, typename... Args>
-    inline llvm::FunctionType* get_func_type(bool isVarArg = false) {
-        return llvm::FunctionType::get(
-                get_type<RetT>(), { get_type<Args>()... }, isVarArg
-        );
-    }*/
-
-    template<typename RetT, typename ArgsTuple
-            , typename Inds = std::make_index_sequence<std::tuple_size_v<ArgsTuple>>
-            , typename = typename std::enable_if_t<is_std_tuple_v<ArgsTuple>> >
-    inline llvm::FunctionType* get_func_type(bool isVarArg = false) {
-        return llvm::FunctionType::get(
-                get_type<RetT>(), get_func_args_type<ArgsTuple>(Inds{}), isVarArg
-        );
-    }
-    template<typename ArgsTuple, std::size_t ...I>
-    inline std::array<llvm::Type*, sizeof...(I)> get_func_args_type(std::index_sequence<I...>) {
-        return { get_type< std::tuple_element_t<I, ArgsTuple> >()... };
-    }
-
-    // todo: somehow restrict bit width of arithmetic types depending on target platform
-    template<typename T, typename = typename std::enable_if_t<std::is_arithmetic_v<T>>>
-    auto get_llvm_const(T val) {
-        if constexpr (std::is_floating_point_v<T>) {
-            return llvm::ConstantFP::get(get_type<T>(), static_cast<double>(val));
-        } else if constexpr (std::is_unsigned_v<T>) {
-            return llvm::ConstantInt::get(get_type<T>(), static_cast<uint64_t>(val));
-        } else {
-            static_assert(std::is_signed_v<T>);
-            return llvm::ConstantInt::getSigned(get_type<T>(), static_cast<int64_t>(val));
-        }
-    }
-
-    template<typename T, std::size_t N, typename = typename std::enable_if_t<std::is_arithmetic_v<T>>>
-//    auto get_llvm_const(const T (&arr)[N]) {
-    auto get_llvm_const(const std::array<T, N> &arr) {
-        // todo ensure it works when vals are out of scope after return
-        std::array<llvm::Constant*, N> vals;
-        for (auto i = 0; i < N; ++i) {
-            vals[i] = get_llvm_const(arr[i]);
-        }
-        return llvm::ConstantArray::get(get_type<std::array<T, N>>(), llvm::ArrayRef<llvm::Constant*>{vals});
-    };
+    utils::LLVMMapper llvm_map;
 
 public:
     explicit IRTranslator()
-            : context{}, cur_builder{new llvm::IRBuilder<>{context}}, type_map{utils::get_map(context)} {}
+            : context{}, cur_builder{new llvm::IRBuilder<>{context}}, llvm_map{context} {}
 //    explicit IRTranslator(llvm::LLVMContext &context)
 //            : context{context}, cur_builder{new llvm::IRBuilder<>{context}}, type_map{utils::get_map(context)} {}
 
@@ -213,12 +136,12 @@ public: // out-of-dsl constructs
         if (known == std::end(frame->allocated)) {
 
             llvm::Value* array_size = nullptr;
-            if constexpr (is_std_array_v<T>) { array_size = get_llvm_const(std::tuple_size<T>::value); }
+            if constexpr (is_std_array_v<T>) { array_size = llvm_map.get_const(std::tuple_size<T>::value); }
             // Default empty name is handled automatically by LLVM (when var.name().data() == "")
-            val_addr = cur_builder->CreateAlloca(get_type<T>(), array_size, var.name().data());
+            val_addr = cur_builder->CreateAlloca(llvm_map.get_type<T>(), array_size, var.name().data());
 
             // When var is used for the first time (this branch) its actual value is its initial value
-            auto init_val = get_llvm_const(var.initial_val());
+            auto init_val = llvm_map.get_const(var.initial_val());
             auto initInst = cur_builder->CreateStore(init_val, val_addr, is_volatile);
             frame->allocated[&var] = val_addr;
         } else { // Variable usage
@@ -232,7 +155,7 @@ public: // out-of-dsl constructs
     template<typename T>
     void accept(const Const<T, false> &var) {
         // Non-volatile const variables can be directly substitued by its value
-        push_val(get_llvm_const(var.initial_val()));
+        push_val(llvm_map.get_const(var.initial_val()));
     }
 
     // todo: try EArrayAccess and understand.
@@ -246,10 +169,10 @@ public: // out-of-dsl constructs
         auto known = frame->allocated.find(&a);
         if (known == std::end(frame->allocated)) {
             // Default empty name is handled automatically by LLVM (when var.name().data() == "")
-            val_addr = cur_builder->CreateAlloca(get_type<T[N]>(), get_llvm_const(N), a.name().data());
+            val_addr = cur_builder->CreateAlloca(llvm_map.get_type<T[N]>(), llvm_map.get_const(N), a.name().data());
 
             // When var is used for the first time (this branch) its actual value is its initial value
-            auto init_val = get_llvm_const(a.initial_val());
+            auto init_val = llvm_map.get_const(a.initial_val());
             auto initInst = cur_builder->CreateStore(init_val, val_addr, is_volatile);
             frame->allocated[&a] = val_addr;
         } else { // Variable usage
@@ -265,11 +188,11 @@ public: // out-of-dsl constructs
         auto arr_addr = pop_addr().first;
 
         // todo: maybe specialise for constexpr values
-//        llvm::Constant* ind = get_llvm_const(e.ind);
+//        llvm::Constant* ind = llvm_map.get_const(e.ind);
 
         e.ind.toIR(*this);
         llvm::Value* ind = pop_val();
-        auto zero = get_llvm_const(0); // need extra 0 to access elements of arrays
+        auto zero = llvm_map.get_const(0); // need extra 0 to access elements of arrays
         auto elt_addr = cur_builder->CreateInBoundsGEP(arr_addr, {zero, ind});
 
         push_addr(elt_addr, is_volatile);
@@ -313,7 +236,6 @@ public: // out-of-dsl constructs
 
 
 public: // dsl function and related constructs (function is 'entry' point of ir generation)
-    // todo: make static (make get_type and get_llvm_const static and... context? do i need same context?)
     template<typename Td>
     auto translate(const DSLGlobal<Td>& g) {
         const auto g_name = std::string(g.x.name());
@@ -321,11 +243,11 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         auto g_module = new llvm::Module(moduleName, context);
 
         llvm::GlobalVariable g_var{
-                g_module,
-                get_type<f_t<Td>>(),
+                *g_module,
+                llvm_map.get_type<f_t<Td>>(),
                 Td::const_q,
                 llvm::GlobalValue::LinkageTypes::ExternalLinkage,
-                g.x.initialised() ? get_llvm_const(g.x.initial_val()) : nullptr,
+                g.x.initialised() ? llvm_map.get_const(g.x.initial_val()) : nullptr,
                 g_name
         };
 
@@ -365,8 +287,8 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         using ret_t = f_t<TdRet>;
         using args_t = std::tuple<f_t<TdArgs>...>;
         llvm::Function *fun = llvm::Function::Create(
-            get_func_type<ret_t, args_t>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
-//            get_func_type<f_t<TdRet>, f_t<TdArgs>...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
+            llvm_map.get_func_type<ret_t, args_t>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
+//            llvm_map.get_func_type<f_t<TdRet>, f_t<TdArgs>...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
         );
 
         // Handle arguments
@@ -439,7 +361,7 @@ public:
 
         // Create temp value to hold result of the whole expr depending on branch
         using T = typename IfExpr<TdCond, TdThen, TdElse>::type;
-        auto result_var = cur_builder->CreateAlloca(get_type<T>());
+        auto result_var = cur_builder->CreateAlloca(llvm_map.get_type<T>());
 
         // Evaluate condition
         e.cond_expr.toIR(*this);
@@ -527,8 +449,8 @@ public:
         using args_t = typename TdCallable::args_t;
 
         llvm::CallInst* inst = cur_builder->CreateCall(
-                get_func_type<ret_t, args_t>(),
-                get_llvm_const(e.callee.callAddr),
+                llvm_map.get_func_type<ret_t, args_t>(),
+                llvm_map.get_const(e.callee.callAddr),
                 eval_func_args<TdCallable>(e.args)
         );
         push_val(inst);
@@ -537,8 +459,8 @@ public:
 /*    template<typename AddrT, typename TdRet, typename ...ArgExprs>
     void accept(const ECallLoaded<AddrT, TdRet, ArgExprs...> &e) {
         llvm::CallInst* inst = cur_builder->CreateCall(
-                get_func_type<f_t<TdRet>, f_t<TdArgs>...>(),
-                get_llvm_const(e.callee.callAddr),
+                llvm_map.get_func_type<f_t<TdRet>, f_t<TdArgs>...>(),
+                llvm_map.get_const(e.callee.callAddr),
                 eval_func_args(e.args)
         );
         push_val(inst);
@@ -583,7 +505,7 @@ public: // Operations and Casts
         // Cast only if necessary
         if constexpr (!std::is_same_v<To, From>) {
             llvm::Value* src = pop_val();
-            llvm::Value* casted = cur_builder->CreateCast(Op, src, get_type<To>());
+            llvm::Value* casted = cur_builder->CreateCast(Op, src, llvm_map.get_type<To>());
             push_val(casted);
         }
     }
