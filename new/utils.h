@@ -62,7 +62,7 @@ constexpr std::string_view type_name() {
     using namespace std;
 #ifdef __clang__
     string_view p = __PRETTY_FUNCTION__;
-    return string_view(p.data() + 45, p.size() - 45); // for clang 5, supposedly?
+    return string_view(p.data() + 50, p.size() - 50 - 1); // for clang 5, supposedly?
 //    return string_view(p.data() + 34, p.size() - 34 - 1); // original
 #elif defined(__GNUC__)
     string_view p = __PRETTY_FUNCTION__;
