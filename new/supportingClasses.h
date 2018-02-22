@@ -34,6 +34,7 @@ public:
     ObjCode(m_payload_t payload, const std::string &mainSymbol)
             : ISignature<RetT, Args...>{mainSymbol}, m_payload{std::move(payload)}, m_sym{}
     {
+        // TODO: handle unnamed symbols!!! (or simply disallow)
         for (const auto &sym : m_payload.getBinary()->symbols()) {
             if (auto name = sym.getName()) {
                 if (name.get().str() == mainSymbol) {

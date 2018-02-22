@@ -131,7 +131,28 @@ target_sources(hetarch_trik
 
 add_library(temp_target
         tests/test_code/test_code.cpp
-        new/CodeGen.h new/MemoryManager.h new/MemResident.h new/dsl/dsl_base.h new/supportingClasses.h new/CodeLoader.h new/IConnection.h new/dsl/sequence.h new/dsl/IRTranslator.h new/utils.h new/dsl/types_map.h new/dsl/if_else.h new/dsl/ResidentObjCode.h new/dsl/op.h new/dsl/var.h new/dsl/fun.h new/dsl/dsl_type_traits.h new/dsl/array.h new/dsl/ptr.h new/dsl/loops.h new/dsl.h)
+        new/IConnection.h
+        new/MemoryManager.h
+        new/MemResident.h
+        new/supportingClasses.h
+        new/CodeLoader.h
+        new/CodeGen.h
+        new/dsl/types_map.h
+        new/dsl/IRTranslator.h
+        new/utils.h
+        new/dsl/dsl_base.h
+        new/dsl/fun.h
+        new/dsl/ResidentObjCode.h
+        new/dsl/sequence.h
+        new/dsl/if_else.h
+        new/dsl/loops.h
+        new/dsl/op.h
+        new/dsl/var.h
+        new/dsl/dsl_type_traits.h
+        new/dsl/array.h
+        new/dsl/ptr.h
+        new/dsl/dsl_meta.h)
+
 
 add_subdirectory(examples)
 add_subdirectory(tests)
