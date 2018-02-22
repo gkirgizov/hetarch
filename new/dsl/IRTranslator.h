@@ -242,12 +242,15 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         const auto moduleName = "module_for_global_" + g_name;
         auto g_module = new llvm::Module(moduleName, context);
 
-        llvm::GlobalVariable g_var{
+//        llvm::GlobalVariable g_var{
+        // todo: is it owned by Module?
+        llvm::GlobalVariable* g_var = new llvm::GlobalVariable{
                 *g_module,
                 llvm_map.get_type<f_t<Td>>(),
                 Td::const_q,
                 llvm::GlobalValue::LinkageTypes::ExternalLinkage,
-                g.x.initialised() ? llvm_map.get_const(g.x.initial_val()) : nullptr,
+//                g.x.initialised() ? llvm_map.get_const(g.x.initial_val()) : nullptr,
+                llvm_map.get_const(g.x.initial_val()), // init even if not g.x.initialised()
                 g_name
         };
 
@@ -255,20 +258,43 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         return IRModule<Td>{g_module, g_name};
     }
 
-    template<typename TdRet, typename TdBody, typename... TdArgs>
-    auto translate(const DSLFunction<TdRet, TdBody, TdArgs...> &fun) {
-//        std::cout << "Translating DSLFunction '" << fun.name() << "'" << std::endl;
+    template<typename AddrT, typename Td>
+    void accept(const ResidentGlobal<AddrT, Td>& g) {
+        // todo: specialise for non-volatile Const value, returning just llvm::Constant* of needed type?
+            // we can't change init_val for Const value after loading, can we?
+        if constexpr (g.const_q) {
+            push_val(llvm_map.get_const(g.initial_val()));
+            return;
+        }
 
+        llvm::Value* g_ptr = nullptr;
+        auto known = frame->allocated.find(&g);
+        if (known == std::end(frame->allocated)) {
+            llvm::Type* element_type = llvm_map.get_type<f_t<Td>>();
+            llvm::PointerType* ptr_type = element_type->getPointerTo();
+
+            auto g_addr = llvm_map.get_const(g.addr);
+            // todo: create 'static' llvm cast ConstantInt->Ptr ?
+            g_ptr = cur_builder->CreateIntToPtr(g_addr, ptr_type, g.name().data());
+            frame->allocated[&g] = g_ptr;
+        } else {
+            g_ptr = known->second;
+        }
+
+        push_addr(g_ptr, g.volatile_q);
+    };
+
+    template<typename TdBody, typename... TdArgs>
+    auto translate(const DSLFunction<TdBody, TdArgs...> &fun) {
         const auto moduleName = "module_" + std::string(fun.name());
         cur_module = std::make_unique<llvm::Module>(moduleName, context);
         fun.toIR(*this);
 
         llvm::Module* m = cur_module.release();
         clear();
-//        using fun_t = DSLFunction<TdRet, TdBody, TdArgs...>;
-//        using RetT = typename fun_t::ret_t;
+        using fun_t = DSLFunction<TdBody, TdArgs...>;
+        using TdRet = typename fun_t::dsl_ret_t;
 //        using Args = typename fun_t::args_full_t;
-//        return IRModule<RetT, f_t<TdArgs>...>{m, fun.name().data()};
         return IRModule<TdRet, TdArgs...>{m, fun.name().data()};
 
     }
@@ -278,21 +304,22 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         // check that func is really loaded?
     }
 
-    template<typename TdRet, typename TdBody, typename... TdArgs>
-    void accept(const DSLFunction<TdRet, TdBody, TdArgs...> &dslFun) {
+    template<typename TdBody, typename... TdArgs>
+    void accept(const DSLFunction<TdBody, TdArgs...> &dslFun) {
         std::string funcName{dslFun.name()};
 
         // Define function
         // ExternalLinkage is to be able to call the func outside the module it resides in
-        using ret_t = f_t<TdRet>;
-        using args_t = std::tuple<f_t<TdArgs>...>;
+        using fun_t = DSLFunction<TdBody, TdArgs...>;
+        using ret_t = typename fun_t::ret_t;
+        using args_t = typename fun_t::args_t;
         llvm::Function *fun = llvm::Function::Create(
             llvm_map.get_func_type<ret_t, args_t>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
-//            llvm_map.get_func_type<f_t<TdRet>, f_t<TdArgs>...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
+//            llvm_map.get_func_type<ret_t, f_t<TdArgs>...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
         );
 
         // Handle arguments
-        modifyArgs(dslFun, fun);
+        modify_args(dslFun, fun);
 
         const auto blockName = funcName + "_block" + "_entry";
         llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, blockName, fun);
@@ -303,7 +330,6 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         frame = &frame_stack.top();
 
         dslFun.body.toIR(*this);
-        dslFun.returnSt.toIR(*this);
 
         frame_stack.pop();
         frame = &frame_stack.top();
@@ -316,27 +342,26 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
 
 private:
     // todo: test modifyArgs
-    template<typename TdRet, typename TdBody, typename... TdArgs
+    template<typename TdBody, typename... TdArgs
             , typename Inds = std::index_sequence_for<TdArgs...>>
-    void modifyArgs(const DSLFunction<TdRet, TdBody, TdArgs...> &dslFun, llvm::Function *fun) {
+    void modify_args(const DSLFunction<TdBody, TdArgs...> &dslFun, llvm::Function *fun) {
         std::array<llvm::Argument*, sizeof...(TdArgs)> args;
         for(llvm::Argument* arg_ptr = fun->arg_begin(); arg_ptr != fun->arg_end(); ++arg_ptr) {
             args[arg_ptr->getArgNo()] = arg_ptr;
         }
-        modifyArgsImpl(dslFun, args, Inds{});
+        modify_args_impl(dslFun, args, Inds{});
     }
 
-    template<typename TdRet, typename TdBody, typename ...TdArgs
-            , std::size_t ...I>
-    void modifyArgsImpl(const DSLFunction<TdRet, TdBody, TdArgs...> &dslFun,
+    template<typename TdBody, typename ...TdArgs, std::size_t ...I>
+    void modify_args_impl(const DSLFunction<TdBody, TdArgs...> &dslFun,
                         std::array<llvm::Argument*, sizeof...(TdArgs)> &args,
                         std::index_sequence<I...>) {
-        auto dummy = std::make_tuple( 0, ( modifyArg(std::get<I>(dslFun.args), *args[I]) , 0)... );
+        auto dummy = std::make_tuple( 0, ( modify_arg(std::get<I>(dslFun.args), *args[I]) , 0)... );
     }
 
     template<typename TdArg>
-    void modifyArg(const TdArg& param, llvm::Argument &arg) {
-        arg.setName(param.name().data());
+    void modify_arg(const TdArg& dsl_arg, llvm::Argument &arg) {
+        arg.setName(dsl_arg.name().data());
         if constexpr (is_byref_v<TdArg>) {
             // todo: get sizeof in target platform
             arg.addAttr(llvm::Attribute::getWithDereferenceableBytes(context, sizeof(i_t<TdArg>)));
@@ -539,9 +564,9 @@ public: // Operations and Casts
         } else if constexpr (Op == OtherOps::ICmp) {
             res = cur_builder->CreateICmp(P, lhs, rhs);
         } else {
-            std::cout << "FCmp==" << OtherOps::FCmp << std::endl;
-            std::cout << "ICmp==" << OtherOps::ICmp << std::endl;
-            std::cout << "Op  ==" << Op << std::endl;
+            std::cerr << "FCmp==" << OtherOps::FCmp << std::endl;
+            std::cerr << "ICmp==" << OtherOps::ICmp << std::endl;
+            std::cerr << "Op  ==" << Op << std::endl;
 //            static_assert(false, "Unknown CmpInst kind!");
         }
         push_val(res);
@@ -553,7 +578,7 @@ public: // Operations and Casts
 template<typename T>
 void toIRImpl(const T &irTranslatable, IRTranslator &irt) {
 //    std::cout << "accept " << typeid(irTranslatable).name() << std::endl;
-    std::cout << "accept: " << utils::type_name<decltype(irTranslatable)>() << std::endl;
+    std::cerr << "accept: " << utils::type_name<decltype(irTranslatable)>() << std::endl;
 
     // Checking some invariants
 //    const auto n_vals = irt.frame->val_stack.size();

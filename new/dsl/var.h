@@ -8,6 +8,7 @@
 namespace hetarch {
 namespace dsl {
 
+
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 
 
@@ -27,7 +28,7 @@ struct DSLGlobal {
     const Td x;
 
     // only rvalues allowed
-    explicit constexpr DSLGlobal(Td&& x) : x{x} {}
+    explicit constexpr DSLGlobal(Td&& x) : x{std::move(x)} {}
 
 //    inline constexpr auto name() const { return x.name(); }
 

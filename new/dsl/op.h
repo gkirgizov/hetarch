@@ -5,6 +5,7 @@
 
 #include "dsl_base.h"
 #include "dsl_type_traits.h"
+#include "var.h"
 
 
 namespace hetarch {

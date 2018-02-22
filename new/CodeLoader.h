@@ -4,12 +4,12 @@
 #include "IConnection.h"
 #include "MemoryManager.h"
 #include "MemResident.h"
-
 #include "CodeGen.h"
-#include "supportingClasses.h"
-#include "dsl/dsl_base.h"
-#include "dsl/ResidentObjCode.h"
+
 #include "dsl/IRTranslator.h"
+#include "supportingClasses.h"
+#include "dsl/ResidentObjCode.h"
+#include "dsl/fun.h"
 
 #include "../tests/test_utils.h"
 
@@ -17,13 +17,12 @@
 namespace hetarch {
 
 
-// temporary here
 class CodeLoader {
     using content_t = llvm::StringRef;
 
 public:
     template<typename AddrT, typename Td>
-    static dsl::ResidentGlobal<AddrT, Td> load(conn::IConnection<AddrT>* conn,
+    static dsl::ResidentGlobal<AddrT, Td> load(conn::IConnection<AddrT>& conn,
                                                mem::MemManager<AddrT> *memManager,
                                                mem::MemType memType,
                                                dsl::IRTranslator& irt,
@@ -31,6 +30,10 @@ public:
                                                const dsl::DSLGlobal<Td>& g) {
 
         IRModule<Td> g_module = irt.translate(g);
+        std::cerr << "DUMPING g_module:" << std::endl;
+        g_module.get().dump();
+        std::cerr << "DUMPED g_module." << std::endl;
+
         ObjCode<Td> g_binary = cg.compile(g_module);
 
 //        auto contents = getContents(g_binary);
@@ -45,7 +48,17 @@ public:
         if(auto it_exp = symbol.getSection()) {
             const llvm::object::SectionRef& section = *it_exp.get();
 
-            assert(g.x.initialised() && section.isData() || !g.x.initialised() && section.isBSS());
+            // debug things
+            StringRef section_name;
+            auto err_code0 = section.getName(section_name);
+            if (!err_code0) {
+                std::cerr << "section_name: " << section_name.str() << std::endl;
+            } else {
+                std::cerr << "error when accessing section.getName(): " << err_code0 << std::endl;
+            }
+
+//            assert(g.x.initialised() && section.isData() || !g.x.initialised() && section.isBSS());
+//            assert(section.isData() || section.isBSS());
 
             llvm::StringRef contents;
             auto err_code = section.getContents(contents);
@@ -54,8 +67,11 @@ public:
                 const AddrT contentsSize = section.getSize();
                 auto memRegion = memManager->alloc(contentsSize, memType);
 
-                conn->write(memRegion.start, contentsSize, contents.data());
-                return dsl::ResidentGlobal<AddrT, Td>{memManager, memRegion, true};
+                std::cerr << "contentsSize=" << contentsSize << "; contents.size()=" << contents.size() << std::endl;
+                assert(contents.size() == contentsSize);
+
+                conn.write(memRegion.start, contentsSize, contents.data());
+                return dsl::ResidentGlobal<AddrT, Td>{conn, memManager, memRegion, true};
 
             } else {
                 // todo: handle err_code

@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+
 #include "dsl_base.h"
 #include "var.h"
 #include "ptr.h"
@@ -13,7 +14,7 @@ namespace hetarch {
 namespace dsl {
 
 
-template<typename, typename, typename...> class DSLFunction;
+template<typename, typename...> class DSLFunction;
 
 
 template<typename Td, typename = typename std::enable_if_t<is_val_v<Td>>>
@@ -51,24 +52,42 @@ template<typename Td>
 inline constexpr bool is_byval_v = is_byval<Td>::value;
 
 
+// todo: align with DSL Value type system
+template<typename TdExpr>
+struct param_for_arg {
+    using T = f_t<TdExpr>;
+//    using type = Var<T>;
+    using type = std::conditional_t< std::is_void_v<T>, VoidExpr, Var<T>>;
+};
+template<typename TdExpr>
+using param_for_arg_t = typename param_for_arg<TdExpr>::type;
+
+
 template<typename TdCallable, typename... ArgExprs>
 struct ECall : public Expr<typename TdCallable::ret_t> {
     const TdCallable& callee;
-    std::tuple<const ArgExprs...> args;
+    const std::tuple<ArgExprs...> args;
 
     explicit constexpr ECall(const TdCallable& callee, ArgExprs&&... args)
             : callee{callee}, args{std::forward<ArgExprs>(args)...} {}
+//    explicit constexpr ECall(TdCallable&& callee, ArgExprs&&... args)
+//            : callee{std::move(callee)}, args{std::forward<ArgExprs>(args)...} {}
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+};
+
+template<typename TdCallable, typename... ArgExprs>
+constexpr auto makeCall(TdCallable&& callable, ArgExprs&&... args) {
+    return ECall<TdCallable, ArgExprs...>{std::forward<TdCallable>(callable), std::forward<ArgExprs>(args)...};
 };
 
 
 template<typename TdCallable, typename TdRet, typename ...TdArgs>
 struct DSLCallable : public CallableBase {
-    using ret_t = f_t<TdRet>;
-    using args_t = std::tuple<f_t<TdArgs>...>;
     using dsl_ret_t = TdRet;
     using dsl_args_t = std::tuple<TdArgs...>;
+    using ret_t = f_t<TdRet>;
+    using args_t = std::tuple<f_t<TdArgs>...>;
 
     template<typename ...ArgExprs>
     constexpr static bool validateArgs() {
@@ -110,11 +129,8 @@ struct DSLCallable : public CallableBase {
 
 
 template<typename Td>
-struct ReturnImpl : public ESBase {
-    using type = f_t<Td>;
-
+struct ReturnImpl : public Expr<f_t<Td>> {
     const Td returnee;
-
     explicit constexpr ReturnImpl(Td&& r) : returnee{std::forward<Td>(r)} {}
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
@@ -122,7 +138,6 @@ struct ReturnImpl : public ESBase {
 
 template<typename Td>
 constexpr auto Return(Td&& r) { return ReturnImpl<Td>{std::forward<Td>(r)}; }
-
 constexpr auto Return() { return ReturnImpl<const VoidExpr&>{empty_expr}; }
 
 
@@ -148,15 +163,8 @@ private:
 };
 
 
-
-//template<typename ...Tds>
-//struct FunArgs3 {
-//    std::tuple<const Tds&...> args;
-//    explicit constexpr FunArgs3(const Tds&... args) : args{args...} {}
-//};
-
 //template<typename ...Tds> using FunArgs = FunArgs3<Tds...>;
-template<typename ...Tds> using FunArgs = std::tuple<const Tds&...>;
+//template<typename ...Tds> using FunArgs = std::tuple<const Tds&...>;
 
 template<typename ...Tds>
 auto MakeFunArgs(const Tds&... args) {
@@ -166,37 +174,23 @@ auto MakeFunArgs(const Tds&... args) {
 }
 
 
-template<typename TdRet, typename TdBody, typename... TdArgs>
-struct DSLFunction : public DSLCallable<DSLFunction<TdRet, TdBody, TdArgs...>, TdRet, TdArgs...>, public Named {
+template<typename TdBody, typename... TdArgs>
+struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs...>, param_for_arg_t<TdBody>, TdArgs...> {
 //    using funargs_t = FunArgs<TdArgs...>;
-    using funargs_t = std::tuple<const TdArgs&...>;
+    using funargs_t = std::tuple<TdArgs...>;
 
     const funargs_t args;
     const TdBody body;
-    const ReturnImpl<TdRet> returnSt;
 
-    // No arguments constructors
-    explicit constexpr DSLFunction(const char* name, ReturnImpl<TdRet>&& returnSt)
-            : Named{name}, args{}, body{empty_expr}, returnSt{std::move(returnSt)} {}
-    // Empty body constructors
-    explicit constexpr DSLFunction(const char* name, funargs_t args, ReturnImpl<TdRet>&& returnSt)
-            : Named{name}, args{args}, body{empty_expr}, returnSt{std::move(returnSt)} {}
-    // Ordinary (full) constructors
-    constexpr DSLFunction(const char* name, funargs_t args, TdBody&& body, ReturnImpl<TdRet>&& returnSt)
-            : Named{name}, args{args}, body{std::move(body)}, returnSt{std::move(returnSt)} {}
+    constexpr DSLFunction(std::string_view name, TdBody&& body)
+            : Named{name}, args{}, body{std::move(body)} {}
+    constexpr DSLFunction(std::string_view name, funargs_t&& args, TdBody&& body)
+            : Named{name}, args{std::forward<funargs_t>(args)}, body{std::move(body)} {}
 
 //    constexpr void specialise(Args... args);
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
-
-// Explicit deduction guides for some ctors
-template<typename TdRet>
-DSLFunction(const char*, ReturnImpl<TdRet>&&) -> DSLFunction<TdRet, const VoidExpr>;
-template<typename TdRet, typename... TdArgs>
-DSLFunction(const char*, FunArgs<TdArgs...>, ReturnImpl<TdRet>&&) -> DSLFunction<TdRet, const VoidExpr, TdArgs...>;
-
-
 
 
 }

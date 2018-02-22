@@ -33,7 +33,7 @@ struct Expr : public ExprBase { using type = T; };
 
 struct VoidExpr : public Expr<void> {
     inline void toIR(IRTranslator &irTranslator) const override {
-        std::cout << "called VoidExpr.toIR()" << std::endl;
+        std::cerr << "called VoidExpr.toIR()" << std::endl;
     }
 };
 static const auto empty_expr = VoidExpr{};
