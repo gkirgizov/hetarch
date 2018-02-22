@@ -100,7 +100,7 @@ public:
     constexpr bool initialised() const { return m_initialised; }
     constexpr const T& initial_val() const { return m_initial_val; }
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<typename T, bool is_volatile = false>

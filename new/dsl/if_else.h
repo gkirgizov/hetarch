@@ -25,6 +25,7 @@ using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 };*/
 
 
+// todo move enable_if to static_assert with friendly err message
 // todo: should both branches always have the same underlying ::type?
 template<typename TdCond, typename TdThen, typename TdElse
         , typename = typename std::enable_if_t<

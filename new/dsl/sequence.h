@@ -16,9 +16,11 @@ template<typename T, typename ...Ts> struct select_last<T, Ts...> { using type =
 */
 
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
+using dsl::f_t; // by some reasons CLion can't resolve it automatically.
+
 
 template<typename Td1, typename Td2>
-struct SeqExpr : public Expr<i_t<Td2>> {
+struct SeqExpr : public Expr<f_t<Td2>> {
     const Td1 e1;
     const Td2 e2;
 
