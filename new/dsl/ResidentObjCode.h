@@ -21,8 +21,8 @@ template<typename AddrT, typename TdRet, typename... ArgExprs>
 using ECallLoaded = ECall<ResidentObjCode<AddrT, TdRet, param_for_arg_t<ArgExprs>...>, ArgExprs...>;
 
 
-template<typename AddrT, typename RetT, typename... Args>
-struct ResidentObjCode : public dsl::DSLCallable<ResidentObjCode<AddrT, RetT, Args...>, RetT, Args...>,
+template<typename AddrT, typename TdRet, typename... TdArgs>
+struct ResidentObjCode : public dsl::DSLCallable<ResidentObjCode<AddrT, TdRet, TdArgs...>, TdRet, TdArgs...>,
                          public MemResident<AddrT> {
     const AddrT callAddr;
 

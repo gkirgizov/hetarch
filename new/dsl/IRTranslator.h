@@ -470,8 +470,9 @@ public:
     template<typename TdCallable, typename... ArgExprs
             , typename = typename std::enable_if_t< is_dsl_loaded_callable_v<TdCallable> >>
     void accept(const ECall<TdCallable, ArgExprs...>& e) {
-        using ret_t = typename TdCallable::ret_t;
-        using args_t = typename TdCallable::args_t;
+        using fun_t = std::remove_reference_t<TdCallable>;
+        using ret_t = typename fun_t::ret_t;
+        using args_t = typename fun_t::args_t;
 
         llvm::CallInst* inst = cur_builder->CreateCall(
                 llvm_map.get_func_type<ret_t, args_t>(),
@@ -501,7 +502,10 @@ private:
     std::array<llvm::Value*, sizeof...(I)> eval_func_args_impl(
             const ArgExprsTuple& args,
             std::index_sequence<I...>) {
-        return { eval_func_arg< std::tuple_element_t<I, typename TdCallable::dsl_args_t> >( std::get<I>(args) )... };
+        return { eval_func_arg
+                         < std::tuple_element_t<I, typename std::remove_reference_t<TdCallable>::dsl_args_t> >
+                         ( std::get<I>(args) )...
+        };
     }
 
     template<typename TdArg, typename ArgExpr>

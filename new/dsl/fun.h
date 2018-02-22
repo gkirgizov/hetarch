@@ -64,14 +64,14 @@ using param_for_arg_t = typename param_for_arg<TdExpr>::type;
 
 
 template<typename TdCallable, typename... ArgExprs>
-struct ECall : public Expr<typename TdCallable::ret_t> {
-    const TdCallable& callee;
+struct ECall : public Expr<typename std::remove_reference_t<TdCallable>::ret_t> {
+    const TdCallable callee;
     const std::tuple<ArgExprs...> args;
 
-    explicit constexpr ECall(const TdCallable& callee, ArgExprs&&... args)
-            : callee{callee}, args{std::forward<ArgExprs>(args)...} {}
-//    explicit constexpr ECall(TdCallable&& callee, ArgExprs&&... args)
-//            : callee{std::move(callee)}, args{std::forward<ArgExprs>(args)...} {}
+//    explicit constexpr ECall(const TdCallable& callee, ArgExprs&&... args)
+//            : callee{callee}, args{std::forward<ArgExprs>(args)...} {}
+    explicit constexpr ECall(TdCallable&& callee, ArgExprs&&... args)
+            : callee{std::forward<TdCallable>(callee)}, args{std::forward<ArgExprs>(args)...} {}
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
@@ -120,7 +120,11 @@ struct DSLCallable : public CallableBase {
             >
     >
     inline constexpr auto call(ArgExprs&&... args) const {
-        return ECall<TdCallable, ArgExprs...>{static_cast<const TdCallable&>(*this), std::forward<ArgExprs>(args)...};
+//        return ECall<TdCallable, ArgExprs...>(
+        return makeCall(
+                static_cast<const TdCallable&>(*this),
+                std::forward<ArgExprs>(args)...
+        );
     }
     template<typename... ArgExprs>
     inline constexpr auto operator()(ArgExprs&&... args) const { return this->call(std::forward<ArgExprs>(args)...); }
@@ -176,10 +180,13 @@ auto MakeFunArgs(const Tds&... args) {
 
 template<typename TdBody, typename... TdArgs>
 struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs...>, param_for_arg_t<TdBody>, TdArgs...> {
+    static_assert((is_val_v<TdArgs> && ...), "Formal parameters must be Values (derived from ValueBase)!");
+
 //    using funargs_t = FunArgs<TdArgs...>;
     using funargs_t = std::tuple<TdArgs...>;
 
-    const funargs_t args;
+    funargs_t args;
+//    const funargs_t args;
     const TdBody body;
 
     constexpr DSLFunction(std::string_view name, TdBody&& body)
@@ -187,11 +194,31 @@ struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs
     constexpr DSLFunction(std::string_view name, funargs_t&& args, TdBody&& body)
             : Named{name}, args{std::forward<funargs_t>(args)}, body{std::move(body)} {}
 
+    template<typename BodyGenerator
+            , typename = typename std::enable_if_t<
+                    std::is_invocable_v<BodyGenerator, TdArgs...>
+            >
+    >
+    constexpr DSLFunction(std::string_view name, funargs_t&& args, BodyGenerator&& body_builder)
+//            : Named{name}, args{std::forward<funargs_t>(args)}, body{std::apply(body_builder, this->args)}
+            : Named{name}, args{std::forward<funargs_t>(args)}, body{Return(std::apply(body_builder, this->args))}
+    {
+        // makes sense when generators are pure: always return their body as expression; don't use side-effects
+        static_assert(!std::is_void_v<TdBody>, "DSL Generator must generate (return) some DSL code!");
+        //static_assert(is_expr_v<TdBody>, "DSL Generator must generate DSL code, not something else!");
+        static_assert(is_dsl_v<TdBody>, "DSL Generator must generate DSL code, not something else!");
+    }
+
 //    constexpr void specialise(Args... args);
 
     inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
 };
 
+// Explicit deduction guide
+template<typename BodyGenerator, typename ...TdArgs>
+DSLFunction(std::string_view, std::tuple<TdArgs...>&&, BodyGenerator&&) ->
+//DSLFunction<std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
+DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
 
 }
 }
