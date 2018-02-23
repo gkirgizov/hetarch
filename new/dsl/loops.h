@@ -28,7 +28,7 @@ struct WhileExpr: public Expr<f_t<TdBody>> {
             , body_expr{std::forward<TdBody>(body_expr)}
     {}
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 

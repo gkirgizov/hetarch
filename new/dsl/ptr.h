@@ -19,8 +19,8 @@ explicit constexpr EDeref(const Td& x) : x{x} {}
 };
 
 template<typename Td, bool is_const, typename = typename std::enable_if_t<std::is_base_of_v<ValueBase, Td>>>
-struct Ptr : public Value<Ptr<Td, is_const>, is_const> {
-    using type = i_t<Td>*;
+struct Ptr : public Value<Ptr<Td, is_const>, f_t<Td>*, is_const> {
+    using type = f_t<Td>*;
     static const bool volatile_q = Td::volatile_q;
     static const bool const_q = is_const;
     static const bool const_pointee_q = Td::const_q;

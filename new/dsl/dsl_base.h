@@ -19,9 +19,9 @@ template<typename T> inline void toIRImpl(const T &irTranslatable, IRTranslator 
 
 
 struct DSLBase {
-    virtual inline void toIR(IRTranslator &irTranslator) const {
-        std::cerr << "called base class toIR()" << std::endl;
-    }
+//    virtual inline void toIR(IRTranslator &irTranslator) const {
+//        std::cerr << "called base class toIR()" << std::endl;
+//    }
 };
 
 struct ESBase : public DSLBase {}; // Expression or Statement
@@ -32,9 +32,9 @@ template<typename T>
 struct Expr : public ExprBase { using type = T; };
 
 struct VoidExpr : public Expr<void> {
-    inline void toIR(IRTranslator &irTranslator) const override {
-        std::cerr << "called VoidExpr.toIR()" << std::endl;
-    }
+//    inline void toIR(IRTranslator &irTranslator) const override {
+//        std::cerr << "called VoidExpr.toIR()" << std::endl;
+//    }
 };
 static const auto empty_expr = VoidExpr{};
 

@@ -123,8 +123,6 @@ public:
 
 public: // out-of-dsl constructs
 
-    // todo: test Const handling
-    // todo: how to create/use globals
     // TODO: allocate everything only in the entry block of a func
     template<typename T, bool is_const, bool is_volatile
 //            , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
@@ -134,17 +132,22 @@ public: // out-of-dsl constructs
 
         auto known = frame->allocated.find(&var);
         if (known == std::end(frame->allocated)) {
+            std::cerr << "--alloca for 0x" << std::hex << &var << "; T="
+                      << utils::type_name<decltype(var)>() << std::endl;
 
             llvm::Value* array_size = nullptr;
             if constexpr (is_std_array_v<T>) { array_size = llvm_map.get_const(std::tuple_size<T>::value); }
             // Default empty name is handled automatically by LLVM (when var.name().data() == "")
             val_addr = cur_builder->CreateAlloca(llvm_map.get_type<T>(), array_size, var.name().data());
 
-            // When var is used for the first time (this branch) its actual value is its initial value
-            auto init_val = llvm_map.get_const(var.initial_val());
-            auto initInst = cur_builder->CreateStore(init_val, val_addr, is_volatile);
+            if (var.initialised()) {
+                auto init_val = llvm_map.get_const(var.initial_val());
+                auto initInst = cur_builder->CreateStore(init_val, val_addr, is_volatile);
+            }
             frame->allocated[&var] = val_addr;
         } else { // Variable usage
+            std::cerr << "--use of 0x" << std::hex << &var << "; T="
+                      << utils::type_name<decltype(var)>() << std::endl;
             val_addr = known->second;
         }
 
@@ -328,7 +331,8 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         cur_builder->SetInsertPoint(entry_bb);
         frame_stack.push(Frame{fun});
         frame = &frame_stack.top();
-
+        // todo: evaluate function arguments here?
+        //      args.toIR()=(alloca; store initial); pop_addr (to leave stack empty)
         dslFun.body.toIR(*this);
 
         frame_stack.pop();

@@ -26,7 +26,7 @@ struct SeqExpr : public Expr<f_t<Td2>> {
 
     constexpr SeqExpr(Td1&& e1, Td2&& e2) : e1{std::forward<Td1>(e1)}, e2{std::forward<Td2>(e2)} {}
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 

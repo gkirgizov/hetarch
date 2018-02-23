@@ -72,7 +72,7 @@ struct ECast : public Expr<i_t<TdTo>> {
     const TdFrom src;
     explicit constexpr ECast(TdFrom&& src) : src{std::forward<TdFrom>(src)} {}
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 
@@ -87,7 +87,7 @@ struct EBinOp : public Expr<f_t<TdLhs>> {
     const TdLhs lhs;
     const TdRhs rhs;
     constexpr EBinOp(TdLhs&& lhs, TdRhs&& rhs) : lhs{std::forward<TdLhs>(lhs)}, rhs{std::forward<TdRhs>(rhs)} {}
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
@@ -95,7 +95,7 @@ template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
 >
 struct EBinOpLogical : public EBinOp<bOp, TdLhs, TdRhs> {
     using EBinOp<bOp, TdLhs, TdRhs>::EBinOp;
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 
@@ -108,7 +108,7 @@ struct EBinCmp : public Expr<bool> {
     const TdRhs rhs;
 
     constexpr EBinCmp(TdLhs&& lhs, TdRhs&& rhs) : lhs{std::forward<TdLhs>(lhs)}, rhs{std::forward<TdRhs>(rhs)} {}
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<Predicate P, typename TdLhs, typename TdRhs>

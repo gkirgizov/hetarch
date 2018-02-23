@@ -21,7 +21,7 @@ using dsl::f_t; // by some reasons CLion can't resolve it automatically.
     constexpr IfElse(Expr<bool> &&cond, ESBase &&then_body, ESBase &&else_body)
             : cond{cond}, then_body{then_body}, else_body{else_body} {}
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };*/
 
 
@@ -42,7 +42,7 @@ struct IfExpr : public Expr<f_t<TdThen>> {
               , then_expr{std::forward<TdThen>(then_expr)}
               , else_expr{std::forward<TdElse>(else_expr)} {}
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<typename TdCond, typename TdThen, typename TdElse>

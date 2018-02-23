@@ -10,6 +10,7 @@ namespace dsl {
 
 
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
+using dsl::remove_cvref_t;
 
 
 // todo: temp
@@ -46,24 +47,38 @@ struct EAssign : public Expr<i_t<TdRhs>> {
 
     constexpr EAssign(const TdLhs& lhs, TdRhs&& rhs) : lhs{lhs}, rhs{std::forward<TdRhs>(rhs)} {}
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 
 
 //template<typename Tw, typename T, bool is_const = false, bool is_volatile = false>
-template<typename Tw, bool is_const = false>
+template<typename Tw, typename T, bool is_const = false>
 struct Value : public ValueBase {
-    void operator=(Value<Tw, is_const>&) = delete; // delete copy assignment to avoid ambigious operator=
+    using this_t = Value<Tw, T, is_const>;
+    using type = T;
+    Value() = default;
+//    constexpr Value(this_t&&) = default; // allow move and implicitly delete copy ctor
+//    Value(const this_t&) = delete; // delete copy ctor
 
-    template<typename Td, typename Tw_ = Tw
-            , typename = typename std::enable_if_t< std::is_same_v<i_t<Tw_>, i_t<Td>> && !is_const >
-    >
+    template<typename Td, typename = typename std::enable_if_t<
+                    std::is_same_v<remove_cvref_t<T>, i_t<Td>>
+                    && !is_const
+    >>
     constexpr auto assign(Td&& rhs) const {
         return EAssign<Tw, Td>{static_cast<const Tw&>(*this), std::forward<Td>(rhs)};
     }
-    template<typename Td>
+
+    template<typename Td, typename = typename std::enable_if_t<
+            !std::is_convertible_v<Tw, Td>
+//            !std::is_base_of_v<this_t, remove_cvref_t<Td>>
+    >>
     constexpr auto operator=(Td&& rhs) const { return this->assign(std::forward<Td>(rhs)); }
+
+    // Member function templates never suppress generation of special member functions
+    //  so, explicitly define copy assignment to avoid default behaviour and make it behave as assign()
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+//    constexpr auto operator=(const Tw& rhs) const { return this->assign(rhs); };
 
 //    template<bool const_ptr = false>
 //    constexpr auto takeAddr() const {
@@ -77,16 +92,18 @@ struct Value : public ValueBase {
 template<typename T, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T>
 //        , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
 >
-class Var : public Named, public Value<Var<T, is_const, is_volatile>, is_const> {
+class Var : public Named, public Value<Var<T, is_const, is_volatile>, T, is_const> {
     T m_initial_val{};
     bool m_initialised{false};
 public:
-    using type = T;
     static const bool volatile_q = is_volatile;
     static const bool const_q = is_const;
 
-    using Value<Var<T, is_const, is_volatile>, is_const>::operator=;
+    using this_t = Var<T, is_const, is_volatile>;
+    using Value<this_t, T, is_const>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
 
+//    Var(Var<T, is_const, is_volatile>&) { std::cerr << "CALLED COPY CTOR OF Var" << std::endl; };
     explicit constexpr Var() = default;
 //    explicit constexpr Var(const std::string_view &name) : Named{name} {};
     explicit constexpr Var(T value) : m_initial_val{value}, m_initialised{true} {}

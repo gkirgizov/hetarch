@@ -18,8 +18,7 @@ template<typename T, std::size_t N, bool is_const, bool is_volatile> class Array
 
 template<typename TdInd, typename T, std::size_t N, bool is_const, bool is_volatile
         , typename = typename std::enable_if_t< std::is_integral_v<i_t<TdInd>> >>
-struct EArrayAccess : Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, is_const> {
-    using type = T;
+struct EArrayAccess : Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, T, is_const> {
     using arr_t = Array<T, N, is_const, is_volatile>;
 
     const arr_t& arr;
@@ -27,16 +26,12 @@ struct EArrayAccess : Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, is
 
     constexpr EArrayAccess(const arr_t& arr, TdInd&& ind) : arr{arr}, ind{std::forward<TdInd>(ind)} {}
 
-//    void operator=(EArrayAccess<TdInd, T, N, is_const, is_volatile>&) = delete;
-    using Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, is_const>::operator=;
+    using this_t = EArrayAccess<TdInd, T, N, is_const, is_volatile>;
+    using Value<this_t, T, is_const>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
-
-// todo: alow using constexpr C++ values (and not constexpr too, too with InBounds)
-//  todo: specialise translation using InBoundsGep
-//template<typename T, std::size_t N, bool is_const, bool is_volatile>
-//using EConstArrayAccess = EArrayAccess<std::size_t, T, N, is_const, is_volatile>;
 
 
 template<typename T, std::size_t N, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T>
@@ -59,7 +54,7 @@ struct Array : public Var<std::array<T, N>, is_const, is_volatile> {
         return EArrayAccess<TdInd, T, N, is_const, is_volatile>{*this, std::forward<TdInd>(ind)};
     }
 
-//    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+//    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 

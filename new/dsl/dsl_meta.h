@@ -80,9 +80,9 @@ constexpr auto make_dsl_fun_from_arg_types(const GLambda &dsl_gen) {
 
     static_assert(std::is_invocable_v<GLambda, ArgExprs...>);
 
-//    auto&& formal_params = std::tuple<param_for_arg_t<ArgExprs>...>{};
-//    return DSLFunction{fun_name, std::move(formal_params), dsl_gen};
-    return DSLFunction{make_bsv(fun_name), std::tuple<param_for_arg_t<ArgExprs>...>{}, dsl_gen};
+    auto&& formal_params = std::tuple<param_for_arg_t<ArgExprs>...>{};
+    return DSLFunction{make_bsv(fun_name), std::move(formal_params), dsl_gen};
+//    return DSLFunction{make_bsv(fun_name), std::tuple<param_for_arg_t<ArgExprs>...>{}, dsl_gen};
 };
 
 

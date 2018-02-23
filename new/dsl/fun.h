@@ -73,7 +73,7 @@ struct ECall : public Expr<typename std::remove_reference_t<TdCallable>::ret_t> 
     explicit constexpr ECall(TdCallable&& callee, ArgExprs&&... args)
             : callee{std::forward<TdCallable>(callee)}, args{std::forward<ArgExprs>(args)...} {}
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<typename TdCallable, typename... ArgExprs>
@@ -137,7 +137,7 @@ struct ReturnImpl : public Expr<f_t<Td>> {
     const Td returnee;
     explicit constexpr ReturnImpl(Td&& r) : returnee{std::forward<Td>(r)} {}
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<typename Td>
@@ -197,21 +197,28 @@ struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs
     template<typename BodyGenerator
             , typename = typename std::enable_if_t<
                     std::is_invocable_v<BodyGenerator, TdArgs...>
+//                    std::is_invocable_v<BodyGenerator, const TdArgs&...>
             >
     >
     constexpr DSLFunction(std::string_view name, funargs_t&& args, BodyGenerator&& body_builder)
-//            : Named{name}, args{std::forward<funargs_t>(args)}, body{std::apply(body_builder, this->args)}
-            : Named{name}, args{std::forward<funargs_t>(args)}, body{Return(std::apply(body_builder, this->args))}
+            : Named{name}
+            , args{std::forward<funargs_t>(args)}
+            , body(std::apply(std::forward<BodyGenerator>(body_builder), this->args))
     {
         // makes sense when generators are pure: always return their body as expression; don't use side-effects
         static_assert(!std::is_void_v<TdBody>, "DSL Generator must generate (return) some DSL code!");
         //static_assert(is_expr_v<TdBody>, "DSL Generator must generate DSL code, not something else!");
         static_assert(is_dsl_v<TdBody>, "DSL Generator must generate DSL code, not something else!");
+
+//        std::cerr << std::endl << "LALALA" << std::endl;
+//        using t2 = std::invoke_result_t<BodyGenerator, const TdArgs&...>;
+//        PR_CERR_TY(t2);
+//        std::cerr << "END LALALA" << std::endl << std::endl;
     }
 
 //    constexpr void specialise(Args... args);
 
-    inline void toIR(IRTranslator &irTranslator) const override { toIRImpl(*this, irTranslator); }
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 // Explicit deduction guide
@@ -219,6 +226,7 @@ template<typename BodyGenerator, typename ...TdArgs>
 DSLFunction(std::string_view, std::tuple<TdArgs...>&&, BodyGenerator&&) ->
 //DSLFunction<std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
 DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
+//DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, const TdArgs&...> >, TdArgs...>;
 
 }
 }
