@@ -132,6 +132,7 @@ public: // out-of-dsl constructs
 
         auto known = frame->allocated.find(&var);
         if (known == std::end(frame->allocated)) {
+            // DBG
             std::cerr << "--alloca for 0x" << std::hex << &var << "; T="
                       << utils::type_name<decltype(var)>() << std::endl;
 
@@ -146,6 +147,7 @@ public: // out-of-dsl constructs
             }
             frame->allocated[&var] = val_addr;
         } else { // Variable usage
+            // DBG
             std::cerr << "--use of 0x" << std::hex << &var << "; T="
                       << utils::type_name<decltype(var)>() << std::endl;
             val_addr = known->second;

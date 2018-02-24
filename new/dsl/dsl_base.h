@@ -31,21 +31,18 @@ struct ExprBase : public ESBase {};
 template<typename T>
 struct Expr : public ExprBase { using type = T; };
 
-struct VoidExpr : public Expr<void> {
-//    inline void toIR(IRTranslator &irTranslator) const override {
-//        std::cerr << "called VoidExpr.toIR()" << std::endl;
-//    }
-};
-static const auto empty_expr = VoidExpr{};
+struct VoidExpr : public Expr<void> {};
+const VoidExpr empty_expr{};
 
 
 struct ValueBase : public DSLBase {};
 
-struct CallableBase : public DSLBase {};
+struct CallableBase : public DSLBase {
+    CallableBase() = default;
+    CallableBase(const CallableBase &) = delete;
 
-
-//template<typename... Args>
-//using expr_tuple = std::tuple<const Expr<Args>&...>;
+    virtual ~CallableBase() = default;
+};
 
 
 
@@ -59,7 +56,6 @@ public:
     constexpr auto name() const { return m_name; }
     constexpr void rename(std::string_view name) { m_name = name; }
 };
-
 
 
 

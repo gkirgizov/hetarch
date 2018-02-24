@@ -65,20 +65,20 @@ using param_for_arg_t = typename param_for_arg<TdExpr>::type;
 
 template<typename TdCallable, typename... ArgExprs>
 struct ECall : public Expr<typename std::remove_reference_t<TdCallable>::ret_t> {
-    const TdCallable callee;
+    const TdCallable& callee;
     const std::tuple<ArgExprs...> args;
 
-//    explicit constexpr ECall(const TdCallable& callee, ArgExprs&&... args)
-//            : callee{callee}, args{std::forward<ArgExprs>(args)...} {}
-    explicit constexpr ECall(TdCallable&& callee, ArgExprs&&... args)
-            : callee{std::forward<TdCallable>(callee)}, args{std::forward<ArgExprs>(args)...} {}
+    explicit constexpr ECall(const TdCallable& callee, ArgExprs&&... args)
+            : callee{callee}
+            , args{std::forward<ArgExprs>(args)...}
+    {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<typename TdCallable, typename... ArgExprs>
-constexpr auto makeCall(TdCallable&& callable, ArgExprs&&... args) {
-    return ECall<TdCallable, ArgExprs...>{std::forward<TdCallable>(callable), std::forward<ArgExprs>(args)...};
+constexpr auto makeCall(const TdCallable& callable, ArgExprs&&... args) {
+    return ECall<TdCallable, ArgExprs...>{callable, std::forward<ArgExprs>(args)...};
 };
 
 
@@ -145,10 +145,8 @@ constexpr auto Return(Td&& r) { return ReturnImpl<Td>{std::forward<Td>(r)}; }
 constexpr auto Return() { return ReturnImpl<const VoidExpr&>{empty_expr}; }
 
 
-//template<typename T, bool isConst, bool is_volatile>
-//using FunArg = Var<T, isConst, is_volatile>;
+/*
 template<typename T> using FunArg = Var<T, false, false>;
-//template<typename... Args> using FunArgs = std::tuple<const FunArg<Args>&...>;
 
 template<typename... Args>
 struct FunArgs2 {
@@ -165,16 +163,13 @@ private:
     }
     bool default_arg_present{false};
 };
+*/
 
-
-//template<typename ...Tds> using FunArgs = FunArgs3<Tds...>;
-//template<typename ...Tds> using FunArgs = std::tuple<const Tds&...>;
 
 template<typename ...Tds>
 auto MakeFunArgs(const Tds&... args) {
     static_assert(is_val_v<Tds...>, "Expected subclasses of ValueBase! (invalid args in function declaration)");
     return std::tuple<const Tds&...>{args...};
-//    return FunArgs<Tds...>{args...};
 }
 
 
@@ -197,7 +192,6 @@ struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs
     template<typename BodyGenerator
             , typename = typename std::enable_if_t<
                     std::is_invocable_v<BodyGenerator, TdArgs...>
-//                    std::is_invocable_v<BodyGenerator, const TdArgs&...>
             >
     >
     constexpr DSLFunction(std::string_view name, funargs_t&& args, BodyGenerator&& body_builder)
@@ -221,12 +215,21 @@ struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
+template<typename BodyGenerator, typename ...TdArgs>
+struct build_dsl_fun_type {
+    using type = DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
+};
+template<typename BodyGenerator, typename ...ArgExprs>
+struct build_dsl_fun_type_from_args {
+    using type = typename build_dsl_fun_type<BodyGenerator, param_for_arg_t<ArgExprs>...>::type;
+};
+
 // Explicit deduction guide
 template<typename BodyGenerator, typename ...TdArgs>
 DSLFunction(std::string_view, std::tuple<TdArgs...>&&, BodyGenerator&&) ->
+//typename build_dsl_fun_type<BodyGenerator, TdArgs...>::type;
 //DSLFunction<std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
 DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
-//DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, const TdArgs&...> >, TdArgs...>;
 
 }
 }

@@ -81,4 +81,5 @@ constexpr std::string_view type_name() {
 }
 }
 
-#define PRINT_TYPE_CERR(VAL) ;std::cerr << hetarch::utils::type_name<decltype( (VAL) )>() << std::endl;
+#define PR_CERR_VAL_TY(VAL) ;std::cerr << hetarch::utils::type_name<decltype( (VAL) )>() << std::endl;
+#define PR_CERR_TY(TY) ;std::cerr << hetarch::utils::type_name< TY >() << std::endl;

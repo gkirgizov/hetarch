@@ -1,6 +1,7 @@
 #pragma once
 
 
+#include <unordered_map>
 #include <tuple>
 //#include <
 
@@ -40,50 +41,55 @@ struct function_traits<ReturnType(ClassType::*)(Args...) const>
 };
 
 
-//template<typename Tuple, typename Inds = std::make_index_sequence<std::tuple_size_v<Tuple>>>
-//struct unpack {};
-//template<std::size_t I, typename Tuple>
-//struct unpack_impl {
-//    using type = std::tuple_element_t<I, Tuple>;
-//};
+template<typename ...ArgExprs, typename GLambda>
+constexpr auto make_dsl_fun_from_arg_types(GLambda&& dsl_gen) {
 
+    static_assert(std::is_invocable_v<GLambda, ArgExprs...>, "DSL Generator cannot be invoked with provided arguments!");
+    constexpr auto fun_name = "generic_name";
 
-template<typename GLambda>
-auto make_dsl_callable_test(GLambda&& dsl_generator) {
-    std::cerr << utils::type_name<GLambda>() << std::endl;
-    static_assert(std::is_invocable_v<GLambda, int, int>); // ok
-    static_assert(std::is_invocable_v<GLambda, std::string, std::string>); // ok
-    // can't be even called! failing when trying to instantiate generic lambda
-//    static_assert(!std::is_invocable_v<GLambda, int, std::string>); // can be called; but ill-formed (no addition for int + std::string)
-
-//    using ft = function_traits<decltype(dsl_generator)>;
-//    static_assert(std::is_same_v<int, ft::result_t>);
-//    std::cerr << utils::type_name< ft::result_type >() << std::endl;
-//    std::cerr << utils::type_name< decltype(&GLambda::operator()) >() << std::endl;
-
-    // X   i can check for arity
-    // XX  likely i can check for parameter types;
-    // XXX and if they are template/non-template parameters
-}
-
+    auto&& formal_params = std::tuple<param_for_arg_t<ArgExprs>...>{};
+    return DSLFunction{make_bsv(fun_name), std::move(formal_params), std::forward<GLambda>(dsl_gen)};
+//    return DSLFunction{make_bsv(fun_name), std::tuple<param_for_arg_t<ArgExprs>...>{}, std::forward<GLambda>(dsl_gen)};
+};
 
 // Overload with type deduction for ArgExprs
 template<typename ...ArgExprs, typename GLambda>
 constexpr auto make_dsl_fun_from_arg_types(GLambda&& dsl_gen, ArgExprs&&...){
-//    return make_dsl_fun_from_arg_types<GLambda, ArgExprs...>(std::forward<GLambda>(dsl_gen));
-    return make_dsl_fun_from_arg_types<ArgExprs...>(dsl_gen);
+    return make_dsl_fun_from_arg_types<ArgExprs...>(std::forward<GLambda>(dsl_gen));
 };
+
+
+namespace {
+
+using callable_ptr = std::unique_ptr<CallableBase>;
+static std::unordered_map<std::string_view, callable_ptr> dsl_fun_instantiated{};
+
 
 template<typename ...ArgExprs, typename GLambda>
-constexpr auto make_dsl_fun_from_arg_types(const GLambda &dsl_gen) {
+constexpr const auto& get_or_alloc_dsl_fun_from_arg_types(GLambda&& dsl_gen) {
+
+    static_assert(std::is_invocable_v<GLambda, ArgExprs...>, "DSL Generator cannot be invoked with provided arguments!");
     constexpr auto fun_name = "generic_name";
 
-    static_assert(std::is_invocable_v<GLambda, ArgExprs...>);
+//        using TdCallable = decltype(make_dsl_fun_from_arg_types<decltype(args)...>( std::declval<GLambda>() ));
+    using TdCallable = typename build_dsl_fun_type_from_args<GLambda, ArgExprs...>::type;
+    auto type_str = utils::type_name<TdCallable>(); // todo: make constexpr
 
-    auto&& formal_params = std::tuple<param_for_arg_t<ArgExprs>...>{};
-    return DSLFunction{make_bsv(fun_name), std::move(formal_params), dsl_gen};
-//    return DSLFunction{make_bsv(fun_name), std::tuple<param_for_arg_t<ArgExprs>...>{}, dsl_gen};
+    auto instantiated = dsl_fun_instantiated.find(type_str);
+    if (instantiated == std::end(dsl_fun_instantiated)) {
+        CallableBase* fun_ptr = new DSLFunction{
+                        make_bsv(fun_name),
+                        std::tuple<param_for_arg_t<ArgExprs>...>{},
+                        std::forward<GLambda>(dsl_gen)
+        };
+        auto inserted = dsl_fun_instantiated.emplace(type_str, fun_ptr);
+        assert(inserted.second && "Error when storing instantiated Generic DSLFunction!");
+        return static_cast<const TdCallable &>(*fun_ptr);
+    }
+    return static_cast<const TdCallable &>(*instantiated->second);
 };
+
+}
 
 
 template<typename GLambda>
@@ -92,13 +98,13 @@ auto make_generic_dsl_fun(GLambda &&dsl_generator) {
     return [&](auto&&... args){
         // what about by-ref, by-val?
         //   ???--> allow user use explicit <CallSomething>(ByVal(arg1), arg2) (ByVal is Copy)
+
         return makeCall(
-                make_dsl_fun_from_arg_types<decltype(args)...>(dsl_generator),
+                get_or_alloc_dsl_fun_from_arg_types<decltype(args)...>(dsl_generator),
                 std::forward<decltype(args)>(args)...
         );
     };
 }
-
 
 
 }
