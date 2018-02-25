@@ -37,11 +37,34 @@ struct DSLGlobal {
 };
 
 
+/*// todo: do implicit cast when not exact type match?
+template<typename TdLhs, typename TdRhs
+        , typename = typename std::enable_if_t<
+                std::is_same_v<i_t<TdLhs>, i_t<TdRhs>>
+                && is_val_v<TdLhs>
+        >
+>
+struct EAssign : public TdLhs { // Assignment returns reference to assignee, so, EAssign behaves in expressions as assignee
+    const TdLhs& lhs;
+    const TdRhs rhs;
+
+    constexpr EAssign(const TdLhs& lhs, TdRhs&& rhs) : lhs{lhs}, rhs{std::forward<TdRhs>(rhs)} {}
+
+    using this_t = EAssign<TdLhs, TdRhs>;
+    using TdLhs::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+};*/
+
 // todo: do implicit cast when not exact type match?
 template<typename TdLhs, typename TdRhs
-        , typename = typename std::enable_if_t<std::is_same_v<i_t<TdLhs>, i_t<TdRhs>>>
+        , typename = typename std::enable_if_t<
+                std::is_same_v<i_t<TdLhs>, i_t<TdRhs>>
+                && is_val_v<TdLhs>
+        >
 >
-struct EAssign : public Expr<i_t<TdRhs>> {
+struct EAssign : public Expr<f_t<TdLhs>> {
     const TdLhs& lhs;
     const TdRhs rhs;
 
@@ -49,7 +72,6 @@ struct EAssign : public Expr<i_t<TdRhs>> {
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
-
 
 
 //template<typename Tw, typename T, bool is_const = false, bool is_volatile = false>

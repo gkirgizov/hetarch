@@ -112,6 +112,7 @@ public:
 //    explicit IRTranslator(llvm::LLVMContext &context)
 //            : context{context}, cur_builder{new llvm::IRBuilder<>{context}}, type_map{utils::get_map(context)} {}
 
+    // todo: push dummy Value to avoid accidental pop in empty stack?
     void accept(const VoidExpr &) {}
 
     void clear() {
@@ -121,7 +122,14 @@ public:
         assert(frame_stack.size() == 0);
     }
 
-public: // out-of-dsl constructs
+public:
+    template<typename T>
+    inline llvm::AllocaInst* allocate(std::string_view name = "") {
+        llvm::Value* array_size = nullptr;
+        if constexpr (is_std_array_v<T>) { array_size = llvm_map.get_const(std::tuple_size<T>::value); }
+        // Default empty name is handled automatically by LLVM (when var.name().data() == "")
+        return cur_builder->CreateAlloca(llvm_map.get_type<T>(), array_size, name.data());
+    }
 
     // TODO: allocate everything only in the entry block of a func
     template<typename T, bool is_const, bool is_volatile
@@ -133,13 +141,10 @@ public: // out-of-dsl constructs
         auto known = frame->allocated.find(&var);
         if (known == std::end(frame->allocated)) {
             // DBG
-            std::cerr << "--alloca for 0x" << std::hex << &var << "; T="
+            std::cerr << "--alloca for " << std::hex << &var << "; T="
                       << utils::type_name<decltype(var)>() << std::endl;
 
-            llvm::Value* array_size = nullptr;
-            if constexpr (is_std_array_v<T>) { array_size = llvm_map.get_const(std::tuple_size<T>::value); }
-            // Default empty name is handled automatically by LLVM (when var.name().data() == "")
-            val_addr = cur_builder->CreateAlloca(llvm_map.get_type<T>(), array_size, var.name().data());
+            val_addr = allocate<T>(var.name());
 
             if (var.initialised()) {
                 auto init_val = llvm_map.get_const(var.initial_val());
@@ -148,7 +153,7 @@ public: // out-of-dsl constructs
             frame->allocated[&var] = val_addr;
         } else { // Variable usage
             // DBG
-            std::cerr << "--use of 0x" << std::hex << &var << "; T="
+            std::cerr << "--use of " << std::hex << &var << "; T="
                       << utils::type_name<decltype(var)>() << std::endl;
             val_addr = known->second;
         }
@@ -299,9 +304,7 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         clear();
         using fun_t = DSLFunction<TdBody, TdArgs...>;
         using TdRet = typename fun_t::dsl_ret_t;
-//        using Args = typename fun_t::args_full_t;
         return IRModule<TdRet, TdArgs...>{m, fun.name().data()};
-
     }
 
     template<typename AddrT, typename TdRet, typename ...TdArgs>
@@ -323,9 +326,6 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
 //            llvm_map.get_func_type<ret_t, f_t<TdArgs>...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
         );
 
-        // Handle arguments
-        modify_args(dslFun, fun);
-
         const auto blockName = funcName + "_block" + "_entry";
         llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, blockName, fun);
 
@@ -333,8 +333,8 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         cur_builder->SetInsertPoint(entry_bb);
         frame_stack.push(Frame{fun});
         frame = &frame_stack.top();
-        // todo: evaluate function arguments here?
-        //      args.toIR()=(alloca; store initial); pop_addr (to leave stack empty)
+
+        handle_args(dslFun, fun);
         dslFun.body.toIR(*this);
 
         frame_stack.pop();
@@ -350,28 +350,36 @@ private:
     // todo: test modifyArgs
     template<typename TdBody, typename... TdArgs
             , typename Inds = std::index_sequence_for<TdArgs...>>
-    void modify_args(const DSLFunction<TdBody, TdArgs...> &dslFun, llvm::Function *fun) {
+    void handle_args(const DSLFunction<TdBody, TdArgs...> &dslFun, llvm::Function *fun) {
+        // Build mapping from llvm::Argument to dslFun.args using indices
         std::array<llvm::Argument*, sizeof...(TdArgs)> args;
         for(llvm::Argument* arg_ptr = fun->arg_begin(); arg_ptr != fun->arg_end(); ++arg_ptr) {
             args[arg_ptr->getArgNo()] = arg_ptr;
         }
-        modify_args_impl(dslFun, args, Inds{});
+        handle_args_impl(dslFun, args, Inds{});
     }
 
     template<typename TdBody, typename ...TdArgs, std::size_t ...I>
-    void modify_args_impl(const DSLFunction<TdBody, TdArgs...> &dslFun,
+    void handle_args_impl(const DSLFunction<TdBody, TdArgs...> &dslFun,
                         std::array<llvm::Argument*, sizeof...(TdArgs)> &args,
                         std::index_sequence<I...>) {
-        auto dummy = std::make_tuple( 0, ( modify_arg(std::get<I>(dslFun.args), *args[I]) , 0)... );
+        // Call handle_arg for each pair of llvm::Argument and arg from dslFun.args
+        auto dummy = std::make_tuple( 0, ( handle_arg(std::get<I>(dslFun.args), args[I]) , 0)... );
     }
 
     template<typename TdArg>
-    void modify_arg(const TdArg& dsl_arg, llvm::Argument &arg) {
-        arg.setName(dsl_arg.name().data());
+    void handle_arg(const TdArg& dsl_arg, llvm::Argument *arg) {
+        const auto name = dsl_arg.name().data();
+        arg->setName(name);
         if constexpr (is_byref_v<TdArg>) {
             // todo: get sizeof in target platform
-            arg.addAttr(llvm::Attribute::getWithDereferenceableBytes(context, sizeof(i_t<TdArg>)));
+            arg->addAttr(llvm::Attribute::getWithDereferenceableBytes(context, sizeof(i_t<TdArg>)));
         }
+        // Now allocate space on stack for argument and store actual Value arg represents (as Clang does)
+        // todo: check that if arg->getType() is already ArrayType then we don't need arraySize param (hence nullptr)
+        auto arg_addr = cur_builder->CreateAlloca(arg->getType(), nullptr, name);
+        cur_builder->CreateStore(arg, arg_addr, dsl_arg.volatile_q);
+        frame->allocated[static_cast<const ValueBase*>(&dsl_arg)] = arg_addr;
     }
 
 public:
@@ -437,10 +445,10 @@ public:
 
     template<typename Td>
     void accept(const ReturnImpl<Td> &returnSt) {
+        returnSt.returnee.toIR(*this);
         if constexpr (std::is_void_v<i_t<Td>>) {
             cur_builder->CreateRetVoid();
         } else {
-            returnSt.returnee.toIR(*this);
             cur_builder->CreateRet(pop_val());
         }
     }
@@ -455,7 +463,9 @@ public:
 
         cur_builder->CreateStore(rhs, dest.first, dest.second);
         // assignment returns result of the evaluation of rhs
-        push_val(rhs);
+//        push_val(rhs);
+        // assignment returns reference to assignee
+        push_addr(dest.first, dest.second);
     }
 
     template<typename TdCallable, typename... ArgExprs>

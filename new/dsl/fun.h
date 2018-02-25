@@ -132,6 +132,8 @@ struct DSLCallable : public CallableBase {
 };
 
 
+namespace {
+
 template<typename Td>
 struct ReturnImpl : public Expr<f_t<Td>> {
     const Td returnee;
@@ -142,7 +144,9 @@ struct ReturnImpl : public Expr<f_t<Td>> {
 
 template<typename Td>
 constexpr auto Return(Td&& r) { return ReturnImpl<Td>{std::forward<Td>(r)}; }
-constexpr auto Return() { return ReturnImpl<const VoidExpr&>{empty_expr}; }
+constexpr auto Return() { return ReturnImpl<const VoidExpr&>{Unit}; }
+
+}
 
 
 /*
@@ -173,6 +177,7 @@ auto MakeFunArgs(const Tds&... args) {
 }
 
 
+// todo: accept TdBody by reference (MakeFunction?)
 template<typename TdBody, typename... TdArgs>
 struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs...>, param_for_arg_t<TdBody>, TdArgs...> {
     static_assert((is_val_v<TdArgs> && ...), "Formal parameters must be Values (derived from ValueBase)!");
@@ -182,12 +187,12 @@ struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs
 
     funargs_t args;
 //    const funargs_t args;
-    const TdBody body;
+    const ReturnImpl<TdBody> body;
 
     constexpr DSLFunction(std::string_view name, TdBody&& body)
-            : Named{name}, args{}, body{std::move(body)} {}
+            : Named{name}, args{}, body{std::forward<TdBody>(body)} {}
     constexpr DSLFunction(std::string_view name, funargs_t&& args, TdBody&& body)
-            : Named{name}, args{std::forward<funargs_t>(args)}, body{std::move(body)} {}
+            : Named{name}, args{std::forward<funargs_t>(args)}, body{std::forward<TdBody>(body)} {}
 
     template<typename BodyGenerator
             , typename = typename std::enable_if_t<
@@ -217,7 +222,8 @@ struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs
 
 template<typename BodyGenerator, typename ...TdArgs>
 struct build_dsl_fun_type {
-    using type = DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
+    using type = DSLFunction< std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
+//    using type = DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
 };
 template<typename BodyGenerator, typename ...ArgExprs>
 struct build_dsl_fun_type_from_args {
@@ -228,8 +234,8 @@ struct build_dsl_fun_type_from_args {
 template<typename BodyGenerator, typename ...TdArgs>
 DSLFunction(std::string_view, std::tuple<TdArgs...>&&, BodyGenerator&&) ->
 //typename build_dsl_fun_type<BodyGenerator, TdArgs...>::type;
-//DSLFunction<std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
-DSLFunction<ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
+DSLFunction< std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
+//DSLFunction< ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
 
 }
 }

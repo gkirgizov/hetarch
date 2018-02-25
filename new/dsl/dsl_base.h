@@ -31,8 +31,10 @@ struct ExprBase : public ESBase {};
 template<typename T>
 struct Expr : public ExprBase { using type = T; };
 
-struct VoidExpr : public Expr<void> {};
-const VoidExpr empty_expr{};
+struct VoidExpr : public Expr<void> {
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+};
+const VoidExpr Unit{};
 
 
 struct ValueBase : public DSLBase {};

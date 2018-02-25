@@ -17,7 +17,7 @@ using dsl::f_t; // by some reasons CLion can't resolve it automatically.
     const ESBase &else_body;
 
     constexpr IfElse(Expr<bool> &&cond, ESBase &&then_body)
-            : cond{cond}, then_body{then_body}, else_body{empty_expr} {}
+            : cond{cond}, then_body{then_body}, else_body{Unit} {}
     constexpr IfElse(Expr<bool> &&cond, ESBase &&then_body, ESBase &&else_body)
             : cond{cond}, then_body{then_body}, else_body{else_body} {}
 
