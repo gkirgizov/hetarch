@@ -11,6 +11,8 @@
 #include "../new/supportingClasses.h"
 #include "../new/CodeGen.h"
 #include "../new/CodeLoader.h"
+#include "../new/TCPConnection.h"
+#include "../new/MemoryManager.h"
 
 #include "../new/dsl.h"
 
@@ -63,8 +65,7 @@ public:
             , self_sufficient{utils::loadModule(ir0, ctx), "pow_naive"}
             , part1{utils::loadModule(ir1, ctx), "square"}
             , part2{utils::loadModule(ir2, ctx), "pow_smart"}
-            , conn{}
-            , memMgr{}
+            , irt{}
     {}
 
     LLVMContext ctx{};
@@ -74,11 +75,8 @@ public:
     IRModule<Var<int>, Var<int>> part1;
     IRModule<Var<int>, Var<int>, Var<unsigned int>> part2;
 
+    IRTranslator irt;
     CodeGen codeGen;
-
-    mock::MockConnection<addr_t> conn;
-    mock::MockMemManager<addr_t> memMgr;
-
 };
 
 
@@ -86,7 +84,6 @@ TEST_F(CodeGenTest, trivialLink) {
     ASSERT_TRUE(CodeGen::link(self_sufficient));
     ASSERT_TRUE(self_sufficient);
 }
-
 
 TEST_F(CodeGenTest, fewModulesLink) {
     // just to be sure with pointer semantic
@@ -105,7 +102,6 @@ TEST_F(CodeGenTest, fewModulesLink) {
     EXPECT_FALSE(deps[1]) << "main_entry is still valid!!!";
     ASSERT_TRUE(part2);
 }
-
 
 TEST_F(CodeGenTest, trivialCompile) {
     EXPECT_TRUE(codeGen.compile(main_entry)) << "main.ll failed to compile";
@@ -130,9 +126,49 @@ TEST_F(CodeGenTest, dependentCompile) {
     EXPECT_TRUE(compiled) << "module with resolved symbols should compile!";
 }
 
-TEST_F(CodeGenTest, codeLoaderTest1) {
+
+class CodeLoaderTest : public ::testing::Test {
+public:
+    explicit CodeLoaderTest()
+            : codeGen("x86_64-unknown-linux-gnu")
+            , irt{}
+            , conn{}
+            , memMgr{}
+            , main_entry{utils::loadModule(main_entry_ll, ctx), "main"}
+            , part1{utils::loadModule(ir1, ctx), "square"}
+    {}
+
+    LLVMContext ctx{};
+
+    IRTranslator irt;
+    CodeGen codeGen;
+
+    mock::MockConnection<addr_t> conn;
+    mock::MockMemManager<addr_t> memMgr;
+
+
+    IRModule<VoidExpr> main_entry;
+    IRModule<Var<int>, Var<int>> part1;
+};
+
+
+TEST_F(CodeLoaderTest, loadCodeTrivial) {
+//    auto objCode = codeGen.compile(main_entry);
     auto objCode = codeGen.compile(part1);
     auto resident = CodeLoader::load(&conn, &memMgr, mem::MemType::ReadWrite, objCode);
+}
+
+TEST_F(CodeLoaderTest, loadGlobal) {
+    DSLGlobal gi1{Var<int16_t>{42}};
+    DSLGlobal gi2{Var<int64_t>{53, "g1"}};
+    DSLGlobal gi3{Var<float>{0, ""}};
+    DSLGlobal gi4{Var<double>{0, "gd2"}};
+
+    auto r1 = CodeLoader::load(conn, &memMgr, mem::MemType::ReadWrite, irt, codeGen, gi1);
+    auto r2 = CodeLoader::load(conn, &memMgr, mem::MemType::ReadWrite, irt, codeGen, gi2);
+    auto r3 = CodeLoader::load(conn, &memMgr, mem::MemType::ReadWrite, irt, codeGen, gi3);
+    auto r4 = CodeLoader::load(conn, &memMgr, mem::MemType::ReadWrite, irt, codeGen, gi4);
+
 }
 
 
