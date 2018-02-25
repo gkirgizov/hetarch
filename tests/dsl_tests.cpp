@@ -25,7 +25,7 @@ struct IRTranslatorTest: public ::testing::Test {
 
 //    static constexpr Var<char> a{'a', make_bsv("char1")};
 //    static constexpr Var<char> b{'b', make_bsv("char2")};
-    Var<int> x{69, make_bsv("la-la")}, y{42}, tmp{};
+    Var<int> x{69, make_bsv("x")}, y{42, "y"}, tmp{0, "tmp"};
 };
 
 
@@ -53,25 +53,27 @@ TEST_F(IRTranslatorTest, compileDSLCommon) {
 
     DSLFunction empty_test(
             "empty",
-            Return()
+            VoidExpr{}
+//            Return()
     );
 
     DSLFunction pass_through(
             "pass_through",
             MakeFunArgs(tmp),
-            Return(tmp)
+            (tmp, tmp)
+//            Return(tmp)
     );
 
     DSLFunction assign_test(
             "swap",
             MakeFunArgs(x, y),
-            (tmp = x, x = y, y = tmp, Return())
+            (tmp = x, x = y, y = tmp, Unit)
     );
 
     DSLFunction call_test(
             "call_thing",
             MakeFunArgs(x),
-            (tmp = pass_through(x), Return(tmp))
+            (tmp = pass_through(x), tmp)
     );
 
     EXPECT_TRUE(translate_verify(irt, empty_test));
@@ -89,17 +91,17 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
     DSLFunction simple_add_test(
             "add2",
             MakeFunArgs(x, y),
-            Return(x + y)
+            x + y
     );
 
     DSLFunction cmp_test(
-            "",
+            "cmp_test",
             MakeFunArgs(x, y),
             (
 //                    xi == yi, xi == yf, xf == yi, xf == yf,
                     xui == yi, xi == yui, xf == yui, xf == yf
 //                    xi < yi, xi < yf, xf < yi, xf < yf
-                    , Return()
+                    , Unit
             )
     );
 
@@ -117,14 +119,14 @@ TEST_F(IRTranslatorTest, compileDSLArray) {
             "try_arr",
             MakeFunArgs(x, y), (
                 tmp = arr[x] + arr[y]
-            , Return(tmp))
+            , tmp)
     );
 
     DSLFunction array_assign_test(
             "try_arr",
             MakeFunArgs(x, y),
             (arr[x] = arr[y]
-            , Return())
+            , VoidExpr())
     );
 
     EXPECT_TRUE(translate_verify(irt, array_access_test));
@@ -140,7 +142,7 @@ TEST_F(IRTranslatorTest, compileDSLControlFlow) {
             "max",
             MakeFunArgs(x, y),
             (tmp = If(cond, x, y),
-            Return(tmp))
+            tmp)
     );
 
     DSLFunction while_test(
@@ -148,14 +150,38 @@ TEST_F(IRTranslatorTest, compileDSLControlFlow) {
             MakeFunArgs(x, y),
             (While(x == zero,
                    x = x - one
-            ), Return())
+            ), VoidExpr())
     );
 
     EXPECT_TRUE(translate_verify(irt, if_else_test));
     EXPECT_TRUE(translate_verify(irt, while_test));
 }
 
-TEST_F(IRTranslatorTest, genericDSLReferenceConsistency) {
+
+struct GenericsTest: public ::testing::Test {
+    explicit GenericsTest() : irt{} {}
+
+    IRTranslator irt;
+    Var<int> x{69, make_bsv("x")}, y{42, "y"}, tmp{0, "tmp"};
+
+};
+
+auto id_generator = [](auto&& x) { return x; };
+
+auto max_code_generator = [](auto&& x, auto&& y) {
+//        auto&& c = x > y; // goes out of scope
+    return If(x > y, x, y);
+};
+
+auto get_generic_caller = [&](const auto& callee) {
+    // return generic caller of generic dsl functions
+    return [&](auto&&... args) {
+        return callee(args...);
+    };
+};
+
+
+TEST_F(GenericsTest, genericDSLReferenceConsistency) {
 
 //    auto test_glambda = [](auto x, auto y) { return x+y; };
 //    auto test_lambda = [](int x, int y) { return x+y; };
@@ -211,15 +237,7 @@ TEST_F(IRTranslatorTest, genericDSLReferenceConsistency) {
 }
 
 
-TEST_F(IRTranslatorTest, genericDSLFunctions) {
-
-    auto id_generator = [](auto&& x) { return x; };
-
-    auto max_code_generator = [](auto&& x, auto&& y) {
-//        auto&& c = x > y; // goes out of scope
-        auto m = If(x > y, x, y);
-        return m;
-    };
+TEST_F(GenericsTest, genericDSLFunctions1) {
 
     auto tst_generator = [](auto&& x) {
         return If(!x, DSLConst(false), DSLConst(true));
@@ -255,23 +273,65 @@ TEST_F(IRTranslatorTest, genericDSLFunctions) {
     auto generic_tst = make_generic_dsl_fun(tst_generator);
     auto generic_dsl_max = make_generic_dsl_fun(max_code_generator);
 
-    auto call_generic_generator = [&](auto&& x, auto&& y){
-        return generic_id(x);
-//        return generic_tst(y);
-//        return generic_dsl_max(x, y);
+    DSLFunction call_generic_fun{
+            "caller_of_generics",
+            MakeFunArgs(x, y),
+            generic_dsl_max(x, y) + generic_id(x)
     };
-    DSLFunction call_generic_fun = make_dsl_fun_from_arg_types<Var<int>, Var<int>>(call_generic_generator);
+
+    // specialise generic caller for specific arguments (and correct number of arguments)
+    DSLFunction call_id = make_dsl_fun_from_arg_types<Var<float>>( get_generic_caller(generic_id) );
+    DSLFunction call_max = make_dsl_fun_from_arg_types<Var<int>, Var<int>>( get_generic_caller(generic_dsl_max) );
 
     std::cerr << std::endl << std::endl;
     EXPECT_TRUE(translate_verify(irt, dsl_id));
     EXPECT_TRUE(translate_verify(irt, dsl_fun_max));
     EXPECT_TRUE(translate_verify(irt, call_generic_fun));
-
-    // call generic inside usual
-    // call generic inside lambda; isntantiated directly
-    // generator composition
-        // oh shit; i can't use Return in generators: they will be fucked up
+    EXPECT_TRUE(translate_verify(irt, call_id));
+    EXPECT_TRUE(translate_verify(irt, call_max));
 }
 
 
+TEST_F(GenericsTest, genericDSLFunctions2) {
+    auto reduce_sum_generator = [&](auto&& ...xs) {
+        return (... + xs);
+    };
 
+    auto get_reducer = [&](auto&& binary_op) {
+        return [&](auto&& x1, auto&&... xs) {
+            // Redundant assignments should be optimized out later by LLVm
+            return ( (x1 = binary_op(x1, xs)), ... );
+
+//            auto xs_tuple = std::tie(xs...);
+//            Var<unsigned> i{sizeof...(xs)};
+        };
+    };
+
+//    auto g_reduce_sum = make_generic_dsl_fun(reduce_sum_generator);
+//    DSLFunction call_sum3 = make_dsl_fun_from_arg_types<Var<float>, Var<float>, Var<float>>( get_generic_caller(g_reduce_sum) );
+//    EXPECT_TRUE(translate_verify(irt, call_sum3));
+
+    DSLFunction sum3 = make_dsl_fun_from_arg_types<
+            Var<float>, Var<float>, Var<int>
+    >(reduce_sum_generator);
+
+    EXPECT_TRUE(translate_verify(irt, sum3));
+
+
+    auto add2_gen = [](auto&& x1, auto&& x2) { return x1 + x2; };
+    auto sum_reducer_generator_v2 = get_reducer(add2_gen);
+    DSLFunction sum3_v2 = make_dsl_fun_from_arg_types<
+            Var<float>, Var<float>, Var<int>
+    >(sum_reducer_generator_v2);
+
+    EXPECT_TRUE(translate_verify(irt, sum3_v2));
+
+
+    // may not be easily optimised; so might be not quite effective due to extra assignments from generic reducer
+    auto max_vararg_generator = get_reducer(max_code_generator);
+    DSLFunction max3 = make_dsl_fun_from_arg_types<
+            Var<float>, Var<float>, Var<float>
+    >(max_vararg_generator);
+
+    EXPECT_TRUE(translate_verify(irt, max3));
+}
