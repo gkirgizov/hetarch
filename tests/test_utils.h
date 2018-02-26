@@ -20,6 +20,8 @@ std::unique_ptr<llvm::Module> loadModule(std::istream &stream, llvm::LLVMContext
 
 std::unique_ptr<llvm::Module> loadModule(std::string &fileName, llvm::LLVMContext &context);
 
+void printSectionName(const llvm::object::SectionRef& section);
+
 void dumpSections(const llvm::object::ObjectFile &objFile);
 
 void dumpSymbols(const llvm::object::ObjectFile &objFile);

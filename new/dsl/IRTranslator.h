@@ -110,10 +110,7 @@ public:
     explicit IRTranslator()
             : context{}, cur_builder{new llvm::IRBuilder<>{context}}, llvm_map{context} {}
 //    explicit IRTranslator(llvm::LLVMContext &context)
-//            : context{context}, cur_builder{new llvm::IRBuilder<>{context}}, type_map{utils::get_map(context)} {}
-
-    // todo: push dummy Value to avoid accidental pop in empty stack?
-    void accept(const VoidExpr &) {}
+//            : context{context}, cur_builder{new llvm::IRBuilder<>{context}}, llvm_map{context} {}
 
     void clear() {
         cur_module.release();
@@ -121,6 +118,11 @@ public:
         defined_funcs.clear();
         assert(frame_stack.size() == 0);
     }
+
+    llvm::LLVMContext& getContext() { return context; }
+
+    // todo: push dummy Value to avoid accidental pop in empty stack?
+    void accept(const VoidExpr &) {}
 
 public:
     template<typename T>

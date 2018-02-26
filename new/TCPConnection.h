@@ -67,7 +67,8 @@ public:
         socket = std::make_unique<asio::ip::tcp::socket>(io_service);
         asio::connect(*socket, endpoint_iterator);
     }
-//    ~TCPConnection() {
+    ~TCPConnection() { close(); }
+
     void close() {
         this->socket->shutdown(asio::ip::tcp::socket::shutdown_both);
     }

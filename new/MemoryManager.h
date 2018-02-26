@@ -24,7 +24,7 @@ template<typename AddrT>
 struct MemRegion {
     explicit MemRegion() : size{0}, start{0}, end{0}, memType{MemType::Undefined} {};  // for constructing false-y value
 
-    MemRegion(const AddrT start, const AddrT size, const MemType memType)
+    MemRegion(AddrT start, AddrT size, MemType memType)
     : size{size}, start{start}, end{start+size}, memType{memType}
     {}
 
@@ -35,6 +35,17 @@ struct MemRegion {
 
     explicit operator bool() const { return size != 0; }
 };
+
+
+template<typename AddrT>
+inline void printMemRegion(std::ostream &stream, const MemRegion<AddrT>& mr, MemType memType = MemType::ReadWrite) {
+    stream << std::hex
+           << " memType:" << static_cast<int>(memType)
+           << " st:" << mr.start
+           << " end:" << mr.end
+           << " sz:" << mr.size
+           << std::endl;
+}
 
 
 template<typename AddrT>
@@ -61,10 +72,10 @@ public:
         assert(defaultAlignment % 2 == 0 || defaultAlignment == 1);
     }
 
-    MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) {
+    inline MemRegion<AddrT> alloc(AddrT memSize, MemType memType, AddrT alignment) {
         return allocImpl(memSize, memType, alignment);
     };
-    MemRegion<AddrT> alloc(AddrT memSize, MemType memType) {
+    inline MemRegion<AddrT> alloc(AddrT memSize, MemType memType) {
         return allocImpl(memSize, memType, defaultAlignment);
     }
 
@@ -72,22 +83,22 @@ public:
     /// \param memRegion
     /// \param alignment
     /// \return actually allocated region (takes @param alignment into consideration)
-    MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion, AddrT alignment) {
+    inline MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion, AddrT alignment) {
         return tryAllocImpl(memRegion, alignment);
     }
-    MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion) {
+    inline MemRegion<AddrT> tryAlloc(const MemRegion<AddrT> &memRegion) {
         return tryAllocImpl(memRegion, defaultAlignment);
     }
 
     // todo: what to do with alignment here?
-    void free(const MemRegion<AddrT> &memRegion) {
+    inline void free(const MemRegion<AddrT> &memRegion) {
         freeImpl(memRegion);
     };
 
     /// Free without any checks. Can be easily misused. Only for the most confident callers who know definetly what they've allocated.
     /// \param memRegion previously allocated region
     /// \return true if memRegion has consistent MemType
-    bool unsafeFree(const MemRegion<AddrT> &memRegion) {
+    inline bool unsafeFree(const MemRegion<AddrT> &memRegion) {
         return unsafeFreeImpl(memRegion);
     }
 
@@ -166,12 +177,8 @@ public:
             auto memType = kv.first;
             int i = 0;
             for (auto mr : kv.second) {
-                stream << "n:" << i++
-                       << " memType:" << static_cast<int>(memType)
-                       << " st:" << mr.start
-                       << " end:" << mr.end
-                       << " sz:" << mr.size
-                       << std::endl;
+                stream << "n:" << i++;
+                printMemRegion(stream, mr, memType);
             }
         }
     }

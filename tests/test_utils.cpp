@@ -43,6 +43,15 @@ std::unique_ptr<llvm::Module> loadModule(std::string &fileName, llvm::LLVMContex
     return loadModule(ir_stream, context);
 }
 
+void printSectionName(const llvm::object::SectionRef& section) {
+    llvm::StringRef section_name;
+    auto err_code0 = section.getName(section_name);
+    if (!err_code0) {
+        std::cerr << "section_name: " << section_name.str() << std::endl;
+    } else {
+        std::cerr << "error when accessing section.getName(): " << err_code0 << std::endl;
+    }
+}
 
 void dumpSections(const llvm::object::ObjectFile &objFile) {
     for (const auto &section : objFile.sections()) {

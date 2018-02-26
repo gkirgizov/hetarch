@@ -121,13 +121,13 @@ void handleClientConnection(tcp::socket &socket, ExecutableBuffer &execBuf) {
     }
 }
 
-void runServer(ExecutableBuffer *buf) {
+void runServer(ExecutableBuffer *buf, uint16_t port = 1334) {
     sleep(1);
     try
     {
         asio::io_service io_service;
 
-        tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), 1334));
+        tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), port));
 
         std::cout << "Server started..." << std::endl;
 
@@ -155,7 +155,7 @@ int main() {
             std::hex << std::uppercase <<
             reinterpret_cast<uint64_t>(codeBuf.data())
             << std::nouppercase << std::dec << std::endl;
-    std::thread t1(runServer, &codeBuf);
+    std::thread t1(runServer, &codeBuf, 13334);
     mainApplicationLoop();
     t1.join();
     return 0;

@@ -132,20 +132,29 @@ public:
     explicit CodeLoaderTest()
             : codeGen("x86_64-unknown-linux-gnu")
             , irt{}
-            , conn{}
-            , memMgr{}
+            , ctx{irt.getContext()}
+            , host{"localhost"}
+            , port{13334}
+            , conn{host, port}
+            , all_mem{conn.getBuffer(0), 1024 * 1024, mem::MemType::ReadWrite}
+            , memMgr{all_mem}
             , main_entry{utils::loadModule(main_entry_ll, ctx), "main"}
             , part1{utils::loadModule(ir1, ctx), "square"}
     {}
 
-    LLVMContext ctx{};
-
-    IRTranslator irt;
     CodeGen codeGen;
+    IRTranslator irt;
+    LLVMContext& ctx;
 
-    mock::MockConnection<addr_t> conn;
-    mock::MockMemManager<addr_t> memMgr;
+//    mock::MockConnection<addr_t> conn{};
+//    mock::MockMemManager<addr_t> memMgr{};
 
+    const std::string host;
+    const uint16_t port;
+    conn::TCPConnection<addr_t> conn;
+
+    const MemRegion<addr_t> all_mem;
+    mem::MemManagerBestFit<addr_t> memMgr;
 
     IRModule<VoidExpr> main_entry;
     IRModule<Var<int>, Var<int>> part1;
@@ -159,16 +168,26 @@ TEST_F(CodeLoaderTest, loadCodeTrivial) {
 }
 
 TEST_F(CodeLoaderTest, loadGlobal) {
-    DSLGlobal gi1{Var<int16_t>{42}};
-    DSLGlobal gi2{Var<int64_t>{53, "g1"}};
-    DSLGlobal gi3{Var<float>{0, ""}};
-    DSLGlobal gi4{Var<double>{0, "gd2"}};
 
-    auto r1 = CodeLoader::load(conn, &memMgr, mem::MemType::ReadWrite, irt, codeGen, gi1);
-    auto r2 = CodeLoader::load(conn, &memMgr, mem::MemType::ReadWrite, irt, codeGen, gi2);
-    auto r3 = CodeLoader::load(conn, &memMgr, mem::MemType::ReadWrite, irt, codeGen, gi3);
-    auto r4 = CodeLoader::load(conn, &memMgr, mem::MemType::ReadWrite, irt, codeGen, gi4);
+    auto load_tester = [&](auto&& g) {
+    //    auto r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, irt, codeGen, g);
+        ResidentGlobal r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, g);
 
+        auto mr = r.memRegion();
+        std::cerr << "loaded DSLGlobal: ";
+        mem::printMemRegion(std::cerr, mr);
+        EXPECT_TRUE(mr.size > 0);
+
+        auto loaded = r.read();
+        auto orig = g.x.initial_val();
+        std::cerr << "original: " << orig << "; loaded-read: " << loaded << std::endl;
+        EXPECT_TRUE((loaded == orig) || !g.x.initialised());
+    };
+
+    load_tester( DSLGlobal{Var<int16_t>{42}} );
+    load_tester( DSLGlobal{Var<int64_t>{53, "g1"}} );
+    load_tester( DSLGlobal{Var<float>{3.1415, ""}} );
+    load_tester( DSLGlobal{Var<double>{69e-69, "gd2"}} );
 }
 
 

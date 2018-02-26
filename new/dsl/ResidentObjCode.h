@@ -28,7 +28,7 @@ struct ResidentObjCode : public dsl::DSLCallable<ResidentObjCode<AddrT, TdRet, T
 
     ResidentObjCode(mem::MemManager<AddrT> *memManager, mem::MemRegion<AddrT> memRegion,
                     AddrT callAddr, bool unloadable)
-            : MemResident<AddrT>(memManager, memRegion, unloadable), callAddr(callAddr)
+            : MemResident<AddrT>(*memManager, memRegion, unloadable), callAddr(callAddr)
     {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
@@ -49,8 +49,8 @@ template<typename AddrT, typename Td
 class ResidentGlobal : public MemResident<AddrT>, public Td {
 //    using MemResident<AddrT>::MemResident;
 //    using simple_type = i_t<Td>;
-    using conn_t = conn::IConnection<AddrT>;
-    conn_t& conn;
+
+    conn::IConnection<AddrT>& conn;
 public:
     const AddrT addr;
 
@@ -58,10 +58,13 @@ public:
     using simple_type = remove_cvref_t<type>;
 
     ResidentGlobal(
-            conn_t& conn,
-            mem::MemManager<AddrT> *memManager, mem::MemRegion<AddrT> memRegion, bool unloadable
+            conn::IConnection<AddrT>& conn,
+            mem::MemManager<AddrT>& memManager, mem::MemRegion<AddrT> memRegion, bool unloadable
     )
-            : MemResident<AddrT>{memManager, memRegion, unloadable}, addr{memRegion.start}, conn{conn} {}
+            : MemResident<AddrT>{memManager, memRegion, unloadable}
+            , conn{conn}
+            , addr{memRegion.start}
+    {}
 
     inline std::enable_if_t<!Td::const_q> write(const simple_type& val) {
         conn.write(addr, sizeof(simple_type), reinterpret_cast<char*>(val));
@@ -70,8 +73,8 @@ public:
     type read() {
         char bytes[sizeof(simple_type)];
         conn.read(addr, sizeof(simple_type), bytes);
-        type val = reinterpret_cast<type>(bytes);
-        return val;
+        auto val_ptr = reinterpret_cast<type*>(bytes);
+        return *val_ptr;
     }
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }

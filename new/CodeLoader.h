@@ -6,6 +6,7 @@
 #include "MemResident.h"
 #include "CodeGen.h"
 
+#include "dsl/dsl_type_traits.h"
 #include "dsl/IRTranslator.h"
 #include "supportingClasses.h"
 #include "dsl/ResidentObjCode.h"
@@ -21,7 +22,7 @@ class CodeLoader {
     using content_t = llvm::StringRef;
 
 public:
-    template<typename AddrT, typename Td>
+/*    template<typename AddrT, typename Td>
     static dsl::ResidentGlobal<AddrT, Td> load(conn::IConnection<AddrT>& conn,
                                                mem::MemManager<AddrT> *memManager,
                                                mem::MemType memType,
@@ -49,13 +50,7 @@ public:
             const llvm::object::SectionRef& section = *it_exp.get();
 
             // debug things
-            StringRef section_name;
-            auto err_code0 = section.getName(section_name);
-            if (!err_code0) {
-                std::cerr << "section_name: " << section_name.str() << std::endl;
-            } else {
-                std::cerr << "error when accessing section.getName(): " << err_code0 << std::endl;
-            }
+            utils::printSectionName(section);
 
 //            assert(g.x.initialised() && section.isData() || !g.x.initialised() && section.isBSS());
 //            assert(section.isData() || section.isBSS());
@@ -79,43 +74,84 @@ public:
         } else {
             // todo: handle section error
         }
-    }
+    }*/
+
+    template<typename AddrT, typename Td>
+    static dsl::ResidentGlobal<AddrT, Td> load(conn::IConnection<AddrT> &conn,
+                                               mem::MemManager<AddrT> &memManager,
+                                               mem::MemType memType,
+                                               const dsl::DSLGlobal<Td>& g) {
+
+        const auto size = reinterpret_cast<AddrT>(sizeof(dsl::f_t<Td>));
+        auto memRegion = memManager.alloc(size, memType);
+        if (memRegion.size >= size) {
+
+            if (g.x.initialised()) {
+                // todo: endianness?
+                // todo: specialise translating initial value to char* (i.e. for Array, for Struct)
+//                conn.write(memRegion.start, size, toBytes(g.x.initial_val()));
+                conn.write(memRegion.start, size, reinterpret_cast<const char*>(&g.x.initial_val()));
+            }
+
+            // todo: is it always unloadable
+            return dsl::ResidentGlobal<AddrT, Td>{conn, memManager, memRegion, true};
+
+        } else {
+            // todo: handle not enough mem
+        }
+    };
+
 
     template<typename AddrT, typename RetT, typename... Args>
     static dsl::ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT> *conn,
                                                mem::MemManager<AddrT> *memManager,
                                                mem::MemType memType,
                                                const ObjCode<RetT, Args...> &objCode) {
-        // if not PIC then relocate symbols ??? but it must be done after allocated memManager...
+        // Load only '.text' section. otherwise need to implement relocations and all the stuff here
 
-        // strip ObjCode from all extra things
-        auto contents = getContents(objCode);
-        // find its size
-        auto contentsSize = reinterpret_cast<AddrT>(contents.size());
+        // LOG FOR DEBUG
+        utils::dumpSections(*objCode.getBinary());
+        utils::dumpSymbols(*objCode.getBinary());
 
-        // alloc memory of needed type
-        auto memRegion = memManager->alloc(contentsSize, memType);
-        if (memRegion.size >= contentsSize) {
+        const llvm::object::SymbolRef& symbol = objCode.getSymbol();
+//        for (const auto& section_exp : symbol.getSection()) {
+        if(auto it_exp = symbol.getSection()) {
+            const llvm::object::SectionRef& section = *it_exp.get();
+            const auto contentsSize = reinterpret_cast<AddrT>(section.getSize());
 
-            // send contents through IConnection
-            conn->write(memRegion.start, contentsSize, contents.data());
+            assert(section.isText());
 
-            // log for debug
-            utils::dumpSections(*objCode.getBinary());
-            utils::dumpSymbols(*objCode.getBinary());
+            llvm::StringRef contents;
+            auto err_code = section.getContents(contents);
+            if (!err_code) {
 
-            // todo: load only '.text' section. otherwise need to implement relocations and all the stuff here
-            // get offset of needed symbol
-            if (auto offsetInSection = objCode.getSymbol().getAddress()) {
-                auto addr = offsetInSection.get();
-                // create unloadable resident
-                return dsl::ResidentObjCode<AddrT, RetT, Args...>(memManager, memRegion, addr, true);
+                // LOG FOR DEBUG
+                std::cerr << "contentsSize=" << contentsSize << "; contents.size()=" << contents.size() << std::endl;
+                assert(contents.size() == contentsSize);
 
+                auto memRegion = memManager->alloc(contentsSize, memType);
+                if (memRegion.size >= contentsSize) {
+
+                    conn->write(memRegion.start, contentsSize, contents.data());
+
+                    // get offset of needed symbol
+                    if (auto offsetInSection = symbol.getAddress()) {
+                        const auto offset = reinterpret_cast<AddrT>(offsetInSection.get());
+                        const AddrT callAddr = offset + memRegion.start;
+                        // Create unloadable resident
+                        return dsl::ResidentObjCode<AddrT, RetT, Args...>(memManager, memRegion, callAddr, true);
+
+                    } else {
+                        // todo: handle some curious thing with unknown address (offset???) of the symbol
+                    }
+                } else {
+                    // todo: throw mem error
+                }
             } else {
-                // todo: handle some curious thing with unknown address (offset???) of the symbol
+                // todo: handle err_code
             }
         } else {
-            // todo: throw mem error
+            // todo: handle section error
         }
     };
 
@@ -155,6 +191,13 @@ private:
 
 };
 
+
+template<typename T>
+auto toBytes(const T &x) {
+    if constexpr (std::is_arithmetic_v<T>) {
+        return reinterpret_cast<const char*>(&x);
+    }
+}
 
 
 // example function: avoid all temp. objects (IRModule, ObjCode) if they're not needed
