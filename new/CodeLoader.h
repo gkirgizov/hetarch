@@ -17,12 +17,12 @@
 
 namespace hetarch {
 
-
 class CodeLoader {
     using content_t = llvm::StringRef;
 
 public:
-/*    template<typename AddrT, typename Td>
+
+    /*    template<typename AddrT, typename Td>
     static dsl::ResidentGlobal<AddrT, Td> load(conn::IConnection<AddrT>& conn,
                                                mem::MemManager<AddrT> *memManager,
                                                mem::MemType memType,
@@ -80,17 +80,35 @@ public:
     static dsl::ResidentGlobal<AddrT, Td> load(conn::IConnection<AddrT> &conn,
                                                mem::MemManager<AddrT> &memManager,
                                                mem::MemType memType,
-                                               const dsl::DSLGlobal<Td>& g) {
+                                               const dsl::DSLGlobal<Td>& g)
+    {
+        return load(
+                conn, memManager, memType, g.x.initial_val(), g.x.initialised()
+        );
+    };
 
-        const auto size = reinterpret_cast<AddrT>(sizeof(dsl::f_t<Td>));
+    // todo: look carefully for sanity of mapping T->dsl::Var<T>
+//    template<typename AddrT, typename T, typename Td = dsl::Var< std::remove_reference_t<T> >
+    template<typename AddrT, typename T
+            , typename = typename std::enable_if_t< !dsl::is_val_v<T> >>
+    static auto load(conn::IConnection<AddrT> &conn,
+                     mem::MemManager<AddrT> &memManager,
+                     mem::MemType memType,
+                     const T& g,
+                     bool writeValue = true)
+    {
+//        using val_type = std::remove_reference_t<T>;
+        using val_type = T;
+        using Td = dsl::Var<val_type>;
+
+        const auto size = reinterpret_cast<AddrT>(sizeof(val_type));
         auto memRegion = memManager.alloc(size, memType);
         if (memRegion.size >= size) {
 
-            if (g.x.initialised()) {
+            if (writeValue) {
                 // todo: endianness?
                 // todo: specialise translating initial value to char* (i.e. for Array, for Struct)
-//                conn.write(memRegion.start, size, toBytes(g.x.initial_val()));
-                conn.write(memRegion.start, size, reinterpret_cast<const char*>(&g.x.initial_val()));
+                conn.write(memRegion.start, size, toBytes(g));
             }
 
             // todo: is it always unloadable
@@ -99,14 +117,15 @@ public:
         } else {
             // todo: handle not enough mem
         }
+
     };
 
 
     template<typename AddrT, typename RetT, typename... Args>
-    static dsl::ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT> *conn,
-                                               mem::MemManager<AddrT> *memManager,
+    static dsl::ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT>& conn,
+                                               mem::MemManager<AddrT>& memManager,
                                                mem::MemType memType,
-                                               const ObjCode<RetT, Args...> &objCode) {
+                                               const ObjCode<RetT, Args...>& objCode) {
         // Load only '.text' section. otherwise need to implement relocations and all the stuff here
 
         // LOG FOR DEBUG
@@ -129,10 +148,10 @@ public:
                 std::cerr << "contentsSize=" << contentsSize << "; contents.size()=" << contents.size() << std::endl;
                 assert(contents.size() == contentsSize);
 
-                auto memRegion = memManager->alloc(contentsSize, memType);
+                auto memRegion = memManager.alloc(contentsSize, memType);
                 if (memRegion.size >= contentsSize) {
 
-                    conn->write(memRegion.start, contentsSize, contents.data());
+                    conn.write(memRegion.start, contentsSize, contents.data());
 
                     // get offset of needed symbol
                     if (auto offsetInSection = symbol.getAddress()) {
@@ -155,20 +174,18 @@ public:
         }
     };
 
-    template<typename AddrT, typename RetT, typename... Args>
-    static dsl::ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT> *conn,
-                                               mem::MemRegion<AddrT> memRegion,
-                                               const ObjCode<RetT, Args...> &objCode) {
-        //
-
-        // call private_load
-    };
 
     template<typename AddrT, typename RetT, typename... Args>
-    static bool checkEquality(conn::IConnection<AddrT> *conn,
+    static bool checkEquality(conn::IConnection<AddrT>& conn,
                               mem::MemRegion<AddrT> memRegion,
-                              const ObjCode<RetT, Args...> &objCode);
+                              const ObjCode<RetT, Args...>& objCode);
 
+    template<typename T>
+    static const char* toBytes(const T &x) {
+        if constexpr (std::is_arithmetic_v<T>) {
+            return reinterpret_cast<const char*>(&x);
+        }
+    }
 private:
     template<typename RetT, typename... Args>
     static content_t getContents(const ObjCode<RetT, Args...> &objCode) {
@@ -190,14 +207,6 @@ private:
     };
 
 };
-
-
-template<typename T>
-auto toBytes(const T &x) {
-    if constexpr (std::is_arithmetic_v<T>) {
-        return reinterpret_cast<const char*>(&x);
-    }
-}
 
 
 // example function: avoid all temp. objects (IRModule, ObjCode) if they're not needed
