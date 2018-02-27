@@ -30,8 +30,8 @@ public:
     mem::MemRegion<AddrT> memRegion() const { return m_memRegion; }
 
     // Move-only type to enforce more reasonable usage
-    MemResident(MemResident &&) = default;
-    MemResident &operator=(MemResident &&) = default;
+    MemResident(MemResident<AddrT> &&) = default;
+    MemResident &operator=(MemResident<AddrT> &&) = default;
 
 };
 

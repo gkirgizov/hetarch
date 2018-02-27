@@ -26,9 +26,9 @@ struct ResidentObjCode : public dsl::DSLCallable<ResidentObjCode<AddrT, TdRet, T
                          public MemResident<AddrT> {
     const AddrT callAddr;
 
-    ResidentObjCode(mem::MemManager<AddrT> *memManager, mem::MemRegion<AddrT> memRegion,
+    ResidentObjCode(mem::MemManager<AddrT>& memManager, mem::MemRegion<AddrT> memRegion,
                     AddrT callAddr, bool unloadable)
-            : MemResident<AddrT>(*memManager, memRegion, unloadable), callAddr(callAddr)
+            : MemResident<AddrT>(memManager, memRegion, unloadable), callAddr(callAddr)
     {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
@@ -56,6 +56,18 @@ public:
 
     using type = f_t<Td>;
     using simple_type = remove_cvref_t<type>;
+
+    using this_t = ResidentGlobal<AddrT, Td>;
+    using Td::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+
+//    ResidentGlobal(this_t &&) = default; // todo: wtf
+    ResidentGlobal(this_t &&other)
+//            : MemResident<AddrT>(std::move(static_cast<MemResident<AddrT>&&>(std::move(other))))
+            : MemResident<AddrT>(static_cast< MemResident<AddrT>&& >(std::move(other)))
+            , conn{other.conn}
+            , addr{other.addr}
+    {}
 
     ResidentGlobal(
             conn::IConnection<AddrT>& conn,
