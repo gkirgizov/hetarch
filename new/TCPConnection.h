@@ -95,6 +95,20 @@ public:
         std::copy(response.begin(), response.end(), buf);
     }
 
+    bool call(AddrT addr) override {
+        std::vector<uint8_t> vec;
+        detail::vecAppend(vec, static_cast<uint32_t>(hetarch::conn::Actions::Call));
+        detail::vecAppend(vec, addr);
+        detail::writeBuffer(*socket, vec);
+        auto response = detail::readBuffer(*socket);
+        if (auto res = detail::vecRead<uint32_t>(response, 0)) {
+//            return res;
+            return true;
+        };
+//        return false;
+        return true;
+    }
+
     AddrT getBuffer(unsigned idx) {
         std::vector<uint8_t> vec;
         detail::vecWrite(vec, 0, static_cast<uint32_t>(hetarch::conn::Actions::GetBuffAddr));
