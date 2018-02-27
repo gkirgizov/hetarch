@@ -2,7 +2,6 @@
 
 #include <cstdint>
 
-//#include "../new/dsl/IDSLCallable.h"
 #include "../new/dsl/IRTranslator.h"
 #include "../new/dsl/dsl_meta.h"
 
@@ -297,6 +296,7 @@ TEST_F(GenericsTest, genericDSLFunctions2) {
         return (... + xs);
     };
 
+    // Reduces arbitrrary expressions, not just of one type
     auto get_reducer = [&](auto&& binary_op) {
         return [&](auto&& x1, auto&&... xs) {
             // Redundant assignments should be optimized out later by LLVm

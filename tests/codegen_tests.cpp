@@ -13,6 +13,7 @@
 #include "../new/CodeLoader.h"
 #include "../new/TCPConnection.h"
 #include "../new/MemoryManager.h"
+#include "../new/Executor.h"
 
 #include "../new/dsl.h"
 
@@ -31,6 +32,7 @@ using addr_t = HETARCH_TARGET_ADDRT;
 
 const string ress{TESTS_RES_DIR};
 string main_entry_ll(ress + "main.ll");
+string do_nothing_ll(ress + "do_nothing.ll");
 string ir0{ress + "self_sufficient.ll"};
 string ir1{ress + "part1.ll"};
 string ir2{ress + "part2.ll"};
@@ -138,8 +140,11 @@ public:
             , conn{host, port}
             , all_mem{conn.getBuffer(0), 1024 * 1024, mem::MemType::ReadWrite}
             , memMgr{all_mem}
+            , exec{conn, memMgr, irt, codeGen}
             , main_entry{utils::loadModule(main_entry_ll, ctx), "main"}
-            , part1{utils::loadModule(ir1, ctx), "square"}
+            , do_nothing{utils::loadModule(do_nothing_ll, ctx), "do_nothing"}
+//            , part1{utils::loadModule(ir1, ctx), "square"}
+            , self_sufficient{utils::loadModule(ir0, ctx), "pow_naive"}
     {}
 
     CodeGen codeGen;
@@ -156,15 +161,30 @@ public:
     const MemRegion<addr_t> all_mem;
     mem::MemManagerBestFit<addr_t> memMgr;
 
+    Executor<addr_t> exec;
+
     IRModule<VoidExpr> main_entry;
-    IRModule<Var<int>, Var<int>> part1;
+    IRModule<VoidExpr> do_nothing;
+//    IRModule<Var<int>, Var<int>> part1;
+    IRModule<Var<int>, Var<int>, Var<int>> self_sufficient;
 };
 
 
 TEST_F(CodeLoaderTest, loadCodeTrivial) {
 //    auto objCode = codeGen.compile(main_entry);
-    auto objCode = codeGen.compile(part1);
-    auto resident = CodeLoader::load(&conn, &memMgr, mem::MemType::ReadWrite, objCode);
+    auto tester = [&](auto&& irModule) {
+        auto objCode = codeGen.compile(irModule);
+        return CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, objCode);
+//        auto&& resident = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, objCode);
+//        EXPECT_TRUE(resident.callAddr != 0);
+//        return std::move(resident);
+    };
+
+    auto emptyCallable = tester(do_nothing);
+    EXPECT_TRUE(emptyCallable.callAddr != 0);
+    EXPECT_TRUE(conn.call(emptyCallable.callAddr));
+    auto c2 = tester(self_sufficient);
+    EXPECT_TRUE(c2.callAddr != 0);
 }
 
 TEST_F(CodeLoaderTest, loadGlobal) {
@@ -172,6 +192,10 @@ TEST_F(CodeLoaderTest, loadGlobal) {
     auto load_tester = [&](auto&& g) {
     //    auto r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, irt, codeGen, g);
         ResidentGlobal r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, g);
+
+        EXPECT_TRUE(std::is_move_constructible_v<decltype(r)>)
+                            << "ResidentGlobal must by constructible! (of type T = "
+                            << utils::type_name<decltype(r)>() << ")" << std::endl;
 
         auto mr = r.memRegion();
         std::cerr << "loaded DSLGlobal: ";
@@ -188,6 +212,47 @@ TEST_F(CodeLoaderTest, loadGlobal) {
     load_tester( DSLGlobal{Var<int64_t>{53, "g1"}} );
     load_tester( DSLGlobal{Var<float>{3.1415, ""}} );
     load_tester( DSLGlobal{Var<double>{69e-69, "gd2"}} );
+}
+
+TEST_F(CodeLoaderTest, loadAndCall) {
+
+    auto generic_caller = [&](auto&& dsl_generator, auto... args) {
+        // Make function from generator
+//        DSLFunction dsl_fun = make_dsl_fun_from_arg_types(dsl_generator, dsl_args...);
+        DSLFunction dsl_fun = make_dsl_fun_from_arg_types< Var<decltype(args)>... >(dsl_generator);
+
+        // Translate, compile and load it
+        IRModule translated = irt.translate(dsl_fun);
+        bool verified_ok = utils::verify_module(translated);
+        EXPECT_TRUE(verified_ok) << "failed verify with fun: " << dsl_fun.name() << std::endl;
+        translated.get().dump();
+
+        ObjCode compiled = codeGen.compile(translated);
+        EXPECT_TRUE(compiled) << "module for fun '" << dsl_fun.name() << "' wasn't compiled okey!" << std::endl;
+
+        ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, compiled);
+
+        // Call it with some args
+//        auto result = exec.call(resident_fun, std::forward<decltype(dsl_args)>(dsl_args)...);
+        auto result = exec.call(resident_fun, args...);
+        return result;
+    };
+
+    // Define some dsl functions
+    auto max_dsl_generator = [](auto&& x, auto&& y) {
+        return If(x > y, x, y);
+    };
+//    Var x{22}, y{11};
+    int x{22}, y{11};
+    EXPECT_TRUE(std::max(x, y) == generic_caller(max_dsl_generator, x, y));
+
+//    DSLFunction dsl_max = make_dsl_fun_from_arg_types< Var<int>, Var<int> >(max_dsl_generator);
+//    IRModule translated = irt.translate(dsl_max);
+//    ObjCode compiled = codeGen.compile(translated);
+//    ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, compiled);
+//    auto result = exec.call(resident_fun);
+
+
 }
 
 

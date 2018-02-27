@@ -43,7 +43,8 @@ execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti") # why -fno-rtti?
+# need -fpermissive to allow casts which lose precision
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fpermissive")
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
@@ -151,7 +152,7 @@ add_library(temp_target
         new/dsl/dsl_type_traits.h
         new/dsl/array.h
         new/dsl/ptr.h
-        new/dsl/dsl_meta.h new/TCPConnection.h new/TCPConnection.cpp)
+        new/dsl/dsl_meta.h new/TCPConnection.h new/TCPConnection.cpp new/Executor.h)
 
 
 add_subdirectory(examples)
