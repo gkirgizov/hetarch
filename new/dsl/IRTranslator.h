@@ -484,6 +484,7 @@ public:
         push_val(inst);
     }
 
+    // TODO: these things with using ... types (e..g in eval_func_args) ain't a good sign.
 
     template<typename TdCallable, typename... ArgExprs
             , typename = typename std::enable_if_t< is_dsl_loaded_callable_v<TdCallable> >>
@@ -500,15 +501,25 @@ public:
         push_val(inst);
     }
 
-/*    template<typename AddrT, typename TdRet, typename ...ArgExprs>
+    template<typename AddrT, typename TdRet, typename ...ArgExprs>
     void accept(const ECallLoaded<AddrT, TdRet, ArgExprs...> &e) {
+//        using fun_t = std::remove_reference_t<TdCallable>;
+        using fun_t = typename ECallLoaded<AddrT, TdRet, ArgExprs...>::fun_t;
+        using ret_t = typename fun_t::ret_t;
+        using args_t = typename fun_t::args_t;
+
+        // todo: cast callAddr to funcPtr type first?
+        llvm::FunctionType* fty = llvm_map.get_func_type<ret_t, args_t>();
+        auto addr_value = llvm_map.get_const(e.callee.callAddr);
+        auto fun_ptr = cur_builder->CreateIntToPtr(addr_value, fty->getPointerTo(), "fun_ptr");
+
         llvm::CallInst* inst = cur_builder->CreateCall(
-                llvm_map.get_func_type<f_t<TdRet>, f_t<TdArgs>...>(),
-                llvm_map.get_const(e.callee.callAddr),
-                eval_func_args(e.args)
+                fty,
+                fun_ptr,
+                eval_func_args<fun_t>(e.args)
         );
         push_val(inst);
-    }*/
+    }
 
 private:
     template<typename TdCallable, typename ArgExprsTuple

@@ -25,10 +25,11 @@ struct DSLConst : public Expr<T> {
 
 
 template<typename Td, typename = typename std::enable_if_t< is_val_v<Td> >>
-struct DSLGlobal {
+struct DSLGlobal : public ValueBase {
     const Td x;
 
     // only rvalues allowed
+    explicit DSLGlobal() = default;
     explicit constexpr DSLGlobal(Td&& x) : x{std::move(x)} {}
 
 //    inline constexpr auto name() const { return x.name(); }

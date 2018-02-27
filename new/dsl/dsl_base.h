@@ -31,20 +31,22 @@ struct ExprBase : public ESBase {};
 template<typename T>
 struct Expr : public ExprBase { using type = T; };
 
-struct VoidExpr : public Expr<void> {
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
-};
-const VoidExpr Unit{};
-
-
 struct ValueBase : public DSLBase {};
 
 struct CallableBase : public DSLBase {
     CallableBase() = default;
-    CallableBase(const CallableBase &) = delete;
+//    CallableBase(const CallableBase &) = delete;
+    CallableBase(CallableBase &&) = default;
 
     virtual ~CallableBase() = default;
 };
+
+struct VoidExpr : public ValueBase {
+    using type = void;
+//struct VoidExpr : public Expr<void> {
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+};
+const VoidExpr Unit{};
 
 
 

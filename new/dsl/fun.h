@@ -65,6 +65,8 @@ using param_for_arg_t = typename param_for_arg<TdExpr>::type;
 
 template<typename TdCallable, typename... ArgExprs>
 struct ECall : public Expr<typename std::remove_reference_t<TdCallable>::ret_t> {
+    using fun_t = std::remove_reference_t<TdCallable>;
+
     const TdCallable& callee;
     const std::tuple<ArgExprs...> args;
 
@@ -84,6 +86,8 @@ constexpr auto makeCall(const TdCallable& callable, ArgExprs&&... args) {
 
 template<typename TdCallable, typename TdRet, typename ...TdArgs>
 struct DSLCallable : public CallableBase {
+    static_assert(is_val_v<TdRet, TdArgs...>);
+
     using dsl_ret_t = TdRet;
     using dsl_args_t = std::tuple<TdArgs...>;
     using ret_t = f_t<TdRet>;
@@ -235,7 +239,6 @@ template<typename BodyGenerator, typename ...TdArgs>
 DSLFunction(std::string_view, std::tuple<TdArgs...>&&, BodyGenerator&&) ->
 //typename build_dsl_fun_type<BodyGenerator, TdArgs...>::type;
 DSLFunction< std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
-//DSLFunction< ReturnImpl< std::invoke_result_t<BodyGenerator, TdArgs...> >, TdArgs...>;
 
 }
 }
