@@ -270,8 +270,8 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         return IRModule<Td>{g_module, g_name};
     }
 
-    template<typename AddrT, typename Td>
-    void accept(const ResidentGlobal<AddrT, Td>& g) {
+    template<typename AddrT, typename T, bool is_const, bool is_volatile>
+    void accept(const ResidentVar<AddrT, T, is_const, is_volatile>& g) {
         // todo: specialise for non-volatile Const value, returning just llvm::Constant* of needed type?
             // we can't change init_val for Const value after loading, can we?
         if constexpr (g.const_q) {
@@ -282,11 +282,10 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
         llvm::Value* g_ptr = nullptr;
         auto known = frame->allocated.find(&g);
         if (known == std::end(frame->allocated)) {
-            llvm::Type* element_type = llvm_map.get_type<f_t<Td>>();
+            llvm::Type* element_type = llvm_map.get_type<T>();
             llvm::PointerType* ptr_type = element_type->getPointerTo();
 
             auto g_addr = llvm_map.get_const(g.addr);
-            // todo: create 'static' llvm cast ConstantInt->Ptr ?
             g_ptr = cur_builder->CreateIntToPtr(g_addr, ptr_type, g.name().data());
             frame->allocated[&g] = g_ptr;
         } else {
@@ -389,7 +388,7 @@ public:
     void accept(const SeqExpr<Td1, Td2> &seq) {
         seq.e1.toIR(*this);
         // Sequence discards result of evaluation of left expression
-        pop_val();
+        pop_val(); // todo: avoid unneeded CreateLoad in pop_val; just pop the stack
         // And returns result of evaluation of right expression
         seq.e2.toIR(*this);
     }

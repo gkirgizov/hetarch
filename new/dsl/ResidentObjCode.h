@@ -43,57 +43,5 @@ template<typename T>
 inline constexpr bool is_dsl_loaded_callable_v = is_dsl_loaded_callable<T>::value;
 
 
-template<typename AddrT, typename Td
-        , typename = typename std::enable_if_t<is_val_v<Td>> // just to be sure
->
-class ResidentGlobal : public MemResident<AddrT>, public Td {
-//    using MemResident<AddrT>::MemResident;
-//    using simple_type = i_t<Td>;
-
-    conn::IConnection<AddrT>& conn;
-public:
-    const AddrT addr;
-
-    using type = f_t<Td>;
-    using simple_type = remove_cvref_t<type>;
-
-    using this_t = ResidentGlobal<AddrT, Td>;
-    using Td::operator=;
-    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
-
-//    ResidentGlobal(this_t &&) = default; // todo: wtf
-    ResidentGlobal(this_t &&other)
-//            : MemResident<AddrT>(std::move(static_cast<MemResident<AddrT>&&>(std::move(other))))
-            : MemResident<AddrT>(static_cast< MemResident<AddrT>&& >(std::move(other)))
-            , conn{other.conn}
-            , addr{other.addr}
-    {}
-
-    ResidentGlobal(
-            conn::IConnection<AddrT>& conn,
-            mem::MemManager<AddrT>& memManager, mem::MemRegion<AddrT> memRegion, bool unloadable
-    )
-            : MemResident<AddrT>{memManager, memRegion, unloadable}
-            , conn{conn}
-            , addr{memRegion.start}
-    {}
-
-    inline std::enable_if_t<!Td::const_q> write(const simple_type& val) {
-        conn.write(addr, sizeof(simple_type), reinterpret_cast<char*>(val));
-    };
-
-    type read() {
-        char bytes[sizeof(simple_type)];
-        conn.read(addr, sizeof(simple_type), bytes);
-        auto val_ptr = reinterpret_cast<type*>(bytes);
-        return *val_ptr;
-    }
-
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
-};
-
-
-
-
 }
 }

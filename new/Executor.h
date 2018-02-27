@@ -2,6 +2,7 @@
 
 
 #include <type_traits>
+#include <tuple>
 
 #include "dsl/dsl_type_traits.h"
 #include "dsl/dsl_base.h"
@@ -24,8 +25,11 @@ class Executor {
 
     template<typename T>
     auto load_single_arg(T&& arg, bool write = true) {
-//        return CodeLoader::load(conn, memManager, mem::MemType::ReadWrite, arg, write);
-        return CodeLoader::load(conn, memManager, mem::MemType::ReadWrite, std::forward<T>(arg), write);
+        return CodeLoader::load(
+                conn,
+                memManager, mem::MemType::ReadWrite,
+                dsl::Var{std::forward<T>(arg)}
+        );
     }
 
 public:
@@ -41,8 +45,6 @@ public:
     {}
 
     using SimpleResident = dsl::ResidentObjCode<AddrT, dsl::VoidExpr>;
-//    template<>
-//    void call<dsl::VoidExpr>(const SimpleResident& f) {
     void call(const SimpleResident& f) {
         if (!conn.call(f.callAddr)) {
             // todo: handle call error
@@ -57,16 +59,11 @@ public:
         using args_t = std::tuple< std::remove_reference_t<Args>... >;
         static_assert(std::is_same_v<params_t, args_t>, "Incorrect arguments!");
 
-        // for each arg
-        //  create corresponding const DSLGlobal and load them
-        //      ...but why indirection? why not just load raw values?
-        //              ah, i see... it is not in-dsl call. it is 'usual' C++ call.
-
         // Create DSLGlobal for return value and load it
         dsl::DSLGlobal<TdRet> ret_g{};
-        dsl::ResidentGlobal ret = CodeLoader::load(conn, memManager, mem::MemType::ReadWrite, ret_g);
+        auto ret = CodeLoader::load(conn, memManager, mem::MemType::ReadWrite, ret_g);
         // todo: load all args in one pass
-        auto args_g = std::tuple{load_single_arg(args)...};
+        auto args_g = std::tuple(load_single_arg(args)...);
 
         // Create dummy function without parameters and return value
         dsl::DSLFunction dummy_caller{
@@ -98,11 +95,10 @@ public:
 //                )
 //        );
 
-        // todo: unload arguments; unload arguments
+        // todo: unload arguments; unload return
 
         return ret.read();
     }
-
 
 
 };

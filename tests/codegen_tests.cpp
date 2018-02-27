@@ -191,7 +191,7 @@ TEST_F(CodeLoaderTest, loadGlobal) {
 
     auto load_tester = [&](auto&& g) {
     //    auto r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, irt, codeGen, g);
-        ResidentGlobal r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, g);
+        ResidentVar r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, g);
 
         EXPECT_TRUE(std::is_move_constructible_v<decltype(r)>)
                             << "ResidentGlobal must by constructible! (of type T = "

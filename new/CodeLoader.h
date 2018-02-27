@@ -77,42 +77,37 @@ public:
     }*/
 
     template<typename AddrT, typename Td>
-    static dsl::ResidentGlobal<AddrT, Td> load(conn::IConnection<AddrT> &conn,
-                                               mem::MemManager<AddrT> &memManager,
-                                               mem::MemType memType,
-                                               const dsl::DSLGlobal<Td>& g)
-    {
-        return load(
-                conn, memManager, memType, g.x.initial_val(), g.x.initialised()
-        );
-    };
-
-    // todo: look carefully for sanity of mapping T->dsl::Var<T>
-//    template<typename AddrT, typename T, typename Td = dsl::Var< std::remove_reference_t<T> >
-    template<typename AddrT, typename T
-            , typename = typename std::enable_if_t< !dsl::is_val_v<T> >>
     static auto load(conn::IConnection<AddrT> &conn,
                      mem::MemManager<AddrT> &memManager,
                      mem::MemType memType,
-                     const T& g,
-                     bool writeValue = true)
+                     const dsl::DSLGlobal<Td>& g)
     {
-//        using val_type = std::remove_reference_t<T>;
+        return load(conn, memManager, memType, g.x);
+    };
+
+    template<typename AddrT, typename T, bool is_const, bool is_volatile>
+    static auto load(conn::IConnection<AddrT> &conn,
+                     mem::MemManager<AddrT> &memManager,
+                     mem::MemType memType,
+                     const dsl::Var<T, is_const, is_volatile>& g)
+    {
         using val_type = T;
-        using Td = dsl::Var<val_type>;
+        using Td = dsl::Var<val_type, is_const, is_volatile>;
 
         const auto size = reinterpret_cast<AddrT>(sizeof(val_type));
         auto memRegion = memManager.alloc(size, memType);
         if (memRegion.size >= size) {
 
-            if (writeValue) {
+            if (g.initialised()) {
                 // todo: endianness?
-                // todo: specialise translating initial value to char* (i.e. for Array, for Struct)
-                conn.write(memRegion.start, size, toBytes(g));
+                conn.write(memRegion.start, size, toBytes(g.initial_val()));
             }
 
             // todo: is it always unloadable
-            return dsl::ResidentGlobal<AddrT, Td>{conn, memManager, memRegion, true};
+            return dsl::ResidentVar<AddrT, T, is_const, is_volatile>{
+                    conn, memManager, memRegion, true,
+                    g.initial_val(), g.name()
+            };
 
         } else {
             // todo: handle not enough mem
@@ -180,6 +175,7 @@ public:
                               mem::MemRegion<AddrT> memRegion,
                               const ObjCode<RetT, Args...>& objCode);
 
+    // todo: specialise translating initial value to char* (i.e. for Array, for Struct)
     template<typename T>
     static const char* toBytes(const T &x) {
         if constexpr (std::is_arithmetic_v<T>) {
