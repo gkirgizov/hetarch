@@ -7,10 +7,10 @@ namespace hetarch {
 
 template<typename AddrT>
 class MemResident {
-    mem::MemManager<AddrT>& m_memManager;
     mem::MemRegion<AddrT> m_memRegion;
     bool m_loaded;
-
+protected:
+    mem::MemManager<AddrT>& m_memManager;
 public:
     const bool unloadable;
 
@@ -20,7 +20,7 @@ public:
 
     bool loaded() const { return m_loaded; }
 
-    void unload() {
+    virtual void unload() {
         if (unloadable && m_loaded) {
             m_memManager.free(m_memRegion);
             m_loaded = false;

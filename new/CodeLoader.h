@@ -1,16 +1,17 @@
 #pragma once
 
+#include <numeric>
 
 #include "IConnection.h"
 #include "MemoryManager.h"
 #include "MemResident.h"
 #include "CodeGen.h"
+#include "supportingClasses.h"
 
 #include "dsl/dsl_type_traits.h"
-#include "dsl/IRTranslator.h"
-#include "supportingClasses.h"
-#include "dsl/ResidentObjCode.h"
 #include "dsl/fun.h"
+#include "dsl/ResidentObjCode.h"
+#include "dsl/IRTranslator.h"
 
 #include "../tests/test_utils.h"
 
@@ -75,6 +76,12 @@ public:
             // todo: handle section error
         }
     }*/
+    template<typename AddrT>
+    static auto load(conn::IConnection<AddrT> &conn,
+                     mem::MemManager<AddrT> &memManager,
+                     mem::MemType memType,
+                     const dsl::VoidExpr& v)
+    { return v; };
 
     template<typename AddrT, typename Td>
     static auto load(conn::IConnection<AddrT> &conn,
@@ -100,11 +107,12 @@ public:
 
             if (g.initialised()) {
                 // todo: endianness?
-                conn.write(memRegion.start, size, toBytes(g.initial_val()));
+                conn.write(memRegion.start, size, utils::toBytes(g.initial_val()));
             }
 
             // todo: is it always unloadable
-            return dsl::ResidentVar<AddrT, T, is_const, is_volatile>{
+            // todo: what about is_const foris_constis_const func params? it is an error (not being able to .write() to it)
+            return dsl::ResidentVar<AddrT, T, false, is_volatile>{
                     conn, memManager, memRegion, true,
                     g.initial_val(), g.name()
             };
@@ -116,12 +124,15 @@ public:
     };
 
 
-    template<typename AddrT, typename RetT, typename... Args>
-    static dsl::ResidentObjCode<AddrT, RetT, Args...> load(conn::IConnection<AddrT>& conn,
-                                               mem::MemManager<AddrT>& memManager,
-                                               mem::MemType memType,
-                                               const ObjCode<RetT, Args...>& objCode) {
-        // Load only '.text' section. otherwise need to implement relocations and all the stuff here
+    template<typename AddrT, typename TdRet, typename... TdArgs>
+    static auto load(conn::IConnection<AddrT>& conn,
+                     mem::MemManager<AddrT>& memManager,
+                     mem::MemType memType,
+                     dsl::IRTranslator& irt,
+                     CodeGen& codeGen,
+                     const ObjCode<TdRet, TdArgs...>& objCode)
+    {
+        // load only '.text' section. otherwise need to implement relocations and all the stuff here
 
         // LOG FOR DEBUG
         utils::dumpSections(*objCode.getBinary());
@@ -143,17 +154,42 @@ public:
                 std::cerr << "contentsSize=" << contentsSize << "; contents.size()=" << contents.size() << std::endl;
                 assert(contents.size() == contentsSize);
 
-                auto memRegion = memManager.alloc(contentsSize, memType);
-                if (memRegion.size >= contentsSize) {
+                // Allocate all mem we need
+                auto memForText = memManager.alloc(contentsSize, memType);
 
-                    conn.write(memRegion.start, contentsSize, contents.data());
+                // specialise for Void return type
+                constexpr bool is_returning = !dsl::is_unit_v<TdRet>;
+                const AddrT retValSize = is_returning ? sizeof(dsl::f_t<TdRet>) : 0;
+                auto memForRetVal = memManager.alloc(retValSize, memType);
 
+                std::array<AddrT, sizeof...(TdArgs)> argsSizes{ sizeof(dsl::f_t<TdArgs>)... };
+                const AddrT argsSize = ( sizeof(dsl::f_t<TdArgs>) + ... + 0 );
+                auto memForArgs = memManager.allocMany(argsSizes, memType);
+                AddrT allocatedSize = 0;
+                for (const auto& mr : memForArgs) { allocatedSize += mr.size; }
+
+                if (memForText.size >= contentsSize && allocatedSize >= argsSize && memForRetVal.size >= retValSize) {
                     // get offset of needed symbol
                     if (auto offsetInSection = symbol.getAddress()) {
                         const auto offset = reinterpret_cast<AddrT>(offsetInSection.get());
-                        const AddrT callAddr = offset + memRegion.start;
+                        const AddrT callAddr = offset + memForText.start;
+
+                        // Load everything we need
+                        conn.write(memForText.start, contentsSize, contents.data());
+                        static_assert((std::is_default_constructible_v<TdRet> && ... && std::is_default_constructible_v<TdArgs>));
+                        auto retLoaded = load(conn, memManager, memType, TdRet{});
+                        std::tuple argsLoaded{ load(conn, memManager, memType, TdArgs{})... };
+
                         // Create unloadable resident
-                        return dsl::ResidentObjCode<AddrT, RetT, Args...>(memManager, memRegion, callAddr, true);
+//                        return dsl::ResidentObjCode<AddrT, TdRet, TdResArgs...>(
+                        return dsl::ResidentObjCode(
+                                conn,
+                                memManager, memForText,
+                                callAddr, true,
+                                std::move(argsLoaded),
+                                std::move(retLoaded),
+                                objCode.symbol
+                        );
 
                     } else {
                         // todo: handle some curious thing with unknown address (offset???) of the symbol
@@ -175,13 +211,7 @@ public:
                               mem::MemRegion<AddrT> memRegion,
                               const ObjCode<RetT, Args...>& objCode);
 
-    // todo: specialise translating initial value to char* (i.e. for Array, for Struct)
-    template<typename T>
-    static const char* toBytes(const T &x) {
-        if constexpr (std::is_arithmetic_v<T>) {
-            return reinterpret_cast<const char*>(&x);
-        }
-    }
+
 private:
     template<typename RetT, typename... Args>
     static content_t getContents(const ObjCode<RetT, Args...> &objCode) {

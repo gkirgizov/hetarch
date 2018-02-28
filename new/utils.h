@@ -55,6 +55,25 @@ inline constexpr auto make_bsv(const CharT* s) noexcept {
 namespace hetarch {
 namespace utils {
 
+// todo: specialise translating initial value to char* (i.e. for Array, for Struct)
+template<typename T>
+const char* toBytes(const T &x) {
+    if constexpr (std::is_arithmetic_v<T>) {
+        return reinterpret_cast<const char*>(&x);
+    }
+}
+
+
+template<typename F, typename Tuple>
+auto for_each(F&& f, Tuple&& t) {
+    std::apply([&](auto&& ...item){
+        std::make_tuple(
+                0, ( std::forward<F>(f)(std::forward<decltype(item)>(item)) , 0)...
+//                0, ( f(std::forward<decltype(item)>(item)) , 0)...
+        );
+    }, std::forward<Tuple>(t));
+};
+
 
 template<typename T>
 constexpr std::string_view type_name() {

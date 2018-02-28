@@ -174,10 +174,7 @@ TEST_F(CodeLoaderTest, loadCodeTrivial) {
 //    auto objCode = codeGen.compile(main_entry);
     auto tester = [&](auto&& irModule) {
         auto objCode = codeGen.compile(irModule);
-        return CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, objCode);
-//        auto&& resident = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, objCode);
-//        EXPECT_TRUE(resident.callAddr != 0);
-//        return std::move(resident);
+        return CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, irt, codeGen, objCode);
     };
 
     auto emptyCallable = tester(do_nothing);
@@ -190,7 +187,6 @@ TEST_F(CodeLoaderTest, loadCodeTrivial) {
 TEST_F(CodeLoaderTest, loadGlobal) {
 
     auto load_tester = [&](auto&& g) {
-    //    auto r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, irt, codeGen, g);
         ResidentVar r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, g);
 
         EXPECT_TRUE(std::is_move_constructible_v<decltype(r)>)
@@ -230,7 +226,8 @@ TEST_F(CodeLoaderTest, loadAndCall) {
         ObjCode compiled = codeGen.compile(translated);
         EXPECT_TRUE(compiled) << "module for fun '" << dsl_fun.name() << "' wasn't compiled okey!" << std::endl;
 
-        ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, compiled);
+        ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite,
+                                                        irt, codeGen, compiled);
 
         // Call it with some args
 //        auto result = exec.call(resident_fun, std::forward<decltype(dsl_args)>(dsl_args)...);

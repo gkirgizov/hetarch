@@ -4,6 +4,7 @@
 #include "../IConnection.h"
 #include "../MemResident.h"
 #include "dsl_type_traits.h"
+#include "../utils.h"
 
 
 namespace hetarch {
@@ -19,12 +20,7 @@ class ResidentGlobal : public MemResident<AddrT> {
 public:
     const AddrT addr;
 
-    ResidentGlobal(ResidentGlobal<AddrT, T, is_const>&& ) = default; // todo: wtf
-//    ResidentGlobal(ResidentGlobal<AddrT, T, is_const>&& other)
-//            : MemResident<AddrT>(static_cast< MemResident<AddrT>&& >(std::move(other)))
-//            , conn{other.conn}
-//            , addr{other.addr}
-//    {}
+    ResidentGlobal(ResidentGlobal<AddrT, T, is_const>&& ) = default;
 
     ResidentGlobal(
             conn::IConnection<AddrT>& conn,
@@ -37,15 +33,14 @@ public:
 
     // todo: better make static_assert for sane error msg at compile error
     inline std::enable_if_t<!is_const> write(const value_type& val) {
-        conn.write(addr, sizeof(value_type), reinterpret_cast<char*>(val));
+        conn.write(addr, sizeof(value_type), utils::toBytes(val));
     };
 
     value_type read() {
         char bytes[sizeof(value_type)];
         conn.read(addr, sizeof(value_type), bytes);
         auto val_ptr = reinterpret_cast<value_type*>(bytes);
-        // todo: bytes go out of scope; dangling ref? no, value_type copy-ctred
-        return *val_ptr;
+        return *val_ptr; // copy-construct from reference
     }
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }

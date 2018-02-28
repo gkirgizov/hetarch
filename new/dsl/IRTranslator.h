@@ -348,7 +348,6 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
     }
 
 private:
-    // todo: test modifyArgs
     template<typename TdBody, typename... TdArgs
             , typename Inds = std::index_sequence_for<TdArgs...>>
     void handle_args(const DSLFunction<TdBody, TdArgs...> &dslFun, llvm::Function *fun) {
@@ -370,8 +369,10 @@ private:
 
     template<typename TdArg>
     void handle_arg(const TdArg& dsl_arg, llvm::Argument *arg) {
-        const auto name = dsl_arg.name().data();
-        arg->setName(name);
+        const std::string name{dsl_arg.name()};
+        // todo: failing at assert(NameRef.find_first_of(0) == StringRef::npos && "Null bytes are not allowed in names");
+//        arg->setName(name);
+
         if constexpr (is_byref_v<TdArg>) {
             // todo: get sizeof in target platform
             arg->addAttr(llvm::Attribute::getWithDereferenceableBytes(context, sizeof(i_t<TdArg>)));
@@ -388,7 +389,7 @@ public:
     void accept(const SeqExpr<Td1, Td2> &seq) {
         seq.e1.toIR(*this);
         // Sequence discards result of evaluation of left expression
-        pop_val(); // todo: avoid unneeded CreateLoad in pop_val; just pop the stack
+        frame->val_stack.pop();
         // And returns result of evaluation of right expression
         seq.e2.toIR(*this);
     }
@@ -470,7 +471,8 @@ public:
     }
 
     template<typename TdCallable, typename... ArgExprs>
-    void accept(const ECall<TdCallable, ArgExprs...> &e) {
+    void accept(const ECall<TdCallable, ArgExprs...> &e
+            , std::enable_if_t< !is_dsl_loaded_callable_v<TdCallable>> = 0) {
         // If dsl func is not defined (i.e. not translated)
         if (defined_funcs.find(&e.callee) == std::end(defined_funcs)) {
             e.callee.toIR(*this);
@@ -485,29 +487,13 @@ public:
 
     // TODO: these things with using ... types (e..g in eval_func_args) ain't a good sign.
 
-    template<typename TdCallable, typename... ArgExprs
-            , typename = typename std::enable_if_t< is_dsl_loaded_callable_v<TdCallable> >>
-    void accept(const ECall<TdCallable, ArgExprs...>& e) {
+    template<typename TdCallable, typename... ArgExprs>
+    void accept(const ECall<TdCallable, ArgExprs...>& e
+        , std::enable_if_t< is_dsl_loaded_callable_v<TdCallable>>* = nullptr) {
         using fun_t = std::remove_reference_t<TdCallable>;
         using ret_t = typename fun_t::ret_t;
         using args_t = typename fun_t::args_t;
 
-        llvm::CallInst* inst = cur_builder->CreateCall(
-                llvm_map.get_func_type<ret_t, args_t>(),
-                llvm_map.get_const(e.callee.callAddr),
-                eval_func_args<TdCallable>(e.args)
-        );
-        push_val(inst);
-    }
-
-    template<typename AddrT, typename TdRet, typename ...ArgExprs>
-    void accept(const ECallLoaded<AddrT, TdRet, ArgExprs...> &e) {
-//        using fun_t = std::remove_reference_t<TdCallable>;
-        using fun_t = typename ECallLoaded<AddrT, TdRet, ArgExprs...>::fun_t;
-        using ret_t = typename fun_t::ret_t;
-        using args_t = typename fun_t::args_t;
-
-        // todo: cast callAddr to funcPtr type first?
         llvm::FunctionType* fty = llvm_map.get_func_type<ret_t, args_t>();
         auto addr_value = llvm_map.get_const(e.callee.callAddr);
         auto fun_ptr = cur_builder->CreateIntToPtr(addr_value, fty->getPointerTo(), "fun_ptr");
@@ -519,6 +505,7 @@ public:
         );
         push_val(inst);
     }
+
 
 private:
     template<typename TdCallable, typename ArgExprsTuple

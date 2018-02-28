@@ -69,6 +69,17 @@ struct is_ev : public std::conditional_t<
 template<typename ...Tds> inline constexpr bool is_ev_v = is_ev<Tds...>::value;
 
 
+template<typename ...Tds>
+struct is_unit : public std::conditional_t<
+        (... && std::is_void_v<i_t<Tds>>),
+        std::true_type,
+        std::false_type
+> {};
+template<typename ...Tds> inline constexpr bool is_unit_v = is_unit<Tds...>::value;
+
+
+
+
 //template<typename ...Ts, typename ...Tds, typename = typename std::enable_if_t<sizeof...(Tds) == sizeof...(Ts)>>
 //struct is_same_raw : public std::conditional_t<
 //        std::is_same_v< std::tuple<i_t<Tds>...>, std::tuple<Ts...> >,
