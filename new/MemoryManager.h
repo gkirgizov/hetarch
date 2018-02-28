@@ -79,6 +79,27 @@ public:
         return allocImpl(memSize, memType, defaultAlignment);
     }
 
+    template<std::size_t N>
+    inline std::array<MemRegion<AddrT>, N> allocMany(const std::array<AddrT, N>& memSizes, MemType memType) {
+        return allocMany(memSizes, memType, defaultAlignment);
+    };
+    // todo: it's tmp impl; allocate contignent space
+    // count sum of __aligned__ sizes
+    // allocate one block
+    // split it in a loop (cutting slices)
+    template<std::size_t N>
+    std::array<MemRegion<AddrT>, N> allocMany(const std::array<AddrT, N>& memSizes, MemType memType, AddrT alignment) {
+        return std::apply([&](auto ...memSize){
+            return std::array<MemRegion<AddrT>, N>{ alloc(memSize, memType, alignment)... };
+        }, memSizes);
+//
+//        std::array<MemRegion<AddrT>, N> many;
+//        for (auto i = 0; i < N; ++i) {
+//            many[i] = alloc(memSizes[i], memType, alignment);
+//        }
+//        return many;
+    };
+
     /// Allows to control memory layout manually, i.e. 'register' memory usage
     /// \param memRegion
     /// \param alignment
