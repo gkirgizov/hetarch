@@ -3,7 +3,6 @@
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 
-#include "llvm/Passes/PassBuilder.h"
 //#include "llvm/InitializePasses.h"
 
 
@@ -52,12 +51,12 @@ const llvm::PassRegistry* CodeGen::initPasses() {
 //    initializeUnreachableBlockElimPass(*pr);
     initializeScalarOpts(*pr);
     initializeInstCombine(*pr);
-//    initializeAnalysis(*pr);
+    initializeAnalysis(*pr);
     return pr;
 }
 
 
-CodeGen::llvm_obj_t CodeGen::compileImpl(IIRModule& irModule) const {
+llvm::TargetMachine* CodeGen::getTargetMachine(OptLvl optLvl) const {
     // CPU
     std::string cpuStr = "generic";
     std::string featuresStr = "";
@@ -66,25 +65,30 @@ CodeGen::llvm_obj_t CodeGen::compileImpl(IIRModule& irModule) const {
     llvm::TargetOptions options = InitTargetOptionsFromCodeGenFlags();
 
     llvm::Reloc::Model relocModel = llvm::Reloc::PIC_;
-//        auto codeModel = llvm::CodeModel::Default;
-//        auto optLevel = llvm::CodeGenOpt::Default;
+    auto codeModel = llvm::CodeModel::Default;
+//    CGOptLvl cgOptLvl = llvm::CodeGenOpt::Default;
+    CGOptLvl cgOptLvl = opt_lvl_map[optLvl];
 
-    llvm::TargetMachine* targetMachine = target->createTargetMachine(
+    return target->createTargetMachine(
             this->targetName,
             cpuStr,
             featuresStr,
             options,
-            relocModel
+            relocModel,
+            codeModel,
+            cgOptLvl
     );
+}
 
+
+CodeGen::llvm_obj_t CodeGen::compileImpl(IIRModule& irModule, OptLvl optLvl) const {
+    llvm::TargetMachine* targetMachine = getTargetMachine(optLvl);
     if (targetMachine) {
         irModule.m->setDataLayout(targetMachine->createDataLayout());
         irModule.m->setTargetTriple(this->targetName);
-
-        llvm::CodeGenOpt::Level cgOptLvl = targetMachine->getOptLevel();
-        if (cgOptLvl != llvm::CodeGenOpt::Level::None) {
-            PR_DBG("CodeGenOpt != None: running Passes.");
-            runPasses(*irModule.m, targetMachine);
+        if (optLvl != OptLvl::O0) {
+            PR_DBG("CodeGen: running Passes.");
+            runPassesImpl(*irModule.m, targetMachine);
         }
 
         auto compiler = llvm::orc::SimpleCompiler(*targetMachine);
@@ -156,24 +160,46 @@ public:
 };
 */
 
+void CodeGen::runPasses(IIRModule &module, OptLvl optLvl) const {
+    if (optLvl != OptLvl::O0) {
+        PR_DBG("CodeGen: running Passes.");
+        runPassesImpl(*module.m, getTargetMachine(optLvl));
+    }
+}
 
-void CodeGen::runPasses(llvm::Module& module, llvm::TargetMachine* tm) const {
+void CodeGen::runPassesImpl(llvm::Module& module, llvm::TargetMachine* tm) const {
     llvm::CodeGenOpt::Level cgOptLvl = tm->getOptLevel();  // todo: map to pass builder opt lvl
     auto optLvl = llvm::PassBuilder::OptimizationLevel::O2;
     llvm::PassBuilder builder{tm};
 
-    llvm::FunctionPassManager fpm = builder.buildFunctionSimplificationPipeline(optLvl, utils::is_debug);  // can be run repeatedly
+    // Register analyses
     llvm::FunctionAnalysisManager fam{utils::is_debug};
+    builder.registerFunctionAnalyses(fam);
+    llvm::ModuleAnalysisManager mam{utils::is_debug};
+    builder.registerModuleAnalyses(mam);
+
+    // Cross register analyses
+//    builder.crossRegisterProxies(lam, fam, cgam, mam);
+    mam.registerPass([&] { return llvm::FunctionAnalysisManagerModuleProxy(fam); });
+//    mam.registerPass([&] { return llvm::CGSCCAnalysisManagerModuleProxy(cgam); });
+//    cgam.registerPass([&] { return llvm::ModuleAnalysisManagerCGSCCProxy(mam); });
+//    fam.registerPass([&] { return llvm::CGSCCAnalysisManagerFunctionProxy(cgam); });
+    fam.registerPass([&] { return llvm::ModuleAnalysisManagerFunctionProxy(mam); });
+//    fam.registerPass([&] { return llvm::LoopAnalysisManagerFunctionProxy(lam); });
+//    lam.registerPass([&] { return llvm::FunctionAnalysisManagerLoopProxy(fam); });
+
+    llvm::FunctionPassManager fpm = builder.buildFunctionSimplificationPipeline(optLvl, utils::is_debug);  // can be run repeatedly
     for (llvm::Function& fun : module.functions()) {
         llvm::PreservedAnalyses fpreserved = fpm.run(fun, fam);
     }
 
-    llvm::ModuleAnalysisManager mam{utils::is_debug};
-//    llvm::ModulePassManager mpm1 = builder.buildModuleSimplificationPipeline(optLvl, utils::is_debug); // can be run repeatedly
-//    llvm::ModulePassManager mpm2 = builder.buildModuleOptimizationPipeline(optLvl, utils::is_debug); // run once
-    llvm::ModulePassManager mpm3 = builder.buildPerModuleDefaultPipeline(optLvl, utils::is_debug); // suitable default
+//    llvm::ModulePassManager mpm = builder.buildModuleSimplificationPipeline(optLvl, utils::is_debug); // can be run repeatedly
+//    llvm::ModulePassManager mpm = builder.buildModuleOptimizationPipeline(optLvl, utils::is_debug); // run once
+//    llvm::ModulePassManager mpm = builder.buildPerModuleDefaultPipeline(optLvl, utils::is_debug); // suitable default
 
-    llvm::PreservedAnalyses mpreserved = mpm3.run(module, mam);
+    // Register other required analyses
+//    mam.registerPass([&] { return llvm::InnerAnalysisManagerProxy<decltype(mam), llvm::Module>(mam); });
+//    llvm::PreservedAnalyses mpreserved = mpm.run(module, mam);
 }
 
 

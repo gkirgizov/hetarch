@@ -5,8 +5,8 @@
 #include <fstream>
 #include <vector>
 
-#include "llvm/IR/Module.h"
-#include "llvm/IR/LLVMContext.h"
+//#include "llvm/IR/Module.h"
+//#include "llvm/IR/LLVMContext.h"
 
 #include "../new/supportingClasses.h"
 #include "../new/CodeGen.h"
@@ -221,16 +221,21 @@ TEST_F(CodeLoaderTest, loadAndCall) {
         IRModule translated = irt.translate(dsl_fun);
         bool verified_ok = utils::verify_module(translated);
         EXPECT_TRUE(verified_ok) << "failed verify with fun: " << dsl_fun.name() << std::endl;
+
+        std::cerr << std::endl << "Initial generated IR before any passes:" << std::endl;
         translated.get().dump();
 
-        ObjCode compiled = codeGen.compile(translated);
+        auto optLvl = CodeGen::OptLvl::O2;
+        ObjCode compiled = codeGen.compile(translated, optLvl);
         EXPECT_TRUE(compiled) << "module for fun '" << dsl_fun.name() << "' wasn't compiled okey!" << std::endl;
+
+        std::cerr << std::endl << "IR after codeGen.compile with OptLvl=" << optLvl << ":" << std::endl;
+        translated.get().dump();
 
         ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite,
                                                         irt, codeGen, compiled);
 
         // Call it with some args
-//        auto result = exec.call(resident_fun, std::forward<decltype(dsl_args)>(dsl_args)...);
         auto result = exec.call(resident_fun, args...);
         return result;
     };
@@ -239,16 +244,8 @@ TEST_F(CodeLoaderTest, loadAndCall) {
     auto max_dsl_generator = [](auto&& x, auto&& y) {
         return If(x > y, x, y);
     };
-//    Var x{22}, y{11};
     int x{22}, y{11};
     EXPECT_TRUE(std::max(x, y) == generic_caller(max_dsl_generator, x, y));
-
-//    DSLFunction dsl_max = make_dsl_fun_from_arg_types< Var<int>, Var<int> >(max_dsl_generator);
-//    IRModule translated = irt.translate(dsl_max);
-//    ObjCode compiled = codeGen.compile(translated);
-//    ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, compiled);
-//    auto result = exec.call(resident_fun);
-
 
 }
 
