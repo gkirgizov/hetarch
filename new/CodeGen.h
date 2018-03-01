@@ -22,7 +22,9 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/CodeGen/CommandFlags.h"
 // For passes
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/InitializePasses.h"
 // For compilation
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 #include "llvm/Object/ObjectFile.h"
@@ -32,6 +34,7 @@
 //#include "MemoryManager.h"
 #include "dsl/dsl_base.h"
 #include "dsl/fun.h"
+#include "../tests/test_utils.h"
 
 
 namespace hetarch {
@@ -41,9 +44,8 @@ class CodeGen {
 
     const std::string targetName;
 
-    // todo: do i need to (resource-)manage this?
-    const llvm::Target *target{nullptr};
-//    const std::unique_ptr<llvm::Target> target;
+    const llvm::Target* target{nullptr};
+    const llvm::PassRegistry* pm{nullptr};
 public:
 
     explicit CodeGen(const std::string &targetName);
@@ -64,20 +66,24 @@ private:
     static std::vector<std::string> findUndefinedSymbols(object::OwningBinary<object::ObjectFile> &objFile);
 
     static const llvm::Target* initTarget(const std::string& targetName);
+    static const llvm::PassRegistry* initPasses();
 
+    void runPasses(llvm::Module& module, llvm::TargetMachine* tm = nullptr) const;
 };
 
 
 CodeGen::CodeGen(const std::string &targetName)
         : targetName(llvm::Triple::normalize(llvm::StringRef(targetName)))
         , target(initTarget(this->targetName))
+        , pm{initPasses()}
 {}
-
 
 const llvm::Target* CodeGen::initTarget(const std::string &targetName) {
 
     // Initialise targets
     // todo: optimise somehow? (don't init ALL targets - check how expensive it is)
+    //  init from a list of allowed architectures
+
 //    InitializeAllTargetInfos();
 //    InitializeAllTargetMCs();
 //    InitializeAllAsmPrinters();
@@ -89,7 +95,6 @@ const llvm::Target* CodeGen::initTarget(const std::string &targetName) {
     LLVMInitializeX86AsmPrinter();
 
     std::string targetLookupError;
-    // todo: move at least that to the ctor
     // todo: make checkable if CodeGen finds target
     auto target = llvm::TargetRegistry::lookupTarget(targetName, targetLookupError);
     if (!target) {
@@ -97,12 +102,20 @@ const llvm::Target* CodeGen::initTarget(const std::string &targetName) {
         return nullptr;
     }
     return target;
+}
 
+const llvm::PassRegistry* CodeGen::initPasses() {
     // Initialize default, common passes
-//    auto passRegistry = llvm::PassRegistry::getPassRegistry();
-//    initializeCore(*passRegistry);
-//    initializeCodeGen(*passRegistry);
-
+    llvm::PassRegistry* pr = llvm::PassRegistry::getPassRegistry();
+    initializeCore(*pr);
+    initializeCodeGen(*pr);
+    initializeLoopStrengthReducePass(*pr);
+//    initializeLowerIntrinsicsPass(*pr);
+//    initializeUnreachableBlockElimPass(*pr);
+    initializeScalarOpts(*pr);
+    initializeInstCombine(*pr);
+//    initializeAnalysis(*pr);
+    return pr;
 }
 
 
@@ -130,6 +143,45 @@ std::vector<std::string> CodeGen::findUndefinedSymbols(object::OwningBinary<obje
 }
 
 
+/*
+template<typename IRUnitT>
+class PassProvider : public llvm::PassRegistrationListener {
+    llvm::PassManager<IRUnitT>& pm;
+
+    void passEnumerate(const llvm::PassInfo* passInfo) override {
+        pm.addPass(passInfo->createPass());
+    }
+
+public:
+    explicit PassProvider(llvm::PassManager<IRUnitT>& pm) : pr{pr} {}
+
+    void addAllPasses(llvm::PassRegistry& pr) const {
+        pr.enumerateWith(this)
+    }
+
+};
+*/
+
+
+void CodeGen::runPasses(llvm::Module& module, llvm::TargetMachine* tm) const {
+    llvm::CodeGenOpt::Level cgOptLvl = tm->getOptLevel();  // todo: map to pass builder opt lvl
+    auto optLvl = llvm::PassBuilder::OptimizationLevel::O2;
+    llvm::PassBuilder builder{tm};
+
+    llvm::FunctionPassManager fpm = builder.buildFunctionSimplificationPipeline(optLvl, utils::is_debug);  // can be run repeatedly
+    llvm::FunctionAnalysisManager fam{utils::is_debug};
+    for (llvm::Function& fun : module.functions()) {
+        llvm::PreservedAnalyses fpreserved = fpm.run(fun, fam);
+    }
+
+    llvm::ModuleAnalysisManager mam{utils::is_debug};
+//    llvm::ModulePassManager mpm1 = builder.buildModuleSimplificationPipeline(optLvl, utils::is_debug); // can be run repeatedly
+//    llvm::ModulePassManager mpm2 = builder.buildModuleOptimizationPipeline(optLvl, utils::is_debug); // run once
+    llvm::ModulePassManager mpm3 = builder.buildPerModuleDefaultPipeline(optLvl, utils::is_debug); // suitable default
+
+    llvm::PreservedAnalyses mpreserved = mpm3.run(module, mam);
+}
+
 
 template<typename RetT, typename... Args>
 ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) const {
@@ -144,7 +196,7 @@ ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) const
 //        auto codeModel = llvm::CodeModel::Default;
 //        auto optLevel = llvm::CodeGenOpt::Default;
 
-    auto targetMachine = target->createTargetMachine(
+    llvm::TargetMachine* targetMachine = target->createTargetMachine(
             this->targetName,
             cpuStr,
             featuresStr,
@@ -156,11 +208,10 @@ ObjCode<RetT, Args...> CodeGen::compile(IRModule<RetT, Args...> &irModule) const
         irModule.m->setDataLayout(targetMachine->createDataLayout());
         irModule.m->setTargetTriple(this->targetName);
 
-        // There go various Passes with PassManager
-        {
-            // Set Module-specific passes through PassManager
-            // todo: provide debug parameter to constructor
-            auto passManager = llvm::PassManager<llvm::Module>();
+        llvm::CodeGenOpt::Level cgOptLvl = targetMachine->getOptLevel();
+        if (cgOptLvl != llvm::CodeGenOpt::Level::None) {
+            PR_DBG("CodeGenOpt != None: running Passes.");
+            runPasses(*irModule.m, targetMachine);
         }
 
         auto compiler = llvm::orc::SimpleCompiler(*targetMachine);
