@@ -29,6 +29,18 @@ void dumpSymbols(const llvm::object::ObjectFile &objFile);
 bool verify_module(const llvm::Module& module);
 inline bool verify_module(const IIRModule& module) { return verify_module(module.get()); };
 
+#ifdef DEBUG
+#   define PR_DBG(x) do { std::cerr << x << std::endl; } while (false);
+#else
+#   define PR_DBG(x)
+#endif
+
+#ifdef DEBUG
+constexpr inline bool is_debug = true;
+#else
+constexpr inline bool is_debug = false;
+#endif
+
 
 }
 }

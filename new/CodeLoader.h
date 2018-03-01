@@ -134,9 +134,11 @@ public:
     {
         // load only '.text' section. otherwise need to implement relocations and all the stuff here
 
-        // LOG FOR DEBUG
+#ifdef DEBUG
+        std::cerr << "DUMPING: " << objCode.symbol << std::endl;
         utils::dumpSections(*objCode.getBinary());
         utils::dumpSymbols(*objCode.getBinary());
+#endif
 
         const llvm::object::SymbolRef& symbol = objCode.getSymbol();
 //        for (const auto& section_exp : symbol.getSection()) {
@@ -150,9 +152,10 @@ public:
             auto err_code = section.getContents(contents);
             if (!err_code) {
 
-                // LOG FOR DEBUG
+#ifdef DEBUG
                 std::cerr << "contentsSize=" << contentsSize << "; contents.size()=" << contents.size() << std::endl;
                 assert(contents.size() == contentsSize);
+#endif
 
                 // Allocate all mem we need
                 auto memForText = memManager.alloc(contentsSize, memType);

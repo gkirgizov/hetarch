@@ -12,6 +12,7 @@
 #include "dsl/dsl_meta.h"
 #include "dsl/ResidentObjCode.h"
 #include "dsl/IRTranslator.h"
+#include "../tests/test_utils.h"
 
 
 namespace hetarch {
@@ -66,13 +67,17 @@ public:
         dsl::DSLFunction dummy_caller = f.getCaller();
         IRModule translated = irt.translate(dummy_caller);
 
+#ifdef DEBUG
         bool verified_ok = utils::verify_module(translated);
         translated.get().dump();
         std::cerr << "verified : " << dummy_caller.name() << ": " << std::boolalpha << verified_ok << std::endl;
+#endif
 
         ObjCode compiled = codeGen.compile(translated);
         dsl::ResidentObjCode loaded = CodeLoader::load(conn, memManager, mem::MemType::ReadWrite, irt, codeGen, compiled);
         call(loaded);
+
+        PR_DBG("loaded dummy_caller");
 //
 //        call(
 //                CodeLoader::load(
