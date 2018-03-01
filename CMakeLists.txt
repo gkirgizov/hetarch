@@ -152,7 +152,7 @@ add_library(temp_target
         new/dsl/dsl_type_traits.h
         new/dsl/array.h
         new/dsl/ptr.h
-        new/dsl/dsl_meta.h new/TCPConnection.h new/TCPConnection.cpp new/Executor.h new/dsl/ResidentGlobal.h)
+        new/dsl/dsl_meta.h new/TCPConnection.h new/TCPConnection.cpp new/Executor.h new/dsl/ResidentGlobal.h new/CodeGen.cpp)
 
 
 add_subdirectory(examples)

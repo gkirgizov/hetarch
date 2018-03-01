@@ -26,6 +26,7 @@ target_link_libraries(gtests gtest ${llvm_libs2} ${llvm_target_libs})
 
 add_executable(gtests2 main.cpp
         ../new/TCPConnection.cpp
+        ../new/CodeGen.cpp
         test_utils.cpp
         mocks.h
         mem_tests.cpp

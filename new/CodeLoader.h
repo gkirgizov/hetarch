@@ -2,11 +2,11 @@
 
 #include <numeric>
 
+#include "supportingClasses.h"
 #include "IConnection.h"
 #include "MemoryManager.h"
 #include "MemResident.h"
 #include "CodeGen.h"
-#include "supportingClasses.h"
 
 #include "dsl/dsl_type_traits.h"
 #include "dsl/fun.h"
