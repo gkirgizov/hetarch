@@ -1,11 +1,11 @@
 
 
 llvm_map_components_to_libnames(llvm_libs2
-        support core irreader linker
+        support core irreader
+        linker
 #        x86  # doesn't work!!! searches for -lLLVMx86 whereas we need -lLLVMX86
+        option scalaropts target mc transformutils
         )
-#llvm_map_components_to_libnames(llvm_libs2 support core irreader
-#        option scalaropts target mc transformutils)
 
 set(llvm_target_libs
         LLVMX86Disassembler

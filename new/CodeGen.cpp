@@ -1,5 +1,11 @@
 #include "CodeGen.h"
 
+#include "llvm/CodeGen/CommandFlags.h"
+#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
+
+#include "llvm/Passes/PassBuilder.h"
+//#include "llvm/InitializePasses.h"
+
 
 namespace hetarch {
 
@@ -51,7 +57,63 @@ const llvm::PassRegistry* CodeGen::initPasses() {
 }
 
 
-std::vector<std::string> CodeGen::findUndefinedSymbols(object::OwningBinary<object::ObjectFile> &objFile) {
+CodeGen::llvm_obj_t CodeGen::compileImpl(IIRModule& irModule) const {
+    // CPU
+    std::string cpuStr = "generic";
+    std::string featuresStr = "";
+
+    // todo: do something with options
+    llvm::TargetOptions options = InitTargetOptionsFromCodeGenFlags();
+
+    llvm::Reloc::Model relocModel = llvm::Reloc::PIC_;
+//        auto codeModel = llvm::CodeModel::Default;
+//        auto optLevel = llvm::CodeGenOpt::Default;
+
+    llvm::TargetMachine* targetMachine = target->createTargetMachine(
+            this->targetName,
+            cpuStr,
+            featuresStr,
+            options,
+            relocModel
+    );
+
+    if (targetMachine) {
+        irModule.m->setDataLayout(targetMachine->createDataLayout());
+        irModule.m->setTargetTriple(this->targetName);
+
+        llvm::CodeGenOpt::Level cgOptLvl = targetMachine->getOptLevel();
+        if (cgOptLvl != llvm::CodeGenOpt::Level::None) {
+            PR_DBG("CodeGenOpt != None: running Passes.");
+            runPasses(*irModule.m, targetMachine);
+        }
+
+        auto compiler = llvm::orc::SimpleCompiler(*targetMachine);
+        // seems, specific ObjectFile type (e.g. ELF32) and endianness are determined from TargetMachine
+        // todo: shouldn't there be irModule.m.release()? no.
+        llvm_obj_t objFile = compiler(*irModule.m);
+
+        if (objFile.getBinary()) {
+            // todo: test: there, IRModule's mainSymbol should resolvable (i.e. the same) in objFile
+            auto undefinedSyms = findUndefinedSymbols(objFile);
+            if (undefinedSyms.empty()) {
+                return objFile;
+
+            } else {
+                // todo: handle undefined symbols error
+                // just return meaningful description; this error is easily resolved and can't be solved at runtime
+            }
+
+        } else {
+            // todo: handle compilation error
+        }
+
+    } else {
+        // todo: handle TargetMachine creation error
+    }
+}
+
+
+std::vector<std::string> CodeGen::findUndefinedSymbols(llvm_obj_t& objFile) {
     std::vector<std::string> undefinedSyms;
     for (const auto &sym : objFile.getBinary()->symbols()) {
 
