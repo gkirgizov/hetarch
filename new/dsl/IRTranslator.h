@@ -125,15 +125,6 @@ public:
     void accept(const VoidExpr &) {}
 
 public:
-    template<typename T>
-    inline llvm::AllocaInst* allocate(std::string_view name = "") {
-        llvm::Value* array_size = nullptr;
-        if constexpr (is_std_array_v<T>) { array_size = llvm_map.get_const(std::tuple_size<T>::value); }
-        // Default empty name is handled automatically by LLVM (when var.name().data() == "")
-        return cur_builder->CreateAlloca(llvm_map.get_type<T>(), array_size, name.data());
-    }
-
-    // TODO: allocate everything only in the entry block of a func
     template<typename T, bool is_const, bool is_volatile
 //            , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
     >
@@ -142,21 +133,23 @@ public:
 
         auto known = frame->allocated.find(&var);
         if (known == std::end(frame->allocated)) {
-            // DBG
+#ifdef DEBUG
             std::cerr << "--alloca for " << std::hex << &var << "; T="
                       << utils::type_name<decltype(var)>() << std::endl;
-
-            val_addr = allocate<T>(var.name());
-
+#endif
+            auto ty = llvm_map.get_type<T>();
             if (var.initialised()) {
                 auto init_val = llvm_map.get_const(var.initial_val());
-                auto initInst = cur_builder->CreateStore(init_val, val_addr, is_volatile);
+                val_addr = allocate(ty, init_val, is_volatile, var.name());
+            } else {
+                val_addr = allocate(ty, var.name());
             }
             frame->allocated[&var] = val_addr;
         } else { // Variable usage
-            // DBG
-            std::cerr << "--use of " << std::hex << &var << "; T="
+#ifdef DEBUG
+            std::cerr << "--use of" << std::hex << &var << "; T="
                       << utils::type_name<decltype(var)>() << std::endl;
+#endif
             val_addr = known->second;
         }
 
@@ -168,6 +161,10 @@ public:
     void accept(const Const<T, false> &var) {
         // Non-volatile const variables can be directly substitued by its value
         push_val(llvm_map.get_const(var.initial_val()));
+    }
+    template<typename T>
+    void accept(const DSLConst<T> &var) {
+        push_val(llvm_map.get_const(var.val));
     }
 
     // todo: try EArrayAccess and understand.
@@ -246,6 +243,30 @@ public:
         // ...> i can apply Deref only to PtrBase
     }
 
+private:
+//    template<typename T>
+//    inline llvm::AllocaInst* allocate(const std::string_view& name = "") {
+//        return allocate(llvm_map.get_type<T>(), name);
+//    }
+
+    inline llvm::AllocaInst* allocate(llvm::Type* ty, const std::string_view& name = "") {
+        return allocate(ty, nullptr, false, name);
+    }
+
+    llvm::AllocaInst* allocate(llvm::Type* ty, llvm::Value* init_val = nullptr, bool is_volatile = false, const std::string_view& name = "") {
+        // Allocate all local data in the entry block of func (as clang does)
+        auto ip = cur_builder->saveIP();
+        auto& entry_block = frame->fun->getEntryBlock();
+        cur_builder->SetInsertPoint(&entry_block, --entry_block.end());
+
+        auto allocated = cur_builder->CreateAlloca(ty, nullptr, name.data());
+        if (init_val != nullptr) {
+            cur_builder->CreateStore(init_val, allocated, is_volatile);
+        }
+
+        cur_builder->restoreIP(ip);
+        return allocated;
+    }
 
 public: // dsl function and related constructs (function is 'entry' point of ir generation)
     template<typename Td>
@@ -327,24 +348,29 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
 //            llvm_map.get_func_type<ret_t, f_t<TdArgs>...>(), llvm::Function::ExternalLinkage, funcName, cur_module.get()
         );
 
-        const auto blockName = funcName + "_block" + "_entry";
-        llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, blockName, fun);
+        const auto entry_bb_name = funcName + "_block" + "_entry";
+        llvm::BasicBlock *entry_bb = llvm::BasicBlock::Create(context, entry_bb_name, fun);
+        const auto main_bb_name = funcName + "_block" + "_main";
+        llvm::BasicBlock* main_bb = llvm::BasicBlock::Create(context, main_bb_name, fun);
 
+        // Save ip in case it's another func translation while previous func translation hasn't finished
         llvm::IRBuilderBase::InsertPoint ip = cur_builder->saveIP();
-        cur_builder->SetInsertPoint(entry_bb);
         frame_stack.push(Frame{fun});
         frame = &frame_stack.top();
 
+        cur_builder->SetInsertPoint(entry_bb);
+        cur_builder->CreateBr(main_bb);
+        cur_builder->SetInsertPoint(main_bb);
         handle_args(dslFun, fun);
         dslFun.body.toIR(*this);
 
         frame_stack.pop();
         frame = &frame_stack.top();
         cur_builder->restoreIP(ip);
-        bool no_name_conflict = defined_funcs.insert({&dslFun, fun}).second;
-        // todo: fail before translation, not after
+        bool not_repeated_translation = defined_funcs.insert({&dslFun, fun}).second;
+        // todo: fail before translation, not after (it's meaningless)
         // Recursive functions ain't handled here
-        assert(no_name_conflict && (funcName + ": dsl function name conflict!").c_str());
+        assert(not_repeated_translation && (funcName + ": attempt to translate dsl function twice!").c_str());
     }
 
 private:
@@ -369,7 +395,7 @@ private:
 
     template<typename TdArg>
     void handle_arg(const TdArg& dsl_arg, llvm::Argument *arg) {
-        const std::string name{dsl_arg.name()};
+//        const std::string name{dsl_arg.name()};
         // todo: failing at assert(NameRef.find_first_of(0) == StringRef::npos && "Null bytes are not allowed in names");
 //        arg->setName(name);
 
@@ -378,8 +404,7 @@ private:
             arg->addAttr(llvm::Attribute::getWithDereferenceableBytes(context, sizeof(i_t<TdArg>)));
         }
         // Now allocate space on stack for argument and store actual Value arg represents (as Clang does)
-        // todo: check that if arg->getType() is already ArrayType then we don't need arraySize param (hence nullptr)
-        auto arg_addr = cur_builder->CreateAlloca(arg->getType(), nullptr, name);
+        auto arg_addr = allocate(arg->getType(), dsl_arg.name());
         cur_builder->CreateStore(arg, arg_addr, dsl_arg.volatile_q);
         frame->allocated[static_cast<const ValueBase*>(&dsl_arg)] = arg_addr;
     }
@@ -402,7 +427,7 @@ public:
 
         // Create temp value to hold result of the whole expr depending on branch
         using T = typename IfExpr<TdCond, TdThen, TdElse>::type;
-        auto result_var = cur_builder->CreateAlloca(llvm_map.get_type<T>());
+        auto result_var = allocate(llvm_map.get_type<T>(), "if_result");
 
         // Evaluate condition
         e.cond_expr.toIR(*this);
@@ -472,7 +497,7 @@ public:
 
     template<typename TdCallable, typename... ArgExprs>
     void accept(const ECall<TdCallable, ArgExprs...> &e
-            , std::enable_if_t< !is_dsl_loaded_callable_v<TdCallable>> = 0) {
+            , std::enable_if_t< !is_dsl_loaded_callable_v<TdCallable>, std::false_type> = std::false_type{}) {
         // If dsl func is not defined (i.e. not translated)
         if (defined_funcs.find(&e.callee) == std::end(defined_funcs)) {
             e.callee.toIR(*this);
@@ -489,7 +514,7 @@ public:
 
     template<typename TdCallable, typename... ArgExprs>
     void accept(const ECall<TdCallable, ArgExprs...>& e
-        , std::enable_if_t< is_dsl_loaded_callable_v<TdCallable>>* = nullptr) {
+        , std::enable_if_t< is_dsl_loaded_callable_v<TdCallable>, std::true_type> = std::true_type{}) {
         using fun_t = std::remove_reference_t<TdCallable>;
         using ret_t = typename fun_t::ret_t;
         using args_t = typename fun_t::args_t;
@@ -533,8 +558,7 @@ private:
         } else { // ArgExpr is Expr
             // ArgExpr represents temporary value; allocate space for it
             llvm::Value* val = pop_val();
-            llvm::AllocaInst* val_addr = cur_builder->CreateAlloca(val->getType());
-            cur_builder->CreateStore(val, val_addr);
+            llvm::AllocaInst* val_addr = allocate(val->getType(), val);
             return val_addr;
         }
     };

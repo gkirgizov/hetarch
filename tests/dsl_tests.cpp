@@ -242,6 +242,14 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
         return If(!x, DSLConst(false), DSLConst(true));
     };
 
+    Var<int> res{1};
+    auto factorial_gen = [&](auto&& n){
+        return (While(
+                n > DSLConst(0u),
+                (res = res * n, n = n - DSLConst(1u))
+        ), res);
+    };
+
     auto dsl_metagenerator = [](bool need_complex_logic) {
         return [=](auto&& dsl_var1, Var<int> dsl_var2) {
             if (need_complex_logic) {
@@ -262,11 +270,12 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
 //    constexpr auto dsl_id = make_dsl_fun_from_arg_types< DSLConst<int> >(id_generator);
     auto dsl_id = make_dsl_fun_from_arg_types< DSLConst<int> >(id_generator);
     PR_CERR_VAL_TY(dsl_id);
-    constexpr auto tmp_sum = Var{10} + Var{11};
+    auto tmp_sum = Var{10} + Var{11};
     auto dsl_fun_max = make_dsl_fun_from_arg_types< Var<int>, decltype(tmp_sum) >(max_code_generator);
     PR_CERR_VAL_TY(dsl_fun_max)
 //    auto ecall2 = generic_dsl_max(Var{10}, Var{2} + Var{3});
 //    PR_CERR_VAL_TY(ecall2)
+    DSLFunction dsl_factorial = make_dsl_fun_from_arg_types< Var<unsigned> >(factorial_gen);
 
     auto generic_id = make_generic_dsl_fun(id_generator);
     auto generic_tst = make_generic_dsl_fun(tst_generator);
@@ -285,6 +294,7 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
     std::cerr << std::endl << std::endl;
     EXPECT_TRUE(translate_verify(irt, dsl_id));
     EXPECT_TRUE(translate_verify(irt, dsl_fun_max));
+    EXPECT_TRUE(translate_verify(irt, dsl_factorial));
     EXPECT_TRUE(translate_verify(irt, call_generic_fun));
     EXPECT_TRUE(translate_verify(irt, call_id));
     EXPECT_TRUE(translate_verify(irt, call_max));

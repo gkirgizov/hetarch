@@ -66,7 +66,7 @@ static std::unordered_map<std::string_view, callable_ptr> dsl_fun_instantiated{}
 
 
 template<typename ...ArgExprs, typename GLambda>
-constexpr const auto& get_or_alloc_dsl_fun_from_arg_types(GLambda&& dsl_gen) {
+const auto& get_or_alloc_dsl_fun_from_arg_types(GLambda&& dsl_gen) {
 
     static_assert(std::is_invocable_v<GLambda, ArgExprs...>, "DSL Generator cannot be invoked with provided arguments!");
     constexpr auto fun_name = "generic_name";

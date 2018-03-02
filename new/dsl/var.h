@@ -19,6 +19,7 @@ template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<
 struct DSLConst : public Expr<T> {
     const T val;
     constexpr DSLConst(T val) : val{val} {}
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 //template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>

@@ -173,18 +173,22 @@ void CodeGen::runPassesImpl(llvm::Module& module, llvm::TargetMachine* tm) const
     llvm::PassBuilder builder{tm};
 
     // Register analyses
+    llvm::LoopAnalysisManager lam{utils::is_debug};
+    builder.registerLoopAnalyses(lam);
     llvm::FunctionAnalysisManager fam{utils::is_debug};
     builder.registerFunctionAnalyses(fam);
     llvm::ModuleAnalysisManager mam{utils::is_debug};
     builder.registerModuleAnalyses(mam);
+    llvm::CGSCCAnalysisManager cgam{utils::is_debug};
+    builder.registerCGSCCAnalyses(cgam);
 
     // Cross register analyses
-//    builder.crossRegisterProxies(lam, fam, cgam, mam);
-    mam.registerPass([&] { return llvm::FunctionAnalysisManagerModuleProxy(fam); });
+    builder.crossRegisterProxies(lam, fam, cgam, mam);
+//    mam.registerPass([&] { return llvm::FunctionAnalysisManagerModuleProxy(fam); });
 //    mam.registerPass([&] { return llvm::CGSCCAnalysisManagerModuleProxy(cgam); });
 //    cgam.registerPass([&] { return llvm::ModuleAnalysisManagerCGSCCProxy(mam); });
 //    fam.registerPass([&] { return llvm::CGSCCAnalysisManagerFunctionProxy(cgam); });
-    fam.registerPass([&] { return llvm::ModuleAnalysisManagerFunctionProxy(mam); });
+//    fam.registerPass([&] { return llvm::ModuleAnalysisManagerFunctionProxy(mam); });
 //    fam.registerPass([&] { return llvm::LoopAnalysisManagerFunctionProxy(lam); });
 //    lam.registerPass([&] { return llvm::FunctionAnalysisManagerLoopProxy(fam); });
 

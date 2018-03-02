@@ -247,6 +247,15 @@ TEST_F(CodeLoaderTest, loadAndCall) {
     int x{22}, y{11};
     EXPECT_TRUE(std::max(x, y) == generic_caller(max_dsl_generator, x, y));
 
+    Var<int> res{1};
+    auto factorial_gen = [&](auto&& n){
+        return (While(
+                n > DSLConst(0u),
+                (res = res * n, n = n - DSLConst(1u))
+        ), res);
+    };
+    auto remoteRes = generic_caller(factorial_gen, 5u);
+    EXPECT_TRUE(120 == remoteRes) << "invalid result: " << remoteRes << std::endl;
 }
 
 
