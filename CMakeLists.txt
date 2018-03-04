@@ -22,16 +22,21 @@ else()
     message(STATUS "BUILDING FOR LOCAL TESTING ENV($ENV{ARCH}) AddrT:${MY_ADDR_BITS}")
 endif()
 
-# Find LLVM
-set(BASE_DIR /home/hades/projects)
-#set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
-#find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
-#find_package(LLVM 5.0 REQUIRED)
-set(LLVM_INSTALL_DIR ${BASE_DIR}/llvms/llvm_50/install_dir)
-set(LLVM_DIR ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
-find_package(LLVM 5.0 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
+add_definitions(-DHETARCH_TARGET_ADDRT=uint${MY_ADDR_BITS}_t ${MY_PLAFORM_SPECIFIC})
 
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+# Find LLVM
+if(CMAKE_BUILD_TYPE MATCHES Release)
+    find_package(LLVM 5.0 REQUIRED)
+    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+else()
+    set(BASE_DIR /home/hades/projects)
+    #set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
+    #find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
+    set(LLVM_INSTALL_DIR ${BASE_DIR}/llvms/llvm_50/install_dir)
+    set(LLVM_DIR ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
+    find_package(LLVM 5.0 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
+    message(STATUS "Found local LLVM ${LLVM_PACKAGE_VERSION}")
+endif()
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 find_package(Threads)
@@ -43,16 +48,17 @@ execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
-# need -fpermissive to allow casts which lose precision
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fpermissive")
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-#    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=lld")
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-#    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
-endif()
 message(STATUS "using compiler: ${CMAKE_CXX_COMPILER_ID}")
-add_definitions(-DHETARCH_TARGET_ADDRT=uint${MY_ADDR_BITS}_t ${MY_PLAFORM_SPECIFIC})
-
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(MY_LD lld)
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    set(MY_LD gold)
+endif()
+# need -fpermissive to allow casts which lose precision
+# need -fno-rtti because of LLVM compiled with -D LLVM_ENABLE_RTTI=OFF
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive -fuse-ld=${MY_LD}")
+#set(BASE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive -fuse-ld=${MY_LD}")
+#set(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} -fno-rtti")
 
 llvm_map_components_to_libnames(llvm_libs1 support core
         irreader option scalaropts target mc ${MY_LLVM_COMPONENTS}
@@ -93,6 +99,7 @@ target_sources(hetarch
         "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl.h"
         )
 target_link_libraries(hetarch ${llvm_libs1})
+target_compile_options(hetarch PUBLIC "-fno-rtti")
 
 
 add_library(hetarchcg SHARED)
@@ -105,6 +112,7 @@ target_sources(hetarchcg
             "${CMAKE_CURRENT_SOURCE_DIR}/include/cg.h"
         )
 target_link_libraries(hetarchcg ${llvm_libs1})
+target_compile_options(hetarchcg PUBLIC "-fno-rtti")
 
 
 add_library(hetarch_trik)
@@ -114,6 +122,7 @@ target_sources(hetarch_trik
         PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include/trikMspI2c.h"
         )
+target_compile_options(hetarch_trik PUBLIC "-fno-rtti")
 
 
 #add_library(hetarch_new_mem)
@@ -128,6 +137,7 @@ target_sources(hetarch_trik
 #message(STATUS "Found Boost ${Boost_Version}")
 #message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
 #target_include_directories(hetarch_new_mem PUBLIC new/ ${Boost_INCLUDE_DIRS})
+#target_compile_options(hetarch_new_mem PUBLIC "-fno-rtti")
 
 
 add_library(temp_target
@@ -153,6 +163,7 @@ add_library(temp_target
         new/dsl/array.h
         new/dsl/ptr.h
         new/dsl/dsl_meta.h new/TCPConnection.h new/TCPConnection.cpp new/Executor.h new/dsl/ResidentGlobal.h new/CodeGen.cpp)
+target_compile_options(temp_target PUBLIC "-fno-rtti")
 
 
 add_subdirectory(examples)

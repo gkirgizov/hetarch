@@ -8,9 +8,11 @@
 #include <thread>
 
 #include <asio.hpp>
+#include <cxxopts.hpp>
 
-#include "../include/TCPTestConn.h"
+#include "../new/TCPConnection.h"
 
+using namespace hetarch::conn;
 using asio::ip::tcp;
 
 #define handle_error(msg) \
@@ -41,71 +43,72 @@ public:
     ~ExecutableBuffer() { if (_data) { free(_data); }}
 };
 
-using hetarch::conn::vecRead;
-using hetarch::conn::vecWrite;
-using hetarch::conn::vecAppend;
 
 bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
-    auto collected = hetarch::conn::readBuffer(socket);
+    auto collected = detail::readBuffer(socket);
 
     if (!collected.size()) {
-        std::cout << "Connection closed by client" << std::endl;
+        std::cerr << "Connection closed by client" << std::endl;
         return false;
     }
-    std::cout << "Got request, len(" << collected.size() << ")" << std::endl;
+    std::cerr << "Got request, len(" << collected.size() << ")" << std::endl;
 
-    uint32_t actionFlags = vecRead<uint32_t>(collected, 0);
-
+    auto actionFlags = detail::vecRead<action_int_t>(collected, 0);
+    size_t offset = sizeof(action_int_t);
     auto action = static_cast<hetarch::conn::Actions>(actionFlags & 0xFF);
-
     switch (action) {
         case hetarch::conn::Actions::GetBuffAddr: {
-            std::cout << "Request is: GetBuffAddr" << std::endl;
+            std::cerr << "Request is: GetBuffAddr" << std::endl;
 
-            uint32_t bufIdx = vecRead<uint32_t>(collected, 4);
+            auto bufIdx = detail::vecRead<unsigned>(collected, offset);
             std::vector<uint8_t> response;
-            uint64_t addr = reinterpret_cast<uint64_t>(execBuf.data());
-            vecAppend<uint64_t>(response, addr);
-            hetarch::conn::writeBuffer(socket, response);
+            auto addr = reinterpret_cast<size_t>(execBuf.data());
+            detail::vecAppend(response, addr);
+            detail::writeBuffer(socket, response);
             break;
         }
         case hetarch::conn::Actions::AddrRead: {
-            std::cout << "Request is: AddrRead" << std::endl;
+            std::cerr << "Request is: AddrRead" << std::endl;
 
-            uint64_t addr = vecRead<uint64_t>(collected, 4);
-            uint64_t size = vecRead<uint64_t>(collected, 12);
+            auto addr = detail::vecRead<size_t>(collected, offset);
+            offset+=sizeof(addr);
+            auto size = detail::vecRead<size_t>(collected, offset);
+            offset+=sizeof(size);
             std::vector<uint8_t> response(static_cast<size_t>(size));
             std::copy((uint8_t*)addr, (uint8_t*)(addr + size), response.begin());
-            hetarch::conn::writeBuffer(socket, response);
+            detail::writeBuffer(socket, response);
             break;
         }
         case hetarch::conn::Actions::AddrWrite: {
-            std::cout << "Request is: AddrWrite" << std::endl;
+            std::cerr << "Request is: AddrWrite" << std::endl;
 
-            uint64_t addr = vecRead<uint64_t>(collected, 4);
-            uint64_t size = vecRead<uint64_t>(collected, 12);
+            auto addr = detail::vecRead<size_t>(collected, offset);
+            offset+=sizeof(addr);
+            auto size = detail::vecRead<size_t>(collected, offset);
+            offset+=sizeof(size);
 
-            std::cout << "Request is: AddrWrite - everything read" << std::endl;
-            std::copy(collected.begin() + 20, collected.begin() + 20 + size, (uint8_t*)addr);
+            std::cerr << "Request is: AddrWrite - everything read" << std::endl;
+            std::copy(collected.begin() + offset, collected.begin() + offset + size, (uint8_t*)addr);
 
             std::vector<uint8_t> response;
-            vecAppend<uint32_t>(response, 0);
-            hetarch::conn::writeBuffer(socket, response);
+            detail::vecAppend(response, 0);
+            detail::writeBuffer(socket, response);
             break;
         }
         case hetarch::conn::Actions::Call: {
-            std::cout << "Request is: Call" << std::endl;
+            std::cerr << "Request is: Call" << std::endl;
 
-            uint64_t addr = vecRead<uint64_t>(collected, 4);
+            auto addr = detail::vecRead<size_t>(collected, offset);
+            offset+=sizeof(addr);
             std::vector<uint8_t> response;
-            uint32_t(*fnptr)() = (uint32_t(*)())(addr);
-            uint32_t callRes = fnptr();
-            vecAppend<uint32_t>(response, callRes);
-            hetarch::conn::writeBuffer(socket, response);
+            int(*fnptr)() = (int(*)())(addr);
+            auto callRes = fnptr();
+            detail::vecAppend(response, callRes);
+            detail::writeBuffer(socket, response);
             break;
         }
         default: {
-            std::cout << "Request is: default" << std::endl;
+            std::cerr << "Request is: default" << std::endl;
             break;
         }
     }
@@ -117,11 +120,11 @@ void handleClientConnection(tcp::socket &socket, ExecutableBuffer &execBuf) {
         while (handleRequest(socket, execBuf));
     }
     catch (...) {
-        std::cout << "EXCEPTION!!!" << std::endl;
+        std::cerr << "EXCEPTION!!!" << std::endl;
     }
 }
 
-void runServer(ExecutableBuffer *buf, uint16_t port = 1334) {
+void runServer(ExecutableBuffer *buf, uint16_t port) {
     sleep(1);
     try
     {
@@ -129,7 +132,7 @@ void runServer(ExecutableBuffer *buf, uint16_t port = 1334) {
 
         tcp::acceptor acceptor(io_service, tcp::endpoint(tcp::v4(), port));
 
-        std::cout << "Server started..." << std::endl;
+        std::cerr << "Server started..." << std::endl;
 
         for (;;)
         {
@@ -144,19 +147,26 @@ void runServer(ExecutableBuffer *buf, uint16_t port = 1334) {
     }
 }
 
-void mainApplicationLoop() {
-    std::cout << "Main application loop started..." << std::endl;
-}
 
-int main() {
-    ExecutableBuffer codeBuf(2 * 1024 * 1024);
-    std::cout <<
-            "Alocated executable buffer at 0x" <<
-            std::hex << std::uppercase <<
-            reinterpret_cast<uint64_t>(codeBuf.data())
-            << std::nouppercase << std::dec << std::endl;
-    std::thread t1(runServer, &codeBuf, 13334);
-    mainApplicationLoop();
+int main(int argc, char* argv[]) {
+    cxxopts::Options opts("local_loader", "Simple TCP server that can give you access to an executable memory buffer.");
+    opts.add_options()
+            ("p,port", "port to listen for incoming connections",
+             cxxopts::value<uint16_t>()->default_value("1334"))
+            ("s,size", "size of the buffer to allocate",
+             cxxopts::value<unsigned>()->default_value(std::to_string(1024*1024)))
+            ;
+    auto result = opts.parse(argc, argv);
+    auto buf_size = result["size"].as<unsigned>();
+    auto port = result["port"].as<uint16_t>();
+
+    ExecutableBuffer codeBuf(buf_size);
+    std::cerr << std::hex
+              << "Alocated executable buffer of size 0x" << buf_size
+              << " at 0x" << std::hex << reinterpret_cast<size_t>(codeBuf.data())
+              << std::dec << std::endl;
+    std::thread t1(runServer, &codeBuf, port);
+    std::cerr << "Main application loop started at port " << port << "..." << std::endl;
     t1.join();
     return 0;
 }

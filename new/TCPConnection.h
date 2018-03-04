@@ -10,7 +10,8 @@ namespace hetarch {
 namespace conn {
 
 
-enum class Actions : uint32_t {
+using action_int_t = uint16_t;
+enum class Actions : action_int_t {
 //enum class Actions {
     AddrRead = 1,
     AddrWrite = 2,
@@ -18,12 +19,15 @@ enum class Actions : uint32_t {
     Call = 4,
 };
 
+//using addr_t = uint64_t;
+using addr_t = HETARCH_TARGET_ADDRT;
+
 namespace detail {
 
 template<typename T> T vecRead(const std::vector<unsigned char> &vec, int offset) {
     T res = 0;
     for (int i = 0; i < sizeof(T); i++) {
-        res |= static_cast<uint64_t>(vec[offset + i]) << (i * 8);
+        res |= static_cast<addr_t>(vec[offset + i]) << (i * sizeof(addr_t));
     }
     return res;
 }
@@ -31,14 +35,14 @@ template<typename T> T vecRead(const std::vector<unsigned char> &vec, int offset
 template<typename T> void vecWrite(std::vector<unsigned char> &vec, int offset, T value) {
     for (int i = 0; i < sizeof(T); i++) {
         vec.insert(vec.begin() + offset + i, static_cast<unsigned char>(value & 0xFF));
-        value >>= 8;
+        value >>= sizeof(addr_t);
     }
 }
 
 template<typename T> void vecAppend(std::vector<unsigned char> &vec, T value) {
     for (int i = 0; i < sizeof(T); i++) {
         vec.insert(vec.end(), static_cast<unsigned char>(value & 0xFF));
-        value >>= 8;
+        value >>= sizeof(addr_t);
     }
 }
 
@@ -75,7 +79,7 @@ public:
 
     AddrT write(AddrT addr, AddrT size, const char *buf) override {
         std::vector<uint8_t> vec;
-        detail::vecAppend(vec, static_cast<uint32_t>(hetarch::conn::Actions::AddrWrite));
+        detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::AddrWrite));
         detail::vecAppend(vec, addr);
         detail::vecAppend(vec, size);
         vec.insert(vec.end(), buf, buf + size);
@@ -87,7 +91,7 @@ public:
 
     AddrT read(AddrT addr, AddrT size, char *buf) override {
         std::vector<uint8_t> vec;
-        detail::vecAppend(vec, static_cast<uint32_t>(hetarch::conn::Actions::AddrRead));
+        detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::AddrRead));
         detail::vecAppend(vec, addr);
         detail::vecAppend(vec, size);
         detail::writeBuffer(*socket, vec);
@@ -97,7 +101,7 @@ public:
 
     bool call(AddrT addr) override {
         std::vector<uint8_t> vec;
-        detail::vecAppend(vec, static_cast<uint32_t>(hetarch::conn::Actions::Call));
+        detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::Call));
         detail::vecAppend(vec, addr);
         detail::writeBuffer(*socket, vec);
         auto response = detail::readBuffer(*socket);
@@ -111,11 +115,11 @@ public:
 
     AddrT getBuffer(unsigned idx) {
         std::vector<uint8_t> vec;
-        detail::vecWrite(vec, 0, static_cast<uint32_t>(hetarch::conn::Actions::GetBuffAddr));
-        detail::vecWrite(vec, 4, 0);
+        detail::vecWrite(vec, 0, static_cast<action_int_t>(hetarch::conn::Actions::GetBuffAddr));
+        detail::vecWrite(vec, sizeof(action_int_t), 0);
         detail::writeBuffer(*socket, vec);
         auto response = detail::readBuffer(*socket);
-        uint64_t addr = detail::vecRead<uint64_t>(response, 0);
+        auto addr = detail::vecRead<addr_t>(response, 0);
         return addr;
     }
 
