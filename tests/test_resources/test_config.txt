@@ -1,2 +1,7 @@
+armv7a-unknown-linux-gnu
+192.168.0.102
+13334
+
+x86_64-unknown-linux-gnu
 localhost
 13334
