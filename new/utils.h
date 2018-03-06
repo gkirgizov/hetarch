@@ -102,3 +102,21 @@ constexpr std::string_view type_name() {
 
 #define PR_CERR_VAL_TY(VAL) ;std::cerr << hetarch::utils::type_name<decltype( (VAL) )>() << std::endl;
 #define PR_CERR_TY(TY) ;std::cerr << hetarch::utils::type_name< TY >() << std::endl;
+
+#ifdef DEBUG
+#   define PR_DBG(x) do { std::cerr << x << std::endl; } while (false);
+#else
+#   define PR_DBG(x)
+#endif
+
+namespace hetarch {
+namespace utils {
+#ifdef DEBUG
+constexpr inline bool is_debug = true;
+#else
+constexpr inline bool is_debug = false;
+#endif
+}
+}
+
+
