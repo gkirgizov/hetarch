@@ -1,9 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <asio.hpp>
+#include <iostream>
 
 #include "IConnection.h"
+#include "utils.h"
 
 
 namespace hetarch {
@@ -12,37 +15,38 @@ namespace conn {
 
 using action_int_t = uint16_t;
 enum class Actions : action_int_t {
-//enum class Actions {
     AddrRead = 1,
     AddrWrite = 2,
     GetBuffAddr = 3,
     Call = 4,
 };
 
-//using addr_t = uint64_t;
 using addr_t = HETARCH_TARGET_ADDRT;
 
 namespace detail {
 
-template<typename T> T vecRead(const std::vector<unsigned char> &vec, int offset) {
+template<typename T = addr_t>
+T vecRead(const std::vector<unsigned char> &vec, int offset = 0) {
     T res = 0;
-    for (int i = 0; i < sizeof(T); i++) {
-        res |= static_cast<addr_t>(vec[offset + i]) << (i * sizeof(addr_t));
+    for (int i = 0; i < sizeof(T); ++i) {
+        res |= static_cast<addr_t>(vec[offset + i]) << (i * CHAR_BIT);
     }
     return res;
 }
 
-template<typename T> void vecWrite(std::vector<unsigned char> &vec, int offset, T value) {
-    for (int i = 0; i < sizeof(T); i++) {
+template<typename T>
+void vecWrite(std::vector<unsigned char> &vec, int offset, T value) {
+    for (int i = 0; i < sizeof(T); ++i) {
         vec.insert(vec.begin() + offset + i, static_cast<unsigned char>(value & 0xFF));
-        value >>= sizeof(addr_t);
+        value >>= CHAR_BIT;
     }
 }
 
-template<typename T> void vecAppend(std::vector<unsigned char> &vec, T value) {
-    for (int i = 0; i < sizeof(T); i++) {
+template<typename T>
+void vecAppend(std::vector<unsigned char> &vec, T value) {
+    for (int i = 0; i < sizeof(T); ++i) {
         vec.insert(vec.end(), static_cast<unsigned char>(value & 0xFF));
-        value >>= sizeof(addr_t);
+        value >>= CHAR_BIT;
     }
 }
 
@@ -78,6 +82,13 @@ public:
     }
 
     AddrT write(AddrT addr, AddrT size, const char *buf) override {
+        if constexpr (utils::is_debug) {
+            std::cerr << "conn::write:"
+                      << std::hex << " addr 0x" << addr
+                      << std::hex << " size 0x" << size
+                      << std::dec << std::endl;
+        }
+
         std::vector<uint8_t> vec;
         detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::AddrWrite));
         detail::vecAppend(vec, addr);
@@ -90,6 +101,13 @@ public:
     }
 
     AddrT read(AddrT addr, AddrT size, char *buf) override {
+        if constexpr (utils::is_debug) {
+            std::cerr << "conn::read:"
+                      << std::hex << " addr 0x" << addr
+                      << std::hex << " size 0x" << size
+                      << std::dec << std::endl;
+        }
+
         std::vector<uint8_t> vec;
         detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::AddrRead));
         detail::vecAppend(vec, addr);
@@ -97,15 +115,22 @@ public:
         detail::writeBuffer(*socket, vec);
         auto response = detail::readBuffer(*socket);
         std::copy(response.begin(), response.end(), buf);
+        return 0;
     }
 
     bool call(AddrT addr) override {
+        if constexpr (utils::is_debug) {
+            std::cerr << "conn::call:"
+                      << std::hex << " addr 0x" << addr
+                      << std::dec << std::endl;
+        }
+
         std::vector<uint8_t> vec;
         detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::Call));
         detail::vecAppend(vec, addr);
         detail::writeBuffer(*socket, vec);
         auto response = detail::readBuffer(*socket);
-        if (auto res = detail::vecRead<uint32_t>(response, 0)) {
+        if (auto res = detail::vecRead(response, 0)) {
 //            return res;
             return true;
         };
@@ -114,12 +139,22 @@ public:
     }
 
     AddrT getBuffer(unsigned idx) {
+        if constexpr (utils::is_debug) {
+            std::cerr << "conn::getBuffer:" << " idx " << idx;
+        }
+
         std::vector<uint8_t> vec;
-        detail::vecWrite(vec, 0, static_cast<action_int_t>(hetarch::conn::Actions::GetBuffAddr));
-        detail::vecWrite(vec, sizeof(action_int_t), 0);
+        detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::GetBuffAddr));
+        detail::vecAppend(vec, 0);
         detail::writeBuffer(*socket, vec);
         auto response = detail::readBuffer(*socket);
-        auto addr = detail::vecRead<addr_t>(response, 0);
+        auto addr = detail::vecRead(response, 0);
+
+        if constexpr (utils::is_debug) {
+            std::cerr << std::hex << " addr 0x" << addr
+                      << std::dec << std::endl;
+        }
+
         return addr;
     }
 

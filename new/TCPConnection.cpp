@@ -15,7 +15,7 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
     size_t expected = 0;
     std::vector<uint8_t> collected;
     std::vector<uint8_t> buf;
-    for (;;) {
+    do {
         asio::error_code error;
         buf = std::vector<uint8_t>(512);
 
@@ -24,26 +24,29 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
         if (error == asio::error::eof) {
             break; // Connection closed cleanly by peer.
         } else if (error) {
+            if constexpr (utils::is_debug) {
+                std::cerr << "readBuffer: error: " << error << std::endl;
+            }
             throw asio::system_error(error); // Some other error.
         }
 
-        if (expected == 0) {
-            expected = vecRead<uint64_t>(buf, 0);
-            buf = std::vector<uint8_t>(buf.begin() + 8, buf.begin() + len);
-            len -= 8;
+        auto beg = buf.begin();
+        if (expected == 0) { // read total size of expected data
+            expected = vecRead(buf, 0);
+            beg += sizeof(addr_t);
+            len -= sizeof(addr_t);
         }
-        collected.insert(collected.end(), buf.begin(), buf.begin() + len);
-
+        // read data
+        collected.insert(collected.end(), beg, beg + len);
         expected -= len;
-        if (!expected) { break; }
-    }
+    } while (expected > 0);
     return collected;
 }
 
 void writeBuffer(tcp::socket &socket, const std::vector<uint8_t> &buffer) {
     asio::error_code ignored_error;
     std::vector<unsigned char> dataToSend;
-    vecWrite<uint64_t>(dataToSend, 0, (uint64_t)buffer.size());
+    vecWrite(dataToSend, 0, static_cast<addr_t>(buffer.size()));
     dataToSend.insert(dataToSend.end(), buffer.begin(), buffer.end());
     asio::write(socket, asio::buffer(dataToSend), ignored_error);
 }
