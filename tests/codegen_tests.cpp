@@ -133,31 +133,32 @@ TEST_F(CodeGenTest, dependentCompile) {
 }
 
 
-using host_port_t = std::pair<std::string, uint16_t>;
-host_port_t read_config() {
+struct cg_config {
+    std::string triple;
+    std::string host;
+    uint16_t port;
+};
+
+cg_config read_config() {
     std::ifstream test_config{ress + "test_config.txt"};
+    std::string triple;
     std::string host;
     uint16_t port;
 
-    test_config >> host;
-    test_config >> port;
-
-    std::cerr << "Tests: using: host: " << host << "; port: " << port << std::endl;
-
-    return host_port_t{host, port};
+    test_config >> triple >> host >> port;
+    std::cerr << "Tests: using: host: " << host << "; port: " << port << "; triple: " << triple << std::endl;
+    return {triple, host, port};
 }
 
 
 class CodeLoaderTest : public ::testing::Test {
 public:
     explicit CodeLoaderTest()
-            : codeGen("x86_64-unknown-linux-gnu")
+            : config{read_config()}
+            , codeGen(config.triple)
             , irt{}
             , ctx{irt.getContext()}
-            , hp{read_config()}
-            , host{hp.first}
-            , port{hp.second}
-            , conn{host, port}
+            , conn{config.host, config.port}
             , all_mem{conn.getBuffer(0), 1024 * 1024, mem::MemType::ReadWrite}
             , memMgr{all_mem}
             , exec{conn, memMgr, irt, codeGen}
@@ -167,6 +168,8 @@ public:
             , self_sufficient{utils::loadModule(ir0, ctx), "pow_naive"}
     {}
 
+    const cg_config config;
+
     CodeGen codeGen;
     IRTranslator irt;
     LLVMContext& ctx;
@@ -174,11 +177,7 @@ public:
 //    mock::MockConnection<addr_t> conn{};
 //    mock::MockMemManager<addr_t> memMgr{};
 
-    const host_port_t hp;
-    const std::string host;
-    const uint16_t port;
     conn::TCPConnection<addr_t> conn;
-
     const MemRegion<addr_t> all_mem;
     mem::MemManagerBestFit<addr_t> memMgr;
 
