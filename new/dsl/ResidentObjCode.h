@@ -12,23 +12,22 @@
 
 
 namespace hetarch {
+
+template<typename AddrT> class Executor;
+
 namespace dsl {
 
 
 using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
 
-//template<typename AddrT, typename RetT, typename ...Args> class ResidentObjCode;
-
-//template<typename AddrT> class Executor;
-
 template<typename AddrT, typename TdRet, typename... TdArgs>
 class ResidentObjCode : public dsl::DSLCallable<ResidentObjCode<AddrT, TdRet, TdArgs...>, TdRet, TdArgs...>
                       , public MemResident<AddrT>
                       , public Named
 {
-    template<typename AddrT2> friend class Executor;
-//    friend class Executor<AddrT>;
+//    template<typename AddrT2> friend class Executor;
+    friend class Executor<AddrT>;
 
 //    using args_space_t = std::tuple< ResidentGlobal<f_t<TdArgs>, TdArgs::const_q>... >;
     using ret_space_t = TdRet;

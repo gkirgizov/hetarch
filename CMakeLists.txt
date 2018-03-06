@@ -4,31 +4,43 @@ project(hetarch-proj)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if ("$ENV{ARCH}" STREQUAL "arm")
-    # BUILDING FOR TRIK
-    set(MY_LLVM_BUILD_DIR_NAME ARM-cmake-build-release)
-    set(MY_LLVM_COMPONENTS msp430 msp430asmprinter msp430codegen msp430desc msp430info)
-    set(MY_ADDR_BITS 16)
-    set(MY_PLAFORM_SPECIFIC "-DHETARCH_MSP430ONLY")
 
-    message(STATUS "BUILDING FOR TRIK ENV($ENV{ARCH}) AddrT:${MY_ADDR_BITS}")
+### LLVM CONFIG ###
+
+#set(MY_TARGET X86)
+#set(MY_HOST X86)
+
+if(${MY_TARGET} MATCHES X86)
+    set(TARGET_BITWIDTH 64)
+elseif(${MY_TARGET} MATCHES ARM)
+    set(TARGET_BITWIDTH 32)
+elseif(${MY_TARGET} MATCHES MSP430)
+    set(TARGET_BITWIDTH 16)
 else()
-    # BUILDING FOR LOCAL TESTING - X86_64
-    set(MY_LLVM_BUILD_DIR_NAME cmake-build-debug)
-    set(MY_LLVM_COMPONENTS msp430 msp430asmprinter msp430codegen msp430desc msp430info
-            x86 x86asmparser x86asmprinter x86codegen x86desc x86disassembler x86info x86utils)
-    set(MY_ADDR_BITS 64)
-
-    message(STATUS "BUILDING FOR LOCAL TESTING ENV($ENV{ARCH}) AddrT:${MY_ADDR_BITS}")
+    message(FATAL_ERROR "Unknown Target!")
 endif()
 
-add_definitions(-DHETARCH_TARGET_ADDRT=uint${MY_ADDR_BITS}_t ${MY_PLAFORM_SPECIFIC})
+# Set needed llvm libs
+set(LLVM_COMPONENTS_BASE
+        support core irreader
+        linker
+        passes
+        )
+set(LLVM_COMPONENTS_TARGET ${MY_TARGET})
+set(LLVM_COMPONENTS_HOST ${MY_HOST})
+
+add_definitions(-DHT_ENABLE_${MY_TARGET} -DHT_ENABLE_${MY_HOST})
+add_definitions(-DHETARCH_TARGET_ADDRT=uint${TARGET_BITWIDTH}_t ${MY_PLAFORM_SPECIFIC})
+message(STATUS "Building for Host=${MY_HOST}; for Target=${MY_TARGET} (bitwidth: ${TARGET_BITWIDTH})")
 
 # Find LLVM
+# TODO: link llvm statically
 if(CMAKE_BUILD_TYPE MATCHES Release)
+    # Default system LLVM should support all targets
     find_package(LLVM 5.0 REQUIRED)
     message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 else()
+    # Debug LLVM version support needed targets (x86, arm, msp430)
     set(BASE_DIR /home/hades/projects)
     #set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
     #find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
@@ -39,30 +51,50 @@ else()
 endif()
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-find_package(Threads)
+# Get libnames for linking
+llvm_map_components_to_libnames(llvm_libs_base ${LLVM_COMPONENTS_BASE})
+llvm_map_components_to_libnames(llvm_libs_host ${LLVM_COMPONENTS_HOST})
+llvm_map_components_to_libnames(llvm_libs_target ${LLVM_COMPONENTS_TARGET})
+#llvm_map_components_to_libnames(llvm_libs_more ${LLVM_COMPONENTS_TARGET} ${LLVM_COMPONENTS_HOST})
+set(llvm_libs_more "${llvm_libs_host};${llvm_libs_target}")
+#string(REPLACE "x86" "X86" llvm_libs_more ${llvm_libs_more}) # some llvm inconsistency?
 
-execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE_DIR}/examples/memmap.def "${MY_ADDR_BITS}"
-        RESULT_VARIABLE cmd_result)
-#message(STATUS ${CMAKE_SOURCE_DIR}/compileMemMapDef.sh " " ${cmd_result})
+set(llvm_libs_all "${llvm_libs_base};${llvm_libs_more}")
+message(STATUS "llvm_libs_base: ${llvm_libs_base}")
+#message(STATUS "llvm_libs_target: ${llvm_libs_target}")
+message(STATUS "llvm_libs_more: ${llvm_libs_more}")
 
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
+### END LLVM CONFIG ###
+
+# todo: what is it for?
+execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE_DIR}/examples/memmap.def "${MY_ADDR_BITS}"
+        RESULT_VARIABLE cmd_result)
+#message(STATUS ${CMAKE_SOURCE_DIR}/compileMemMapDef.sh " " ${cmd_result})
+
+find_package(Threads)
+
+# Set some compiler flags & change linker
+
+#if(CMAKE_BUILD_TYPE MATCHES Debug)
 message(STATUS "using compiler: ${CMAKE_CXX_COMPILER_ID}")
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    set(MY_LD lld)
+    set(LD_OPT "-fuse-ld=lld")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    set(MY_LD gold)
+    set(LD_OPT "-fuse-ld=gold")
 endif()
+#endif()
 # need -fpermissive to allow casts which lose precision
 # need -fno-rtti because of LLVM compiled with -D LLVM_ENABLE_RTTI=OFF
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive -fuse-ld=${MY_LD}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive ${LD_OPT}")
 #set(BASE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive -fuse-ld=${MY_LD}")
 #set(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} -fno-rtti")
 
-llvm_map_components_to_libnames(llvm_libs1 support core
-        irreader option scalaropts target mc ${MY_LLVM_COMPONENTS}
-        transformutils)
+#llvm_map_components_to_libnames(llvm_libs1 support core
+#        irreader option scalaropts target mc ${MY_LLVM_COMPONENTS}
+#        transformutils)
 
 
 include_directories(include)
@@ -98,7 +130,7 @@ target_sources(hetarch
         INTERFACE
         "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl.h"
         )
-target_link_libraries(hetarch ${llvm_libs1})
+target_link_libraries(hetarch ${llvm_libs_all})
 target_compile_options(hetarch PUBLIC "-fno-rtti")
 
 
@@ -111,7 +143,7 @@ target_sources(hetarchcg
         PUBLIC
             "${CMAKE_CURRENT_SOURCE_DIR}/include/cg.h"
         )
-target_link_libraries(hetarchcg ${llvm_libs1})
+target_link_libraries(hetarchcg ${llvm_libs_all})
 target_compile_options(hetarchcg PUBLIC "-fno-rtti")
 
 
@@ -122,7 +154,6 @@ target_sources(hetarch_trik
         PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include/trikMspI2c.h"
         )
-target_compile_options(hetarch_trik PUBLIC "-fno-rtti")
 
 
 #add_library(hetarch_new_mem)
@@ -137,7 +168,6 @@ target_compile_options(hetarch_trik PUBLIC "-fno-rtti")
 #message(STATUS "Found Boost ${Boost_Version}")
 #message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
 #target_include_directories(hetarch_new_mem PUBLIC new/ ${Boost_INCLUDE_DIRS})
-#target_compile_options(hetarch_new_mem PUBLIC "-fno-rtti")
 
 
 add_library(temp_target
@@ -163,7 +193,6 @@ add_library(temp_target
         new/dsl/array.h
         new/dsl/ptr.h
         new/dsl/dsl_meta.h new/TCPConnection.h new/TCPConnection.cpp new/Executor.h new/dsl/ResidentGlobal.h new/CodeGen.cpp)
-target_compile_options(temp_target PUBLIC "-fno-rtti")
 
 
 add_subdirectory(examples)

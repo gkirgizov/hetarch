@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <memory>
 #include <utility>
 
@@ -21,6 +21,8 @@
 #include "supportingClasses.h"
 #include "dsl/dsl_base.h"
 #include "dsl/fun.h"
+#include "utils.h"
+
 #include "../tests/test_utils.h"
 
 
@@ -54,7 +56,7 @@ private:
     const llvm::Target* target{nullptr};
     const llvm::PassRegistry* pm{nullptr};
 
-    const std::map<OptLvl, CGOptLvl> opt_lvl_map{
+    const std::unordered_map<OptLvl, CGOptLvl> opt_lvl_map{
             { OptLvl::O0, CGOptLvl::None },
             { OptLvl::O1, CGOptLvl::Less },
             { OptLvl::O2, CGOptLvl::Default },

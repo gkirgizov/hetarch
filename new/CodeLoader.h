@@ -101,7 +101,7 @@ public:
         using val_type = T;
         using Td = dsl::Var<val_type, is_const, is_volatile>;
 
-        const auto size = reinterpret_cast<AddrT>(sizeof(val_type));
+        const auto size = static_cast<AddrT>(sizeof(val_type));
         auto memRegion = memManager.alloc(size, memType);
         if (memRegion.size >= size) {
 
@@ -144,7 +144,7 @@ public:
 //        for (const auto& section_exp : symbol.getSection()) {
         if(auto it_exp = symbol.getSection()) {
             const llvm::object::SectionRef& section = *it_exp.get();
-            const auto contentsSize = reinterpret_cast<AddrT>(section.getSize());
+            const auto contentsSize = static_cast<AddrT>(section.getSize());
 
             assert(section.isText());
 
@@ -161,8 +161,12 @@ public:
                 auto memForText = memManager.alloc(contentsSize, memType);
 
                 // specialise for Void return type
-                constexpr bool is_returning = !dsl::is_unit_v<TdRet>;
-                const AddrT retValSize = is_returning ? sizeof(dsl::f_t<TdRet>) : 0;
+//                const AddrT retValSize = is_returning ? sizeof(dsl::f_t<TdRet>) : 0;
+                AddrT retValSize = 0;
+                using val_type = dsl::f_t<TdRet>;
+                if constexpr (!std::is_void_v<val_type>) {
+                    retValSize = sizeof(val_type);
+                }
                 auto memForRetVal = memManager.alloc(retValSize, memType);
 
                 std::array<AddrT, sizeof...(TdArgs)> argsSizes{ sizeof(dsl::f_t<TdArgs>)... };
@@ -174,7 +178,7 @@ public:
                 if (memForText.size >= contentsSize && allocatedSize >= argsSize && memForRetVal.size >= retValSize) {
                     // get offset of needed symbol
                     if (auto offsetInSection = symbol.getAddress()) {
-                        const auto offset = reinterpret_cast<AddrT>(offsetInSection.get());
+                        const auto offset = static_cast<AddrT>(offsetInSection.get());
                         const AddrT callAddr = offset + memForText.start;
 
                         // Load everything we need
@@ -236,21 +240,6 @@ private:
     };
 
 };
-
-
-// example function: avoid all temp. objects (IRModule, ObjCode) if they're not needed
-// todo: this ex. shows that all funcs must have && counterparts \
-// todo: and all util objects must obey move semantics (not clear about copy)
-//template<typename RetT, typename... Args>
-//dsl::ResidentObjCode<RetT, Args...> convenientLoad(const DSLFunction<RetT, Args...> &target) {
-//
-//    IRModule<RetT, Args...> irModule = CodeGen::generateIR(target);
-//    if (bool success = CodeGen::link(irModule)) {
-//        return CodeLoader::load(CodeGen::compile(irModule));
-//    } else {
-//        return nullptr;
-//    }
-//};
 
 
 }

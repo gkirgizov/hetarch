@@ -5,8 +5,14 @@
 
 //#include "llvm/InitializePasses.h"
 
-
 namespace hetarch {
+
+
+//#define HT_LLVM_INIT_TARGET(X) \
+//    LLVMInitialize##X##TargetInfo(); \
+//    LLVMInitialize##X##Target(); \
+//    LLVMInitialize##X##TargetMC(); \
+//    LLVMInitialize##X##AsmPrinter();
 
 
 CodeGen::CodeGen(const std::string &targetName)
@@ -16,20 +22,25 @@ CodeGen::CodeGen(const std::string &targetName)
 {}
 
 const llvm::Target* CodeGen::initTarget(const std::string &targetName) {
-
     // Initialise targets
-    // todo: optimise somehow? (don't init ALL targets - check how expensive it is)
-    //  init from a list of allowed architectures
 
 //    InitializeAllTargetInfos();
 //    InitializeAllTargetMCs();
 //    InitializeAllAsmPrinters();
 //    InitializeAllAsmParsers();
 
+#ifdef HT_ENABLE_X86
     LLVMInitializeX86TargetInfo();
     LLVMInitializeX86Target();
     LLVMInitializeX86TargetMC();
     LLVMInitializeX86AsmPrinter();
+#endif
+#ifdef HT_ENABLE_ARM
+    LLVMInitializeARMTargetInfo();
+    LLVMInitializeARMTarget();
+    LLVMInitializeARMTargetMC();
+    LLVMInitializeARMAsmPrinter();
+#endif
 
     std::string targetLookupError;
     // todo: make checkable if CodeGen finds target
@@ -67,7 +78,7 @@ llvm::TargetMachine* CodeGen::getTargetMachine(OptLvl optLvl) const {
     llvm::Reloc::Model relocModel = llvm::Reloc::PIC_;
     auto codeModel = llvm::CodeModel::Default;
 //    CGOptLvl cgOptLvl = llvm::CodeGenOpt::Default;
-    CGOptLvl cgOptLvl = opt_lvl_map[optLvl];
+    CGOptLvl cgOptLvl = opt_lvl_map.at(optLvl);
 
     return target->createTargetMachine(
             this->targetName,
@@ -93,7 +104,6 @@ CodeGen::llvm_obj_t CodeGen::compileImpl(IIRModule& irModule, OptLvl optLvl) con
 
         auto compiler = llvm::orc::SimpleCompiler(*targetMachine);
         // seems, specific ObjectFile type (e.g. ELF32) and endianness are determined from TargetMachine
-        // todo: shouldn't there be irModule.m.release()? no.
         llvm_obj_t objFile = compiler(*irModule.m);
 
         if (objFile.getBinary()) {
@@ -105,6 +115,9 @@ CodeGen::llvm_obj_t CodeGen::compileImpl(IIRModule& irModule, OptLvl optLvl) con
             } else {
                 // todo: handle undefined symbols error
                 // just return meaningful description; this error is easily resolved and can't be solved at runtime
+                PR_DBG("CodeGen: undefined symbols found in .text section!")
+                // anyway return objFile maybe it is okey. not clear.
+                return objFile;
             }
 
         } else {
@@ -121,19 +134,28 @@ std::vector<std::string> CodeGen::findUndefinedSymbols(llvm_obj_t& objFile) {
     std::vector<std::string> undefinedSyms;
     for (const auto &sym : objFile.getBinary()->symbols()) {
 
-//        std::cerr
-//                << "; type: " << sym.getType().get()
-//                << "; flags: 0x" << std::hex << sym.getFlags()
-//                << "; name: '" << sym.getName().get().str() << "'"
-//                << std::endl;
+//        if constexpr (utils::is_debug) {
+//            std::cerr
+//                    << "; type: " << sym.getType().get()
+//                    << "; flags: 0x" << std::hex << sym.getFlags()
+//                    << "; name: '" << sym.getName().get().str() << "'"
+//                    << std::endl;
+//        }
 
         // we don't care about SF_FormatSpecific (e.g. debug symbols)
         auto sf = sym.getFlags();
         if (!(sf & llvm::object::BasicSymbolRef::SF_FormatSpecific)
             && sf & llvm::object::BasicSymbolRef::SF_Undefined)
         {
-            if (auto name = sym.getName()) {
-                undefinedSyms.push_back(name.get().str());
+            // we care only about .text section
+            if (auto it_exp = sym.getSection()) {
+                const auto& section = *it_exp.get();
+                if(section.isText()) {
+                    // add undefined symbol to a list
+                    if (auto name = sym.getName()) {
+                        undefinedSyms.push_back(name.get().str());
+                    }
+                }
             }
         }
     }
