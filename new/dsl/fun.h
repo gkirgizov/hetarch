@@ -84,6 +84,16 @@ constexpr auto makeCall(const TdCallable& callable, ArgExprs&&... args) {
 };
 
 
+// Almost anyway need to explicitly specify return type TdRet
+//  otherwise only some kind of return type deduction magic depending on exit condition (if there is some...)
+template<typename TdRet, typename ...TdArgs>
+struct Recurse : public Expr<f_t<TdRet>> {
+    const std::tuple<TdArgs...> args;
+    explicit constexpr Recurse(TdArgs&&... args): args{std::forward<TdArgs>(args)...} {}
+    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+};
+
+
 template<typename TdCallable, typename TdRet, typename ...TdArgs>
 struct DSLCallable : public CallableBase {
     static_assert(is_val_v<TdRet, TdArgs...>);
