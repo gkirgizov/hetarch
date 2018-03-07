@@ -31,9 +31,7 @@
 *.out
 *.app
 
-ARM-cmake-build-release
-cmake-build-release
-cmake-build-debug
+*cmake-build*
 
 .idea
 
