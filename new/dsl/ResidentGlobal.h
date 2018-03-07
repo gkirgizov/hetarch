@@ -11,6 +11,7 @@ namespace hetarch {
 namespace dsl {
 
 
+// todo: make Named?
 template<typename AddrT, typename T, bool is_const = std::is_const_v<T>>
 class ResidentGlobal : public MemResident<AddrT> {
 //    using value_type = i_t<Td>;
@@ -42,8 +43,6 @@ public:
         auto val_ptr = reinterpret_cast<value_type*>(bytes);
         return *val_ptr; // copy-construct from reference
     }
-
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 

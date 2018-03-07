@@ -81,7 +81,6 @@ TEST_F(IRTranslatorTest, compileDSLCommon) {
     EXPECT_TRUE(translate_verify(irt, call_test));
 }
 
-
 TEST_F(IRTranslatorTest, compileDSLOperations) {
     Var<int32_t> xi{1}, yi{3};
     Var<uint64_t> xui{1}, yui{3};
@@ -109,6 +108,23 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
     EXPECT_TRUE(translate_verify(irt, cmp_test));
 }
 
+TEST_F(IRTranslatorTest, compilePtr) {
+    Var<int32_t> xi{1}, yi{3};
+    Ptr p_xi{xi};
+
+    DSLFunction ptr_test(
+            "ptr_test",
+            MakeFunArgs(yi),
+            (
+                    xi == *p_xi,
+                    *p_xi = yi,
+                    xi == yi,
+                    Unit
+            )
+    );
+
+    EXPECT_TRUE(translate_verify(irt, ptr_test));
+}
 
 TEST_F(IRTranslatorTest, compileDSLArray) {
     std::array arr_init = {1, 2, 3, 5};
@@ -172,7 +188,7 @@ auto max_code_generator = [](auto&& x, auto&& y) {
     return If(x > y, x, y);
 };
 
-auto get_generic_caller = [&](const auto& callee) {
+auto get_generic_caller = [](const auto& callee) {
     // return generic caller of generic dsl functions
     return [&](auto&&... args) {
         return callee(args...);

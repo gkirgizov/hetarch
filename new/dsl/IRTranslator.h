@@ -124,36 +124,35 @@ public:
     // todo: push dummy Value to avoid accidental pop in empty stack?
     void accept(const VoidExpr &) {}
 
-public:
-    template<typename T, bool is_const, bool is_volatile
-//            , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
-    >
-    void accept(const Var<T, is_const, is_volatile> &var) {
+public: // Values
+    template<typename TdVal
+            , typename = typename std::enable_if_t<is_val_v<TdVal>>>
+    void accept_value(const TdVal& val, llvm::Value* init_val = nullptr, bool is_volatile = false) {
         llvm::Value* val_addr = nullptr;
 
-        auto known = frame->allocated.find(&var);
+        auto known = frame->allocated.find(&val);
         if (known == std::end(frame->allocated)) {
-#ifdef DEBUG
-            std::cerr << "--alloca for " << std::hex << &var << "; T="
-                      << utils::type_name<decltype(var)>() << std::endl;
-#endif
-            auto ty = llvm_map.get_type<T>();
-            if (var.initialised()) {
-                auto init_val = llvm_map.get_const(var.initial_val());
-                val_addr = allocate(ty, init_val, is_volatile, var.name());
-            } else {
-                val_addr = allocate(ty, var.name());
-            }
-            frame->allocated[&var] = val_addr;
+            if constexpr (utils::is_debug)
+                std::cerr << "--alloca for " << std::hex << &val << "; T=" << utils::type_name<decltype(val)>() << std::endl;
+
+            auto ty = llvm_map.get_type<f_t<TdVal>>();
+            val_addr = allocate(ty, init_val, is_volatile, val.name());
+
+            frame->allocated[&val] = val_addr;
         } else { // Variable usage
-#ifdef DEBUG
-            std::cerr << "--use of" << std::hex << &var << "; T="
-                      << utils::type_name<decltype(var)>() << std::endl;
-#endif
+            if constexpr (utils::is_debug)
+                std::cerr << "--use of" << std::hex << &val << "; T=" << utils::type_name<decltype(val)>() << std::endl;
+
             val_addr = known->second;
         }
 
         push_addr(val_addr, is_volatile);
+    }
+
+    template<typename T, bool is_const, bool is_volatile>
+    void accept(const Var<T, is_const, is_volatile> &var) {
+        auto init_val = var.initialised() ? llvm_map.get_const(var.initial_val()) : nullptr;
+        accept_value(var, init_val, is_volatile);
     }
 
     // Actually, this specialisation is optional, because non-volatile const case can be handled above
@@ -170,26 +169,6 @@ public:
     // todo: try EArrayAccess and understand.
     //  todo: Ptr, Deref, ?TakeAddr
     //  todo: think how Struct
-
-/*    template<typename T, std::size_t N, bool is_const, bool is_volatile>
-    void accept(const Array<T, N, is_const, is_volatile>& a) {
-        llvm::Value* val_addr = nullptr;
-
-        auto known = frame->allocated.find(&a);
-        if (known == std::end(frame->allocated)) {
-            // Default empty name is handled automatically by LLVM (when var.name().data() == "")
-            val_addr = cur_builder->CreateAlloca(llvm_map.get_type<T[N]>(), llvm_map.get_const(N), a.name().data());
-
-            // When var is used for the first time (this branch) its actual value is its initial value
-            auto init_val = llvm_map.get_const(a.initial_val());
-            auto initInst = cur_builder->CreateStore(init_val, val_addr, is_volatile);
-            frame->allocated[&a] = val_addr;
-        } else { // Variable usage
-            val_addr = known->second;
-        }
-
-        push_addr(val_addr, is_volatile); // todo: how the addr of the whole array can be volatile?
-    };*/
 
     template<typename TdInd, typename T, std::size_t N, bool is_const, bool is_volatile>
     void accept(const EArrayAccess<TdInd, T, N, is_const, is_volatile>& e) {
@@ -211,36 +190,30 @@ public:
     void accept(const Ptr<Td, is_const>& ptr) {
         ptr.pointee.toIR(*this);
 
-        /*
-        auto addr = pop_addr();
-        llvm::Value* pointee_addr = addr.first;
-        bool is_volatile = addr.second; // todo: do I need it for anything?
+        auto addr_pair = pop_addr();
+        llvm::Value* pointee_addr = addr_pair.first;
+//        bool is_volatile = addr_pair.second; // todo: do I need it for anything?
 
-        auto ptr_type = pointee_addr->getType()->getPointerTo();
-        auto ptr_var = cur_builder->CreateAlloca(ptr_type, nullptr, "ptr");
-        cur_builder->CreateStore(pointee_addr, ptr_var, false);
-
-        push_addr(ptr_var, false);
-         */
-
-        /*
-         * ? if <anythin (array, global)> is accessed through ptr then I need to do zero-GEP first
-         */
+        accept_value(ptr, pointee_addr, false);
     };
 
     template<typename Td>
     void accept(const ETakeAddr<Td>& e) {
         // it is enough to just do that -- then on the stack should be addr
         e.pointee.toIR(*this);
-
     }
 
     template<typename Td>
     void accept(const EDeref<Td>& e) {
         // it is memory access, isn't it? so, it is DANGEROUS. emit warning when dereferencing unknown Ptr and not ETakeAddr
-        e.x.toIR(*this);
 
-        // ...> i can apply Deref only to PtrBase
+        // avoid allocating ptr in e.ptr.toIR(*this)
+        e.ptr.pointee.toIR(*this);
+
+        // another, more explicit way
+/*        e.ptr.toIR(*this);
+        auto pointee_addr = pop_val();
+        push_addr(pointee_addr, e.ptr.pointee.volatile_q);*/
     }
 
 private:
@@ -268,7 +241,9 @@ private:
         return allocated;
     }
 
-public: // dsl function and related constructs (function is 'entry' point of ir generation)
+public: // dsl functions & residents
+
+    // todo: remove
     template<typename Td>
     auto translate(const DSLGlobal<Td>& g) {
         const auto g_name = std::string(g.x.name());
@@ -295,7 +270,7 @@ public: // dsl function and related constructs (function is 'entry' point of ir 
     void accept(const ResidentVar<AddrT, T, is_const, is_volatile>& g) {
         // todo: specialise for non-volatile Const value, returning just llvm::Constant* of needed type?
             // we can't change init_val for Const value after loading, can we?
-        if constexpr (g.const_q) {
+        if (g.const_q) {
             push_val(llvm_map.get_const(g.initial_val()));
             return;
         }
@@ -530,6 +505,23 @@ public:
         );
         push_val(inst);
     }
+
+    template<typename TdRet, typename ...TdArgs>
+    void accept(const Recurse<TdRet, TdArgs...>& e) {
+        std::cerr << "not implemented." << std::endl;
+
+/*        using fun_t = decltype(frame->dsl_fun); // todo: no way to get full DSLFunction type now
+        static_assert(std::is_invocable_v<fun_t, TdArgs...>,
+                      "Arguments type mismatch between DSLFunction and Recurse!");
+        static_assert(std::is_same_v< f_t<std::invoke_result_t<fun_t, TdArgs...>>, f_t<TdRet> >,
+                      "Return type mismatch between DSLFunction and Recurse!");
+
+        llvm::CallInst* inst = cur_builder->CreateCall(
+                frame->fun,
+                eval_func_args<fun_t>(e.args)
+        );
+        push_val(inst);*/
+    };
 
 
 private:
