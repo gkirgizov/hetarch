@@ -14,8 +14,12 @@ namespace hetarch {
 namespace dsl {
 
 
+// Forward declaration for use in other dsl/*.h files
 class IRTranslator;
 template<typename T> inline void toIRImpl(const T &irTranslatable, IRTranslator &irTranslator);
+
+#define IR_TRANSLATABLE \
+inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 
 
 struct DSLBase {
