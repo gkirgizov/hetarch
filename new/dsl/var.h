@@ -82,6 +82,9 @@ template<typename Tw, typename T, bool is_const = false>
 struct Value : public ValueBase {
     using this_t = Value<Tw, T, is_const>;
     using type = T;
+//    using type = std::conditional_t<is_const, std::add_const_t<T>, T>;
+//    static const bool const_q = is_const;
+
     Value() = default;
 //    Value(this_t&&) = default; // allow move and implicitly delete copy ctor
 //    Value(const this_t&) = delete; // delete copy ctor
@@ -114,26 +117,18 @@ struct Value : public ValueBase {
 };
 
 
-template<typename T, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T>
+template<typename TdVar, typename T
+        , bool is_const = false, bool is_volatile = false
 //        , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
 >
-class Var : public Named, public Value<Var<T, is_const, is_volatile>, T, is_const> {
+class VarBase : public Value< TdVar, T, is_const >
+              , public Named
+{
     T m_initial_val{};
     bool m_initialised{false};
 public:
     static const bool volatile_q = is_volatile;
     static const bool const_q = is_const;
-
-    using this_t = Var<T, is_const, is_volatile>;
-    using Value<this_t, T, is_const>::operator=;
-    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
-
-//    Var(Var<T, is_const, is_volatile>&) { std::cerr << "CALLED COPY CTOR OF Var" << std::endl; };
-    explicit constexpr Var() = default;
-//    explicit constexpr Var(const std::string_view &name) : Named{name} {};
-//    explicit constexpr Var(T value) : m_initial_val{value}, m_initialised{true} {}
-    explicit constexpr Var(T value, const std::string_view &name = "")
-    : Named{name}, m_initial_val{value}, m_initialised{true} {}
 
     constexpr void initialise(T value) {
         m_initial_val = std::move(value);
@@ -142,52 +137,58 @@ public:
     constexpr bool initialised() const { return m_initialised; }
     constexpr const T& initial_val() const { return m_initial_val; }
 
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    explicit constexpr VarBase() = default;
+//    explicit constexpr VarBase(const std::string_view &name = "") : Named{name} {}
+    explicit constexpr VarBase(T value, const std::string_view &name = "")
+            : Named{name}, m_initial_val{value}, m_initialised{true} {}
+};
+
+
+template<typename T, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T> >
+struct Var : public VarBase< Var<T, is_const, is_volatile>, T, is_const, is_volatile >
+{
+    using this_t = Var<T, is_const, is_volatile>;
+    using Value<this_t, T, is_const>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+
+//    using VarBase<this_t, T, is_const, is_volatile>::VarBase; // breaks template arg deduction from constructor
+    explicit constexpr Var() = default;
+//    explicit constexpr Var(const std::string_view &name = "")
+//            : VarBase<this_t, T, is_const, is_volatile>{name} {}
+    explicit constexpr Var(T value, const std::string_view &name = "")
+            : VarBase<this_t, T, is_const, is_volatile>{value, name} {}
+
+    IR_TRANSLATABLE
 };
 
 template<typename T, bool is_volatile = false>
 using Const = Var<T, true, is_volatile>;
 
 
-
-template<typename AddrT, typename T
-        , bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T>
+template<typename AddrT
+        , typename T, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T>
 >
-class ResidentVar
-        : public Named
-        , public Value<ResidentVar<AddrT, T, is_const, is_volatile>, T, is_const>
-        , public ResidentGlobal<AddrT, T, is_const>
+struct ResidentVar
+        : public VarBase< ResidentVar<AddrT, T, is_const, is_volatile>, T, is_const, is_volatile >
+        , public ResidentGlobal< AddrT, T, is_const >
 {
     using this_t = ResidentVar<AddrT, T, is_const, is_volatile>;
-
-    T m_initial_val{};
-    bool m_initialised{false};
-public:
-    static const bool volatile_q = is_volatile;
-    static const bool const_q = is_const;
 
     using Value<this_t, T, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
 
-    ResidentVar(this_t&&) = default;
-    explicit constexpr ResidentVar(
+    constexpr ResidentVar(
             conn::IConnection<AddrT>& conn,
             mem::MemManager<AddrT>& memMgr, mem::MemRegion<AddrT> memRegion, bool unloadable,
             T value = T{},
             const std::string_view &name = ""
     )
             : ResidentGlobal<AddrT, T, is_const>{conn, memMgr, memRegion, unloadable}
-            , Named{name}
-            , m_initial_val{value}, m_initialised{true}
+            , VarBase<this_t, T, is_const, is_volatile>{value, name} // note: always initialised
     {}
 
-    constexpr bool initialised() const { return m_initialised; }
-    constexpr const T& initial_val() const { return m_initial_val; }
-
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
-
-
 
 
 }
