@@ -166,16 +166,19 @@ public: // Values
         push_val(llvm_map.get_const(var.val));
     }
 
-    // todo: try EArrayAccess and understand.
-    //  todo: Ptr, Deref, ?TakeAddr
-    //  todo: think how Struct
 
-    template<typename TdInd, typename T, std::size_t N, bool is_const, bool is_volatile>
-    void accept(const EArrayAccess<TdInd, T, N, is_const, is_volatile>& e) {
+    template<typename TdElem, std::size_t N, bool is_const = false>
+    void accept(const Array<TdElem, N, is_const>& arr) {
+        auto init_val = arr.initialised() ? llvm_map.get_const(arr.initial_val()) : nullptr;
+        accept_value(arr, init_val);
+    };
+
+    template<typename TdInd, typename TdElem, std::size_t N, bool is_const>
+    void accept(const EArrayAccess<TdInd, TdElem, N, is_const>& e) {
         e.arr.toIR(*this);
         auto arr_addr = pop_addr().first;
 
-        // todo: maybe specialise for constexpr values
+        // todo: maybe specialise for constexpr indices
 //        llvm::Constant* ind = llvm_map.get_const(e.ind);
 
         e.ind.toIR(*this);
@@ -183,7 +186,7 @@ public: // Values
         auto zero = llvm_map.get_const(0); // need extra 0 to access elements of arrays
         auto elt_addr = cur_builder->CreateInBoundsGEP(arr_addr, {zero, ind});
 
-        push_addr(elt_addr, is_volatile);
+        push_addr(elt_addr, TdElem::volatile_q);
     };
 
     template<typename Td, bool is_const>

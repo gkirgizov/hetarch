@@ -31,6 +31,7 @@ struct EDeref : public Value< EDeref<TdPtr>
 };
 
 
+// todo: make volatile ptr (not just ptr to volatile, which is handled by element type)
 //template< bool is_global
 //        , typename TdPtr
 template< typename TdPtr

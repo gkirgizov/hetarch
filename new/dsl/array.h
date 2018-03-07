@@ -11,36 +11,65 @@ namespace hetarch {
 namespace dsl {
 
 
-using ::hetarch::dsl::i_t; // by some reasons CLion can't resolve it automatically.
+using dsl::i_t; // by some reasons CLion can't resolve it automatically.
+using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
 
-template<typename T, std::size_t N, bool is_const, bool is_volatile> class Array;
+template<typename T, std::size_t N, bool is_const> class Array;
 
-template<typename TdInd, typename T, std::size_t N, bool is_const, bool is_volatile
+template< typename TdInd
+        , typename TdElem
+        , std::size_t N
+        , bool is_const
+//        , bool is_volatile
         , typename = typename std::enable_if_t< std::is_integral_v<i_t<TdInd>> >>
-struct EArrayAccess : Value<EArrayAccess<TdInd, T, N, is_const, is_volatile>, T, is_const> {
-    using arr_t = Array<T, N, is_const, is_volatile>;
+struct EArrayAccess : Value< EArrayAccess<TdInd, TdElem, N, is_const>
+                           , f_t<TdElem>
+                           , is_const
+                           >
+{
+//    using arr_t = Array<T, N, is_const, is_volatile>;
+    using arr_t = Array<TdElem, N, is_const>;
+    using type = typename arr_t::element_t;
 
     const arr_t& arr;
     const TdInd ind;
 
     constexpr EArrayAccess(const arr_t& arr, TdInd&& ind) : arr{arr}, ind{std::forward<TdInd>(ind)} {}
 
-    using this_t = EArrayAccess<TdInd, T, N, is_const, is_volatile>;
-    using Value<this_t, T, is_const>::operator=;
+    using this_t = EArrayAccess<TdInd, TdElem, N, is_const>;
+    using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
 
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 
-template<typename T, std::size_t N, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T>
-//        , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
+template< typename TdArr
+        , typename TdElem
+        , std::size_t N
+        , bool is_const = false
+//        , bool is_volatile = false
+        , typename = typename std::enable_if_t<std::is_base_of_v<ValueBase, TdElem>>
 >
-struct Array : public Var<std::array<T, N>, is_const, is_volatile> {
-    using Var<std::array<T, N>, is_const, is_volatile>::Var;
+class ArrayBase : public Value< TdArr, std::array<f_t<TdElem>, N>, is_const >
+                , public Named
+{
+public:
+    using element_t = f_t<TdElem>;
+    using dsl_element_t = remove_cvref_t<TdElem>;
+    static const bool const_q = is_const;
+//    static const bool volatile_q = is_volatile;
+    static const bool elt_const_q = dsl_element_t::const_q;
+    static const bool elt_volatile_q = dsl_element_t::volatile_q;
 
-    using value_t = T;
+    template<typename TdInd
+            , typename = typename std::enable_if_t< std::is_integral_v<f_t<TdInd>> >>
+    constexpr auto operator[](TdInd&& ind) const {
+        return EArrayAccess<TdInd, TdElem, N, is_const>{
+                static_cast<const TdArr&>(*this), std::forward<TdInd>(ind)
+        };
+    }
 
     // todo: allow indexing by const int
 //    constexpr auto operator[](const std::size_t I) const {
@@ -48,13 +77,52 @@ struct Array : public Var<std::array<T, N>, is_const, is_volatile> {
 //        return EArrayAccess{*this, I};
 //    }
 
-    template<typename TdInd
-            , typename = typename std::enable_if_t< std::is_integral_v<i_t<TdInd>> >>
-    constexpr auto operator[](TdInd&& ind) const {
-        return EArrayAccess<TdInd, T, N, is_const, is_volatile>{*this, std::forward<TdInd>(ind)};
-    }
+private:
+    using arr_impl_t = std::array<element_t, N>; // equiv. to Value::type
 
-//    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    arr_impl_t m_initial_val{};
+    bool m_initialised{false};
+
+public:
+    constexpr void initialise(const arr_impl_t& value) {
+        m_initial_val = value;
+        m_initialised = true;
+    }
+    constexpr bool initialised() const { return m_initialised; }
+    constexpr const arr_impl_t& initial_val() const { return m_initial_val; }
+
+    explicit constexpr ArrayBase() = default;
+    explicit constexpr ArrayBase(const arr_impl_t& a, const std::string_view& name = "")
+            : m_initial_val{a}, m_initialised{true}
+            , Named{name} {}
+
+/*    template< typename ...TInit
+            , typename = typename std::enable_if_t<
+                    std::is_constructible_v<arr_impl_t, TInit...>
+            >
+    >
+    explicit constexpr ArrayBase(TInit&&... xs)
+            : m_initial_val{std::forward<TInit>(xs)...} {}*/
+
+};
+
+
+template< typename TdElem
+        , std::size_t N
+        , bool is_const = false
+//        , bool is_volatile = false
+>
+struct Array : public ArrayBase< Array< TdElem, N, is_const >
+                                      , TdElem, N, is_const >
+{
+    using type = std::array<f_t<TdElem>, N>;
+    using this_t = Array<TdElem, N, is_const>;
+    using Value<this_t, type, is_const>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+
+    using ArrayBase< this_t, TdElem, N, is_const >::ArrayBase;
+
+    IR_TRANSLATABLE
 };
 
 

@@ -173,7 +173,6 @@ struct ResidentVar
         , public ResidentGlobal< AddrT, T, is_const >
 {
     using this_t = ResidentVar<AddrT, T, is_const, is_volatile>;
-
     using Value<this_t, T, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
 

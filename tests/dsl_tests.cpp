@@ -128,7 +128,7 @@ TEST_F(IRTranslatorTest, compilePtr) {
 
 TEST_F(IRTranslatorTest, compileDSLArray) {
     std::array arr_init = {1, 2, 3, 5};
-    Array<int, 4> arr{arr_init};
+    Array<Var<int>, 4> arr{arr_init};
 
     DSLFunction array_access_test(
             "try_arr",
@@ -141,11 +141,21 @@ TEST_F(IRTranslatorTest, compileDSLArray) {
             "try_arr",
             MakeFunArgs(x, y),
             (arr[x] = arr[y]
-            , VoidExpr())
+            , Unit)
+    );
+
+    std::array arr2_init = {0, 22, 33, 55};
+    Array<Var<int>, 4> arr2{arr2_init};
+    DSLFunction array_assign2_test(
+            "array_assign2",
+            MakeFunArgs(),
+            (arr = arr2
+            , Unit)
     );
 
     EXPECT_TRUE(translate_verify(irt, array_access_test));
     EXPECT_TRUE(translate_verify(irt, array_assign_test));
+    EXPECT_TRUE(translate_verify(irt, array_assign2_test));
 }
 
 TEST_F(IRTranslatorTest, compileDSLControlFlow) {
