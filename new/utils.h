@@ -58,8 +58,15 @@ namespace utils {
 // todo: specialise translating initial value to char* (i.e. for Array, for Struct)
 template<typename T>
 const char* toBytes(const T &x) {
-    if constexpr (std::is_arithmetic_v<T>) {
+    if constexpr (std::is_standard_layout_v<T>) {
         return reinterpret_cast<const char*>(&x);
+    }
+}
+
+template<typename T>
+const T& fromBytes(const char* bytes) {
+    if constexpr (std::is_standard_layout_v<T>) {
+        return *reinterpret_cast<const T*>(bytes);
     }
 }
 
