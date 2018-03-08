@@ -58,6 +58,12 @@ template<typename Td, bool is_const = false>
 struct Ptr : public PtrBase< Ptr<Td, is_const>, Td, is_const >
            , public Named
 {
+    using type = f_t<Td>*;
+    using this_t = Ptr<Td, is_const>;
+    using Value<this_t, type, is_const>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr Ptr(this_t&&) = default;
+
     const Td& pointee;
     explicit constexpr Ptr(const Td& pointee)
             : pointee{pointee}, Named{std::string{"ptr_"} + pointee.name().data()} {}
@@ -72,6 +78,10 @@ struct ResidentPtr
         , public Named
 {
     using type = f_t<Td>*;
+    using this_t = ResidentPtr<AddrT, Td, is_const>;
+    using Value<this_t, type, is_const>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr ResidentPtr(this_t&&) = default;
 
     constexpr ResidentPtr(
             conn::IConnection<AddrT>& conn,

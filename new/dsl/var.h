@@ -119,7 +119,7 @@ struct Value : public ValueBase {
 
 template<typename TdVar, typename T
         , bool is_const = false, bool is_volatile = false
-//        , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
+        , typename = typename std::enable_if_t<std::is_arithmetic_v<T>>
 >
 class VarBase : public Value< TdVar, T, is_const >
               , public Named
@@ -135,7 +135,7 @@ public:
         m_initialised = true;
     }
     constexpr bool initialised() const { return m_initialised; }
-    constexpr const T& initial_val() const { return m_initial_val; }
+    constexpr T initial_val() const { return m_initial_val; }
 
     explicit constexpr VarBase() = default;
 //    explicit constexpr VarBase(const std::string_view &name = "") : Named{name} {}
@@ -150,6 +150,7 @@ struct Var : public VarBase< Var<T, is_const, is_volatile>, T, is_const, is_vola
     using this_t = Var<T, is_const, is_volatile>;
     using Value<this_t, T, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr Var(this_t&&) = default;
 
 //    using VarBase<this_t, T, is_const, is_volatile>::VarBase; // breaks template arg deduction from constructor
     explicit constexpr Var() = default;
@@ -175,6 +176,7 @@ struct ResidentVar
     using this_t = ResidentVar<AddrT, T, is_const, is_volatile>;
     using Value<this_t, T, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr ResidentVar(this_t&&) = default;
 
     constexpr ResidentVar(
             conn::IConnection<AddrT>& conn,
