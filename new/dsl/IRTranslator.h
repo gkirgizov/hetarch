@@ -269,11 +269,13 @@ public: // dsl functions & residents
         return IRModule<Td>{g_module, g_name};
     }
 
-    template<typename AddrT, typename T, bool is_const, bool is_volatile>
-    void accept(const ResidentVar<AddrT, T, is_const, is_volatile>& g) {
-        // todo: specialise for non-volatile Const value, returning just llvm::Constant* of needed type?
-            // we can't change init_val for Const value after loading, can we?
-        if (g.const_q) {
+    template<typename TdResident>
+    void accept_resident(const TdResident& g, bool is_const = false, bool is_volatile = false) {
+        using T = f_t<TdResident>;
+
+//        if (TdResident::const_q) {
+        if (is_const && !is_volatile) {
+            // we can't change init_val for Const value after loading, can we? so, just return it.
             push_val(llvm_map.get_const(g.initial_val()));
             return;
         }
@@ -291,7 +293,18 @@ public: // dsl functions & residents
             g_ptr = known->second;
         }
 
-        push_addr(g_ptr, g.volatile_q);
+//        push_addr(g_ptr, TdResident::volatile_q);
+        push_addr(g_ptr, is_volatile);
+    };
+
+    template<typename AddrT, typename T, bool is_const, bool is_volatile>
+    inline void accept(const ResidentVar<AddrT, T, is_const, is_volatile>& g) {
+        accept_resident(g, is_const, is_volatile);
+    };
+
+    template<typename AddrT, typename TdElem, std::size_t N, bool is_const>
+    inline void accept(const ResidentArray<AddrT, TdElem, N, is_const>& g) {
+        accept_resident(g, is_const);
     };
 
     template<typename TdBody, typename... TdArgs>

@@ -98,20 +98,19 @@ public:
                      mem::MemType memType,
                      const dsl::Var<T, is_const, is_volatile>& g)
     {
-        using val_type = T;
-        using Td = dsl::Var<val_type, is_const, is_volatile>;
+        using Td = dsl::Var<T, is_const, is_volatile>;
+        using val_type = typename Td::type;
 
         const auto size = static_cast<AddrT>(sizeof(val_type));
         auto memRegion = memManager.alloc(size, memType);
         if (memRegion.size >= size) {
-
             if (g.initialised()) {
                 // todo: endianness?
                 conn.write(memRegion.start, size, utils::toBytes(g.initial_val()));
             }
 
             // todo: is it always unloadable
-            // todo: what about is_const foris_constis_const func params? it is an error (not being able to .write() to it)
+            // todo: what about is_const for func params? it is an error (not being able to .write() to it)
             return dsl::ResidentVar<AddrT, T, false, is_volatile>{
                     conn, memManager, memRegion, true,
                     g.initial_val(), g.name()
@@ -120,7 +119,32 @@ public:
         } else {
             // todo: handle not enough mem
         }
+    };
 
+    template<typename AddrT, typename TdElem, std::size_t N, bool is_const>
+    static auto load(conn::IConnection<AddrT> &conn,
+                     mem::MemManager<AddrT> &memManager,
+                     mem::MemType memType,
+                     const dsl::Array<TdElem, N, is_const>& g)
+    {
+        using Td = dsl::Array<TdElem, N, is_const>;
+        using val_type = typename Td::type;
+
+        const auto size = static_cast<AddrT>(sizeof(val_type));
+        auto memRegion = memManager.alloc(size, memType);
+        if (memRegion.size >= size) {
+            if (g.initialised()) {
+                conn.write(memRegion.start, size, utils::toBytes(g.initial_val()));
+            }
+
+            return dsl::ResidentArray<AddrT, TdElem, N, false>{
+                    conn, memManager, memRegion, true,
+                    g.initial_val(), g.name()
+            };
+
+        } else {
+            // todo: handle not enough mem
+        }
     };
 
 

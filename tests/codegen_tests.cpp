@@ -203,14 +203,40 @@ TEST_F(CodeLoaderTest, loadCodeTrivial) {
     EXPECT_TRUE(c2.callAddr != 0);
 }
 
-TEST_F(CodeLoaderTest, loadGlobal) {
+namespace hetarch {
+namespace utils {
 
+template<typename T
+        , typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
+std::string to_string(T x) {
+    return std::to_string(x);
+}
+
+template<typename T, std::size_t N>
+std::string to_string(const std::array<T, N>& x) {
+    std::string s{"{"};
+    if constexpr (N != 0) {
+        for(auto i = 0; i < N-1; ++i) {
+            s += utils::to_string(x[i]) + ", ";
+        }
+        s += utils::to_string(x[N-1]);
+
+    }
+    s += "}";
+    return s;
+}
+
+}
+}
+
+TEST_F(CodeLoaderTest, loadGlobal) {
     auto load_tester = [&](auto&& g) {
-        ResidentVar r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, g);
+        auto r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, g);
 
         EXPECT_TRUE(std::is_move_constructible_v<decltype(r)>)
-                            << "ResidentGlobal must by constructible! (of type T = "
-                            << utils::type_name<decltype(r)>() << ")" << std::endl;
+                            << "ResidentGlobal must be move-constructible!"
+                            << " (of type T = " << utils::type_name<decltype(r)>() << ")"
+                            << std::endl;
 
         auto mr = r.memRegion();
         std::cerr << "loaded DSLGlobal: ";
@@ -219,7 +245,9 @@ TEST_F(CodeLoaderTest, loadGlobal) {
 
         auto loaded = r.read();
         auto orig = g.x.initial_val();
-        std::cerr << "original: " << orig << "; loaded-read: " << loaded << std::endl;
+        std::cerr << "original: " << utils::to_string(orig)
+                  << "; loaded-read: " << utils::to_string(loaded)
+                  << std::endl;
         EXPECT_TRUE((loaded == orig) || !g.x.initialised());
     };
 
@@ -227,10 +255,10 @@ TEST_F(CodeLoaderTest, loadGlobal) {
     load_tester( DSLGlobal{Var<int64_t>{53, "g1"}} );
     load_tester( DSLGlobal{Var<float>{3.1415, ""}} );
     load_tester( DSLGlobal{Var<double>{69e-69, "gd2"}} );
+    load_tester( DSLGlobal{Array<Var<int>, 3>{ {1, 2, 3} }} );
 }
 
 TEST_F(CodeLoaderTest, loadAndCall) {
-
     auto generic_caller = [&](auto&& dsl_generator, auto... args) {
         // Make function from generator
 //        DSLFunction dsl_fun = make_dsl_fun_from_arg_types(dsl_generator, dsl_args...);

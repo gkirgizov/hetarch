@@ -91,6 +91,7 @@ public:
     constexpr bool initialised() const { return m_initialised; }
     constexpr const arr_impl_t& initial_val() const { return m_initial_val; }
 
+    // todo: add ctor for DSL types (Array = {Var1, Var2})
     explicit constexpr ArrayBase() = default;
     explicit constexpr ArrayBase(const arr_impl_t& a, const std::string_view& name = "")
             : m_initial_val{a}, m_initialised{true}
@@ -119,11 +120,46 @@ struct Array : public ArrayBase< Array< TdElem, N, is_const >
     using this_t = Array<TdElem, N, is_const>;
     using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr Array(this_t&&) = default;
 
     using ArrayBase< this_t, TdElem, N, is_const >::ArrayBase;
 
     IR_TRANSLATABLE
 };
+
+
+template< typename AddrT
+        , typename TdElem
+        , std::size_t N
+        , bool is_const = false
+//        , bool is_volatile = false
+>
+struct ResidentArray
+        : public ArrayBase< ResidentArray< AddrT, TdElem, N, is_const >
+                                                , TdElem, N, is_const >
+        , public ResidentGlobal< AddrT
+                               , std::array<f_t<TdElem>, N>
+                               , is_const >
+{
+    using type = std::array<f_t<TdElem>, N>;
+    using this_t = ResidentArray<AddrT, TdElem, N, is_const>;
+    using Value<this_t, type, is_const>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr ResidentArray(this_t&&) = default;
+
+    constexpr ResidentArray(
+            conn::IConnection<AddrT>& conn,
+            mem::MemManager<AddrT>& memMgr, mem::MemRegion<AddrT> memRegion, bool unloadable,
+            const type& value = type{},
+            const std::string_view &name = ""
+    )
+            : ResidentGlobal<AddrT, type, is_const>{conn, memMgr, memRegion, unloadable}
+            , ArrayBase<this_t, TdElem, N, is_const>{value, name} // note: always initialised
+    {}
+
+    IR_TRANSLATABLE
+};
+
 
 
 }
