@@ -36,7 +36,7 @@ public:
     };
 
     value_type read() {
-        char bytes[sizeof(value_type)];
+        unsigned char bytes[sizeof(value_type)];
         conn.read(addr, sizeof(value_type), bytes);
         return utils::fromBytes<value_type>(bytes); // copy-construct from reference
     }

@@ -25,29 +25,22 @@ using addr_t = HETARCH_TARGET_ADDRT;
 
 namespace detail {
 
+// Return ref to data owned by vec
 template<typename T = addr_t>
-T vecRead(const std::vector<unsigned char> &vec, int offset = 0) {
-    T res = 0;
-    for (int i = 0; i < sizeof(T); ++i) {
-        res |= static_cast<addr_t>(vec[offset + i]) << (i * CHAR_BIT);
-    }
-    return res;
+inline const T& vecRead(const std::vector<unsigned char> &vec, int offset = 0) {
+    return utils::fromBytes<T>(vec.data() + offset);
 }
 
 template<typename T>
-void vecWrite(std::vector<unsigned char> &vec, int offset, T value) {
-    for (int i = 0; i < sizeof(T); ++i) {
-        vec.insert(vec.begin() + offset + i, static_cast<unsigned char>(value & 0xFF));
-        value >>= CHAR_BIT;
-    }
+inline void vecWrite(std::vector<unsigned char> &vec, int offset, T value) {
+    const unsigned char* bytes = utils::toBytes(value);
+    vec.insert(vec.begin() + offset, bytes, bytes + sizeof(T));
 }
 
 template<typename T>
-void vecAppend(std::vector<unsigned char> &vec, T value) {
-    for (int i = 0; i < sizeof(T); ++i) {
-        vec.insert(vec.end(), static_cast<unsigned char>(value & 0xFF));
-        value >>= CHAR_BIT;
-    }
+inline void vecAppend(std::vector<unsigned char> &vec, T value) {
+    const unsigned char* bytes = utils::toBytes(value);
+    vec.insert(vec.end(), bytes, bytes + sizeof(T));
 }
 
 }
@@ -75,13 +68,12 @@ public:
         socket = std::make_unique<asio::ip::tcp::socket>(io_service);
         asio::connect(*socket, endpoint_iterator);
     }
-    ~TCPConnection() { close(); }
 
     void close() {
         this->socket->shutdown(asio::ip::tcp::socket::shutdown_both);
     }
 
-    AddrT write(AddrT addr, AddrT size, const char *buf) override {
+    AddrT write(AddrT addr, AddrT size, const unsigned char *buf) override {
         if constexpr (utils::is_debug) {
             std::cerr << "conn::write:"
                       << std::hex << " addr 0x" << addr
@@ -100,7 +92,7 @@ public:
         return 0;
     }
 
-    AddrT read(AddrT addr, AddrT size, char *buf) override {
+    AddrT read(AddrT addr, AddrT size, unsigned char *buf) override {
         if constexpr (utils::is_debug) {
             std::cerr << "conn::read:"
                       << std::hex << " addr 0x" << addr

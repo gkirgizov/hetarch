@@ -55,16 +55,17 @@ inline constexpr auto make_bsv(const CharT* s) noexcept {
 namespace hetarch {
 namespace utils {
 
-// todo: specialise translating initial value to char* (i.e. for Array, for Struct)
+using CharT = unsigned char;
+
 template<typename T>
-const char* toBytes(const T &x) {
+inline const CharT* toBytes(const T &x) {
     if constexpr (std::is_standard_layout_v<T>) {
-        return reinterpret_cast<const char*>(&x);
+        return reinterpret_cast<const CharT*>(&x);
     }
 }
 
 template<typename T>
-const T& fromBytes(const char* bytes) {
+inline const T& fromBytes(const CharT* bytes) {
     if constexpr (std::is_standard_layout_v<T>) {
         return *reinterpret_cast<const T*>(bytes);
     }

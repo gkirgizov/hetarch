@@ -206,7 +206,7 @@ public:
                         const AddrT callAddr = offset + memForText.start;
 
                         // Load everything we need
-                        conn.write(memForText.start, contentsSize, contents.data());
+                        conn.write(memForText.start, contentsSize, reinterpret_cast<const unsigned char*>(contents.data()));
                         static_assert((std::is_default_constructible_v<TdRet> && ... && std::is_default_constructible_v<TdArgs>));
                         auto retLoaded = load(conn, memManager, memType, TdRet{});
                         std::tuple argsLoaded{ load(conn, memManager, memType, TdArgs{})... };
