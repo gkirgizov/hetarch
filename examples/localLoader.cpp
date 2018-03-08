@@ -91,7 +91,7 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
             assert(addr >= buf_addr && addr + size <= buf_addr + execBuf.size());
 
             std::vector<uint8_t> response(static_cast<addr_t>(size));
-            std::copy((uint8_t*)addr, (uint8_t*)(addr + size), response.begin());
+            std::copy((uint8_t*)addr, (uint8_t*)addr + size, response.begin());
             detail::writeBuffer(socket, response);
             break;
         }

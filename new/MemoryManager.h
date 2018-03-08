@@ -217,8 +217,7 @@ private:
             MemRegion<AddrT> splittedRegion(it->start + memSize, it->size - memSize, memType);
             MemRegion<AddrT> foundRegion(it->start, memSize, memType);
             regions.erase(it);
-            regions.insert(splittedRegion);
-//            insertRegion(splittedRegion, regions);
+            insertRegion(splittedRegion, regions);
             return foundRegion;
         }
 
@@ -236,19 +235,21 @@ private:
 
         MemRegion<AddrT> actualMemRegion{memRegion.start, this->alignUp(memRegion.size, alignment), memType};
 
-        auto ms = actualMemRegion.start, me = actualMemRegion.end;
+        auto ms = actualMemRegion.start;
+        auto me = actualMemRegion.end;
         for (auto it = std::begin(regions); it != std::end(regions); ++it) {
-            auto is = it->start, ie = it->end;
+            auto is = it->start;
+            auto ie = it->end;
 
             // if there is any intersection then it's impossible to find fitting block, hence additional checks
             if (ms >= is) {
                 if (me <= ie) {
                     regions.erase(it);
                     if (ms > is) {
-                        regions.insert(MemRegion<AddrT>(is, ms - is, memType));
+                        insertRegion(MemRegion<AddrT>(is, ms - is, memType), regions);
                     }
                     if (me < ie) {
-                        regions.insert(MemRegion<AddrT>(me, ie - me, memType));
+                        insertRegion(MemRegion<AddrT>(me, ie - me, memType), regions);
                     }
                     return actualMemRegion;
                 }
