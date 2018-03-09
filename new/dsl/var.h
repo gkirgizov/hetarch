@@ -26,17 +26,27 @@ struct DSLConst : public Expr<T> {
 //constexpr auto operator"" _dsl (T val) { return DSLConst<T>{val}; };
 
 
-template<typename Td, typename = typename std::enable_if_t< is_val_v<Td> >>
+template<typename Td
+        , typename = typename std::enable_if_t< is_val_v<Td> >>
 struct DSLGlobal : public ValueBase {
     const Td x;
-
-    // only rvalues allowed
     explicit DSLGlobal() = default;
+    // only rvalues allowed
     explicit constexpr DSLGlobal(Td&& x) : x{std::move(x)} {}
+    IR_TRANSLATABLE
+};
 
-//    inline constexpr auto name() const { return x.name(); }
+// when user wants to load global on specific addr (e.g. in case of volatile var-s)
+template<typename AddrT
+        , typename Td
+        , typename = typename std::enable_if_t< is_val_v<Td> >>
+struct DSLGlobalPreallocated : public ValueBase {
+    const Td x;
+    const AddrT addr;
 
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    explicit constexpr DSLGlobalPreallocated(AddrT addr) : x{}, addr{addr} {}
+    explicit constexpr DSLGlobalPreallocated(AddrT addr, Td&& x) : x{std::move(x)}, addr{addr} {}
+    IR_TRANSLATABLE
 };
 
 

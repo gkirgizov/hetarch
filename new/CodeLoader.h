@@ -87,6 +87,28 @@ public:
     template<typename AddrT, typename Td>
     static auto load(conn::IConnection<AddrT> &conn,
                      mem::MemManager<AddrT> &memManager,
+                     mem::MemRegion<AddrT> memRegion,
+                     const dsl::DSLGlobalPreallocated<AddrT, Td>& g)
+    {
+        using val_type = dsl::f_t<Td>;
+
+        auto actualMemRegion = memManager.tryAlloc(memRegion);
+        const auto size = static_cast<AddrT>(sizeof(val_type));
+        if (actualMemRegion.size >= size) {
+            if (g.x.initialised()) {
+                // todo: endianness?
+                conn.write(actualMemRegion.start, size, utils::toBytes(g.x.initial_val()));
+            }
+            return getResident(conn, memManager, actualMemRegion, g.x);
+
+        } else {
+            // todo: handle tryAlloc errors
+        }
+    };
+
+    template<typename AddrT, typename Td>
+    static auto load(conn::IConnection<AddrT> &conn,
+                     mem::MemManager<AddrT> &memManager,
                      mem::MemType memType,
                      const dsl::DSLGlobal<Td>& g)
     {
