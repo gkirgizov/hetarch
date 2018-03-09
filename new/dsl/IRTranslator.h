@@ -173,8 +173,9 @@ public: // Values
         accept_value(arr, init_val);
     };
 
-    template<typename TdInd, typename TdElem, std::size_t N, bool is_const>
-    void accept(const EArrayAccess<TdInd, TdElem, N, is_const>& e) {
+//    template<typename TdInd, typename TdElem, std::size_t N, bool is_const>
+    template<typename TdArr, typename TdInd>
+    void accept(const EArrayAccess<TdArr, TdInd>& e) {
         e.arr.toIR(*this);
         auto arr_addr = pop_addr().first;
 
@@ -186,7 +187,7 @@ public: // Values
         auto zero = llvm_map.get_const(0); // need extra 0 to access elements of arrays
         auto elt_addr = cur_builder->CreateInBoundsGEP(arr_addr, {zero, ind});
 
-        push_addr(elt_addr, TdElem::volatile_q);
+        push_addr(elt_addr, TdArr::elt_volatile_q);
     };
 
     template<typename Td, bool is_const>

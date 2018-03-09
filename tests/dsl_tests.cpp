@@ -191,7 +191,9 @@ struct GenericsTest: public ::testing::Test {
 
 };
 
-auto id_generator = [](auto&& x) { return x; };
+//auto id_generator = [](auto&& x) { return x; };
+//auto id_generator = [](auto&& x) -> decltype(auto) { return x; };
+auto id_generator = [](const auto& x) -> decltype(auto) { return x; };
 
 auto max_code_generator = [](auto&& x, auto&& y) {
 //        auto&& c = x > y; // goes out of scope
@@ -296,8 +298,7 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
 //    constexpr auto dsl_id = make_dsl_fun_from_arg_types< DSLConst<int> >(id_generator);
     auto dsl_id = make_dsl_fun_from_arg_types< DSLConst<int> >(id_generator);
     PR_CERR_VAL_TY(dsl_id);
-    auto tmp_sum = Var{10} + Var{11};
-    auto dsl_fun_max = make_dsl_fun_from_arg_types< Var<int>, decltype(tmp_sum) >(max_code_generator);
+    auto dsl_fun_max = make_dsl_fun_from_arg_types< Var<int>, Var<int> >(max_code_generator);
     PR_CERR_VAL_TY(dsl_fun_max)
 //    auto ecall2 = generic_dsl_max(Var{10}, Var{2} + Var{3});
 //    PR_CERR_VAL_TY(ecall2)
