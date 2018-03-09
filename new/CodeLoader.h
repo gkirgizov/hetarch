@@ -76,11 +76,12 @@ public:
             // todo: handle section error
         }
     }*/
+
     template<typename AddrT>
-    static auto load(conn::IConnection<AddrT> &conn,
-                     mem::MemManager<AddrT> &memManager,
-                     mem::MemType memType,
-                     const dsl::VoidExpr& v)
+    inline static auto getResident(conn::IConnection<AddrT> &conn,
+                                   mem::MemManager<AddrT> &memManager,
+                                   mem::MemRegion<AddrT> memRegion,
+                                   const dsl::VoidExpr& v)
     { return v; };
 
     template<typename AddrT, typename Td>
@@ -89,62 +90,46 @@ public:
                      mem::MemType memType,
                      const dsl::DSLGlobal<Td>& g)
     {
-        return load(conn, memManager, memType, g.x);
+        using val_type = dsl::f_t<Td>;
+
+        const auto size = static_cast<AddrT>(sizeof(val_type));
+        auto memRegion = memManager.alloc(size, memType);
+        if (memRegion.size >= size) {
+            if (g.x.initialised()) {
+                // todo: endianness?
+                conn.write(memRegion.start, size, utils::toBytes(g.x.initial_val()));
+            }
+            return getResident(conn, memManager, memRegion, g.x);
+
+        } else {
+            // todo: handle not enough mem
+        }
     };
 
     template<typename AddrT, typename T, bool is_const, bool is_volatile>
-    static auto load(conn::IConnection<AddrT> &conn,
-                     mem::MemManager<AddrT> &memManager,
-                     mem::MemType memType,
-                     const dsl::Var<T, is_const, is_volatile>& g)
+    inline static auto getResident(conn::IConnection<AddrT> &conn,
+                                   mem::MemManager<AddrT> &memManager,
+                                   mem::MemRegion<AddrT> memRegion,
+                                   const dsl::Var<T, is_const, is_volatile>& g)
     {
-        using Td = dsl::Var<T, is_const, is_volatile>;
-        using val_type = typename Td::type;
-
-        const auto size = static_cast<AddrT>(sizeof(val_type));
-        auto memRegion = memManager.alloc(size, memType);
-        if (memRegion.size >= size) {
-            if (g.initialised()) {
-                // todo: endianness?
-                conn.write(memRegion.start, size, utils::toBytes(g.initial_val()));
-            }
-
-            // todo: is it always unloadable
-            // todo: what about is_const for func params? it is an error (not being able to .write() to it)
-            return dsl::ResidentVar<AddrT, T, false, is_volatile>{
-                    conn, memManager, memRegion, true,
-                    g.initial_val(), g.name()
-            };
-
-        } else {
-            // todo: handle not enough mem
-        }
+        // todo: is it always unloadable
+        // todo: what about is_const for func params? it is an error (not being able to .write() to it)
+        return dsl::ResidentVar<AddrT, T, false, is_volatile>{
+                conn, memManager, memRegion, true,
+                g.initial_val(), g.name()
+        };
     };
 
     template<typename AddrT, typename TdElem, std::size_t N, bool is_const>
-    static auto load(conn::IConnection<AddrT> &conn,
-                     mem::MemManager<AddrT> &memManager,
-                     mem::MemType memType,
-                     const dsl::Array<TdElem, N, is_const>& g)
+    inline static auto getResident(conn::IConnection<AddrT> &conn,
+                                   mem::MemManager<AddrT> &memManager,
+                                   mem::MemRegion<AddrT> memRegion,
+                                   const dsl::Array<TdElem, N, is_const>& g)
     {
-        using Td = dsl::Array<TdElem, N, is_const>;
-        using val_type = typename Td::type;
-
-        const auto size = static_cast<AddrT>(sizeof(val_type));
-        auto memRegion = memManager.alloc(size, memType);
-        if (memRegion.size >= size) {
-            if (g.initialised()) {
-                conn.write(memRegion.start, size, utils::toBytes(g.initial_val()));
-            }
-
-            return dsl::ResidentArray<AddrT, TdElem, N, false>{
-                    conn, memManager, memRegion, true,
-                    g.initial_val(), g.name()
-            };
-
-        } else {
-            // todo: handle not enough mem
-        }
+        return dsl::ResidentArray<AddrT, TdElem, N, false>{
+                conn, memManager, memRegion, true,
+                g.initial_val(), g.name()
+        };
     };
 
 
@@ -158,11 +143,11 @@ public:
     {
         // load only '.text' section. otherwise need to implement relocations and all the stuff here
 
-#ifdef DEBUG
-        std::cerr << "DUMPING: " << objCode.symbol << std::endl;
-        utils::dumpSections(*objCode.getBinary());
-        utils::dumpSymbols(*objCode.getBinary());
-#endif
+        if constexpr (utils::is_debug) {
+            std::cerr << "DUMPING: " << objCode.symbol << std::endl;
+            utils::dumpSections(*objCode.getBinary());
+            utils::dumpSymbols(*objCode.getBinary());
+        }
 
         const llvm::object::SymbolRef& symbol = objCode.getSymbol();
 //        for (const auto& section_exp : symbol.getSection()) {
@@ -176,16 +161,15 @@ public:
             auto err_code = section.getContents(contents);
             if (!err_code) {
 
-#ifdef DEBUG
-                std::cerr << "contentsSize=" << contentsSize << "; contents.size()=" << contents.size() << std::endl;
-                assert(contents.size() == contentsSize);
-#endif
+                if constexpr (utils::is_debug) {
+                    std::cerr << "contentsSize=" << contentsSize << "; contents.size()=" << contents.size() << std::endl;
+                    assert(contents.size() == contentsSize);
+                }
 
                 // Allocate all mem we need
                 auto memForText = memManager.alloc(contentsSize, memType);
 
-                // specialise for Void return type
-//                const AddrT retValSize = is_returning ? sizeof(dsl::f_t<TdRet>) : 0;
+                // Allocate memory for return value
                 AddrT retValSize = 0;
                 using val_type = dsl::f_t<TdRet>;
                 if constexpr (!std::is_void_v<val_type>) {
@@ -193,6 +177,7 @@ public:
                 }
                 auto memForRetVal = memManager.alloc(retValSize, memType);
 
+                // Allocate memory for arguments
                 std::array<AddrT, sizeof...(TdArgs)> argsSizes{ sizeof(dsl::f_t<TdArgs>)... };
                 const AddrT argsSize = ( sizeof(dsl::f_t<TdArgs>) + ... + 0 );
                 auto memForArgs = memManager.allocMany(argsSizes, memType);
@@ -208,8 +193,11 @@ public:
                         // Load everything we need
                         conn.write(memForText.start, contentsSize, reinterpret_cast<const unsigned char*>(contents.data()));
                         static_assert((std::is_default_constructible_v<TdRet> && ... && std::is_default_constructible_v<TdArgs>));
-                        auto retLoaded = load(conn, memManager, memType, TdRet{});
-                        std::tuple argsLoaded{ load(conn, memManager, memType, TdArgs{})... };
+                        auto retLoaded = getResident(conn, memManager, memForRetVal, TdRet{});
+                        // Load arguments (use apply to unpack memForArgs)
+                        auto argsLoaded = std::apply([&](auto... memForArg){
+                            return std::tuple{ getResident(conn, memManager, memForArg, TdArgs{})... };
+                        }, memForArgs);
 
                         // Create unloadable resident
 //                        return dsl::ResidentObjCode<AddrT, TdRet, TdResArgs...>(
