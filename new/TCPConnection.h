@@ -1,57 +1,17 @@
 #pragma once
 
+#include <sys/mman.h>
 #include <cstdint>
-#include <limits>
 #include <asio.hpp>
 #include <iostream>
 
 #include "IConnection.h"
+#include "conn_utils.h"
 #include "utils.h"
 
 
 namespace hetarch {
 namespace conn {
-
-
-using action_int_t = uint16_t;
-enum class Actions : action_int_t {
-    AddrRead = 1,
-    AddrWrite = 2,
-    GetBuffAddr = 3,
-    Call = 4,
-};
-
-using addr_t = HETARCH_TARGET_ADDRT;
-
-namespace detail {
-
-// Return ref to data owned by vec
-template<typename T = addr_t>
-inline const T& vecRead(const std::vector<unsigned char> &vec, int offset = 0) {
-    return utils::fromBytes<T>(vec.data() + offset);
-}
-
-template<typename T>
-inline void vecWrite(std::vector<unsigned char> &vec, int offset, T value) {
-    const unsigned char* bytes = utils::toBytes(value);
-    vec.insert(vec.begin() + offset, bytes, bytes + sizeof(T));
-}
-
-template<typename T>
-inline void vecAppend(std::vector<unsigned char> &vec, T value) {
-    const unsigned char* bytes = utils::toBytes(value);
-    vec.insert(vec.end(), bytes, bytes + sizeof(T));
-}
-
-}
-
-namespace detail {
-
-std::vector<uint8_t> readBuffer(asio::ip::tcp::socket &socket);
-
-void writeBuffer(asio::ip::tcp::socket &socket, const std::vector<uint8_t> &buffer);
-
-}
 
 
 template<typename AddrT>
@@ -130,14 +90,14 @@ public:
         return true;
     }
 
-    AddrT getBuffer(unsigned idx) {
+    AddrT getBuffer(unsigned idx = 0) {
         if constexpr (utils::is_debug) {
             std::cerr << "conn::getBuffer:" << " idx " << idx;
         }
 
         std::vector<uint8_t> vec;
         detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::GetBuffAddr));
-        detail::vecAppend(vec, 0);
+        detail::vecAppend(vec, idx);
         detail::writeBuffer(*socket, vec);
         auto response = detail::readBuffer(*socket);
         auto addr = detail::vecRead(response, 0);
@@ -150,6 +110,26 @@ public:
         return addr;
     }
 
+    AddrT mmap(AddrT addr, mmap_rights_t prot = PROT_READ | PROT_WRITE) {
+        if constexpr (utils::is_debug) {
+            std::cerr << "conn::mmap:" << std::hex << " addr 0x" << addr;
+        }
+        std::vector<uint8_t> vec;
+        detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::AddrMmap));
+        detail::vecAppend(vec, prot);
+        detail::writeBuffer(*socket, vec);
+        auto response = detail::readBuffer(*socket);
+        auto mmapped = detail::vecRead(response);
+
+        if constexpr (utils::is_debug) {
+            std::cerr << std::hex << "mmapped to addr 0x" << mmapped;
+            if (!mmapped) { std::cerr << " (failed) "; }
+            std::cerr << std::dec << std::endl;
+        }
+
+        return mmapped;
+
+    }
 };
 
 

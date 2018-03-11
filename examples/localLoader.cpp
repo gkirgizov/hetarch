@@ -10,17 +10,19 @@
 #include <asio.hpp>
 #include <cxxopts.hpp>
 
-#include "../new/TCPConnection.h"
+#include "../new/conn_utils.h"
+
 
 using namespace hetarch::conn;
 using asio::ip::tcp;
+
 
 #define handle_error(msg) \
            do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
 // addr_t is also defined in hetarch::conn
-//static_assert(sizeof(addr_t) == sizeof(size_t));
 // using addr_t = std::size_t;
+static_assert(sizeof(addr_t) == sizeof(size_t));
 
 class ExecutableBuffer {
     addr_t _size;
@@ -130,6 +132,40 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
             auto fnptr = (int(*)())(addr);
             auto callRes = fnptr();
             detail::vecAppend(response, callRes);
+            detail::writeBuffer(socket, response);
+            break;
+        }
+        case hetarch::conn::Actions::AddrMmap: {
+            std::cerr << "Request is: AddrMmap: ";
+
+            auto addr = detail::vecRead<addr_t>(collected, offset);
+            offset+=sizeof(addr);
+            auto mmap_rights = detail::vecRead<hetarch::conn::mmap_rights_t>(collected, offset);
+            offset+=sizeof(mmap_rights);
+
+            std::cerr << std::hex << " addr 0x" << addr
+                      << std::hex << " prot 0x" << mmap_rights
+                      << std::dec << std::endl;
+
+            // todo: check sanity of mmap_rights; get PROT_X; get according file perm-s for open()
+            const auto dev = "/dev/mem";
+            int fd = -1;
+            if ((fd = open(dev, O_RDWR | O_SYNC)) < 0) {
+                std::cerr << "Unable to open " << dev << std::endl;
+                // todo: return-send error
+            }
+
+            auto ptr = mmap(0, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, addr);
+            auto ptr_val = reinterpret_cast<addr_t>(ptr);
+            std::cerr << "mmap returned addr 0x" << std::hex << ptr_val << std::dec << std::endl;
+            if (ptr_val < 0) {
+                std::cerr << "mmap failed" << std::endl;
+                // todo: return-send error
+                ptr_val = 0;
+            }
+
+            std::vector<uint8_t> response;
+            detail::vecAppend(response, ptr_val);
             detail::writeBuffer(socket, response);
             break;
         }
