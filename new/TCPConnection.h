@@ -116,13 +116,14 @@ public:
         }
         std::vector<uint8_t> vec;
         detail::vecAppend(vec, static_cast<action_int_t>(hetarch::conn::Actions::AddrMmap));
+        detail::vecAppend(vec, addr);
         detail::vecAppend(vec, prot);
         detail::writeBuffer(*socket, vec);
         auto response = detail::readBuffer(*socket);
         auto mmapped = detail::vecRead(response);
 
         if constexpr (utils::is_debug) {
-            std::cerr << std::hex << "mmapped to addr 0x" << mmapped;
+            std::cerr << std::hex << " mmapped to addr 0x" << mmapped;
             if (!mmapped) { std::cerr << " (failed) "; }
             std::cerr << std::dec << std::endl;
         }
