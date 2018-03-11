@@ -4,14 +4,18 @@
 
 
 #include "dsl_base.h"
+#include "dsl_type_traits.h"
 #include "var.h"
 #include "ptr.h"
-#include "dsl_type_traits.h"
+#include "array.h"
 #include "../utils.h"
 
 
 namespace hetarch {
 namespace dsl {
+
+
+using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
 
 template<typename, typename...> class DSLFunction;
@@ -52,15 +56,40 @@ template<typename Td>
 inline constexpr bool is_byval_v = is_byval<Td>::value;
 
 
-// todo: align with DSL Value type system
-template<typename TdExpr>
-struct param_for_arg {
-    using T = f_t<TdExpr>;
-//    using type = Var<T>;
-    using type = std::conditional_t< std::is_void_v<T>, VoidExpr, Var<T>>;
+// Type traits for mapping C++ types to DSL type system
+
+template< typename T, typename Enable = void >
+struct to_dsl { using type = void; };
+
+template< typename T > using to_dsl_t = typename to_dsl<T>::type;
+
+template< typename T > struct to_dsl<T, typename std::enable_if_t<
+        std::is_void_v<T> >>
+{ using type = VoidExpr; };
+
+template< typename T > struct to_dsl<T, typename std::enable_if_t<
+        std::is_arithmetic_v<T> >>
+{ using type = Var<T>; };
+
+template< typename T > struct to_dsl<T, typename std::enable_if_t<
+        std::is_pointer_v<T> >>
+{
+    using type = Ptr< to_dsl_t< std::remove_pointer_t<T> >
+                    , std::is_const_v<T>
+                    >;
 };
-template<typename TdExpr>
-using param_for_arg_t = typename param_for_arg<TdExpr>::type;
+
+template< typename T > struct to_dsl<T, typename std::enable_if_t<
+        is_std_array_v<T> >>
+{
+    using type = Array< typename to_dsl< typename T::value_type >::type
+                      , std::tuple_size_v<T>
+                      , std::is_const_v<T>
+                      >;
+};
+
+
+template<typename TdExpr> using param_for_arg_t = typename to_dsl< f_t<TdExpr> >::type;
 
 
 template<typename TdCallable, typename... ArgExprs>
