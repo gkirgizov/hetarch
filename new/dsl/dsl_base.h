@@ -53,6 +53,17 @@ struct VoidExpr : public ValueBase {
 const VoidExpr Unit{};
 
 
+// todo: temp
+template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
+struct DSLConst : public Expr<T> {
+    const T val;
+    constexpr DSLConst(T val) : val{val} {}
+    IR_TRANSLATABLE
+};
+
+//template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
+//constexpr auto operator"" _dsl (T val) { return DSLConst<T>{val}; };
+
 
 class Named {
     std::string_view m_name;
