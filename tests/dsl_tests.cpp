@@ -86,10 +86,22 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
     Var<uint64_t> xui{1}, yui{3};
     Var xf{2.0}, yf{4.0};
 
-    DSLFunction simple_add_test(
-            "add2",
+    DSLFunction simple_ops_test(
+            "simple_ops",
             MakeFunArgs(x, y),
-            x + y
+            (
+                    x + y, x - y, x * y,
+                    Unit
+            )
+    );
+
+    DSLFunction assign_ops_test(
+            "assign_ops",
+            MakeFunArgs(x, y),
+            (
+                    x += y, x -= y, y *= x, ++x, --y,
+                    Unit
+            )
     );
 
     DSLFunction cmp_test(
@@ -104,13 +116,16 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
     );
 
 
-    EXPECT_TRUE(translate_verify(irt, simple_add_test));
+    EXPECT_TRUE(translate_verify(irt, simple_ops_test));
+    EXPECT_TRUE(translate_verify(irt, assign_ops_test));
     EXPECT_TRUE(translate_verify(irt, cmp_test));
 }
 
 TEST_F(IRTranslatorTest, compilePtr) {
-    Var<int32_t> xi{1}, yi{3};
+    Var<int32_t> xi{1, "xi"}, yi{3, "yi"};
     Ptr p_xi{xi};
+    Ptr p_yi{yi};
+    Ptr pp_xi{p_xi};
 
     DSLFunction ptr_test(
             "ptr_test",
@@ -123,7 +138,22 @@ TEST_F(IRTranslatorTest, compilePtr) {
             )
     );
 
+    DSLFunction ptr_arith_test(
+            "ptr_arithmetic",
+            MakeFunArgs(p_yi, pp_xi),
+            (
+                    p_yi = xi.takeAddr(),
+//                    p_yi == p_xi,
+                    p_yi = p_xi + DSLConst(5),
+                    p_yi += DSLConst(5),
+                    p_yi = p_xi - DSLConst(5),
+                    p_yi -= DSLConst(5),
+                    Unit
+            )
+    );
+
     EXPECT_TRUE(translate_verify(irt, ptr_test));
+    EXPECT_TRUE(translate_verify(irt, ptr_arith_test));
 }
 
 TEST_F(IRTranslatorTest, compileDSLArray) {

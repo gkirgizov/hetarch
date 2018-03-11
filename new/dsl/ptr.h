@@ -3,7 +3,7 @@
 
 #include "dsl_base.h"
 #include "dsl_type_traits.h"
-#include "var.h"
+#include "value.h"
 
 
 namespace hetarch {
@@ -44,16 +44,20 @@ struct PtrBase: public Value< TdPtr, f_t<TdPointee>*, is_const >
     using element_t = f_t<TdPointee>;
     using dsl_element_t = remove_cvref_t<TdPointee>;
     static const bool const_q = is_const;
+    static const bool volatile_q = is_const; // todo: tmp
     static const bool elt_const_q = dsl_element_t::const_q;
     static const bool elt_volatile_q = dsl_element_t::volatile_q;
 
     constexpr auto operator*() const { return EDeref<TdPtr>{static_cast<const TdPtr&>(*this)}; }
 
-    // todo: anything with assignment? const assignment?
+    MEMBER_ASSIGN_OP(TdPtr, +)
+    MEMBER_ASSIGN_OP(TdPtr, -)
+    MEMBER_XX_OP(TdPtr, +)
+    MEMBER_XX_OP(TdPtr, -)
 };
 
 
-// todo: allow nullptr?
+// todo: allow nullptr? allow raw ptr (without pointee)?
 template<typename Td, bool is_const = false>
 struct Ptr : public PtrBase< Ptr<Td, is_const>, Td, is_const >
            , public Named
@@ -66,7 +70,8 @@ struct Ptr : public PtrBase< Ptr<Td, is_const>, Td, is_const >
 
     const Td& pointee;
     explicit constexpr Ptr(const Td& pointee)
-            : pointee{pointee}, Named{std::string{"ptr_"} + pointee.name().data()} {}
+//            : pointee{pointee}, Named{pointee.name().data() + std::string{"_ptr"}} {}
+            : pointee{pointee}, Named{pointee.name().data()} {}
 
     IR_TRANSLATABLE
 };
@@ -93,14 +98,6 @@ struct ResidentPtr
     {}
 
     IR_TRANSLATABLE
-};
-
-
-template<typename Td, typename = typename std::enable_if_t<std::is_base_of_v<ValueBase, Td>>>
-struct ETakeAddr: public Expr<i_t<Td>> {
-    using type = i_t<Td>*;
-    const Td& pointee;
-    explicit constexpr ETakeAddr(const Td& pointee) : pointee{pointee} {}
 };
 
 

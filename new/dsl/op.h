@@ -5,19 +5,22 @@
 
 #include "dsl_base.h"
 #include "dsl_type_traits.h"
-#include "var.h"
+#include "value.h"
 
 
 namespace hetarch {
 namespace dsl {
 
+
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 using dsl::f_t; // by some reasons CLion can't resolve it automatically.
+
 
 using BinOps = llvm::Instruction::BinaryOps;
 using Casts = llvm::Instruction::CastOps;
 using OtherOps = llvm::Instruction::OtherOps;
 using Predicate = llvm::CmpInst::Predicate;
+
 
 
 template<typename To, typename From>
@@ -87,7 +90,7 @@ struct EBinOp : public Expr<f_t<TdLhs>> {
     const TdLhs lhs;
     const TdRhs rhs;
     constexpr EBinOp(TdLhs&& lhs, TdRhs&& rhs) : lhs{std::forward<TdLhs>(lhs)}, rhs{std::forward<TdRhs>(rhs)} {}
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
@@ -95,7 +98,22 @@ template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
 >
 struct EBinOpLogical : public EBinOp<bOp, TdLhs, TdRhs> {
     using EBinOp<bOp, TdLhs, TdRhs>::EBinOp;
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
+};
+
+// todo: does it inherit const_q from TdPtr?
+template<BinOps Op, typename TdPtr, typename Td
+        , typename = typename std::enable_if_t< std::is_pointer_v<f_t<TdPtr>> >
+>
+struct EBinPtrOp : public Value< EBinPtrOp<Op, TdPtr, Td>
+        , f_t<TdPtr>
+        , std::remove_reference_t<TdPtr>::elt_const_q
+>
+{
+    const TdPtr& ptr;
+    const Td operand;
+    constexpr EBinPtrOp(const TdPtr& ptr, Td&& operand) : ptr{ptr}, operand{std::forward<Td>(operand)} {}
+    IR_TRANSLATABLE
 };
 
 
@@ -106,9 +124,8 @@ struct EBinCmp : public Expr<bool> {
 //    constexpr static OtherOps opKind{P < 32 ? OtherOps::FCmp : OtherOps::ICmp};
     const TdLhs lhs;
     const TdRhs rhs;
-
     constexpr EBinCmp(TdLhs&& lhs, TdRhs&& rhs) : lhs{std::forward<TdLhs>(lhs)}, rhs{std::forward<TdRhs>(rhs)} {}
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 template<Predicate P, typename TdLhs, typename TdRhs>
@@ -132,42 +149,89 @@ constexpr auto operator SYM (T1&& lhs) { \
 UNARY_OP(+, Add)
 UNARY_OP(-, Sub)
 
-/// Binary plus
-template<typename T1, typename T2 = T1
-        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
->
-constexpr auto operator+(T1&& lhs, T2&& rhs) {
-    using cast_t = ECast<T1, T2>;
-    return EBinOp<(std::is_floating_point_v<i_t<T1>> ? BinOps::FAdd : BinOps::Add), T1, cast_t>{
-            std::forward<T1>(lhs),
-            cast_t{std::forward<T2>(rhs)}
-    };
+
+// todo: implement ptrdiff & handle subtract ptr from val
+
+#define ADDITIVE_OP(SYM, F_OP, I_OP) \
+template<typename T1, typename T2 \
+        , typename = typename std::enable_if_t< is_ev_v<T1, T2> > \
+> \
+constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
+    using t1 = f_t<T1>; \
+    using t2 = f_t<T2>; \
+    if constexpr (std::is_pointer_v<t1>) { \
+        if constexpr (std::is_pointer_v<t2>) { \
+            static_assert(true, "ptrdiff isn't implemented yet"); \
+            \
+        } else { \
+            static_assert(std::is_integral_v<t2>); \
+            return EBinPtrOp<BinOps:: I_OP , T1, T2>{ \
+                    lhs, \
+                    std::forward<T2>(rhs) \
+            }; \
+        } \
+    } else if constexpr (std::is_pointer_v<t2>) { \
+        static_assert(std::is_integral_v<t1>); \
+        assert( BinOps:: I_OP != BinOps::Sub && "Substracting pointer from value is disallowed!"); \
+        return EBinPtrOp<BinOps:: I_OP , T2, T1>{ \
+                rhs, \
+                std::forward<T1>(lhs) \
+        }; \
+    } else if constexpr (std::is_floating_point_v<t1>) { \
+        using cast_t = ECast<T1, T2>; \
+        return EBinOp<BinOps:: F_OP , T1, cast_t>{ \
+            std::forward<T1>(lhs), \
+            cast_t{std::forward<T2>(rhs)} \
+        }; \
+    } else if constexpr (std::is_floating_point_v<t2>) { \
+        using cast_t = ECast<T2, T1>; \
+        return EBinOp<BinOps:: F_OP , cast_t, T2>{ \
+            cast_t{std::forward<T1>(lhs)}, \
+            std::forward<T2>(rhs) \
+        }; \
+    } else { \
+        using cast_t = ECast<T1, T2>; \
+        return EBinOp<BinOps:: I_OP , T1, cast_t>{ \
+            std::forward<T1>(lhs), \
+            cast_t{std::forward<T2>(rhs)} \
+        }; \
+    } \
 }
 
-/// Binary minus
-template<typename T1, typename T2 = T1
-        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
->
-constexpr auto operator-(T1&& lhs, T2&& rhs) {
-    using cast_t = ECast<T1, T2>;
-    return EBinOp<(std::is_floating_point_v<i_t<T1>> ? BinOps::FSub: BinOps::Sub), T1, cast_t>{
-            std::forward<T1>(lhs),
-            cast_t{std::forward<T2>(rhs)}
-    };
+#define MULTIPLICATIVE_OP(SYM, F_OP, S_OP, U_OP) \
+template<typename T1, typename T2 \
+        , typename = typename std::enable_if_t< is_ev_v<T1, T2> > \
+> \
+constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
+    using t1 = f_t<T1>; \
+    using t2 = f_t<T2>; \
+    if constexpr (std::is_floating_point_v<t1>) { \
+        using cast_t = ECast<T1, T2>; \
+        return EBinOp<BinOps:: F_OP , T1, cast_t>{ \
+            std::forward<T1>(lhs), \
+            cast_t{std::forward<T2>(rhs)} \
+        }; \
+    } else if constexpr (std::is_floating_point_v<t2>) { \
+        using cast_t = ECast<T2, T1>; \
+        return EBinOp<BinOps:: F_OP , cast_t, T2>{ \
+            cast_t{std::forward<T1>(lhs)}, \
+            std::forward<T2>(rhs) \
+        }; \
+    } else { \
+        using cast_t = ECast<T1, T2>; \
+        return EBinOp<BinOps:: S_OP , T1, cast_t>{ \
+            std::forward<T1>(lhs), \
+            cast_t{std::forward<T2>(rhs)} \
+        }; \
+    } \
 }
 
-/// Multiplication
-template<typename T1, typename T2 = T1
-        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
->
-constexpr auto operator*(T1&& lhs, T2&& rhs) {
-    using cast_t = ECast<T1, T2>;
-    return EBinOp<(std::is_floating_point<T1>::value ? BinOps::FMul: BinOps::Mul), T1, cast_t>{
-            std::forward<T1>(lhs),
-            cast_t{std::forward<T2>(rhs)}
-    };
-}
 
+ADDITIVE_OP(+, FAdd, Add)
+ADDITIVE_OP(-, FSub, Sub)
+MULTIPLICATIVE_OP(*, FMul, Mul, Mul)
+//MULTIPLICATIVE_OP(/, FDiv, SDiv, UDiv)
+//MULTIPLICATIVE_OP(%, FRem, SRem, URem)
 
 
 // todo: type conversions in bitwise operations?
@@ -260,6 +324,7 @@ constexpr auto operator||(T1&& lhs, T2&& rhs) {
 };
 
 
+// todo cmp pointers
 // todo: emit warning: losing precision when cast float to int
 // todo: handle unordered floats comparisons
 #define CMP_OPERATOR(SYM, F_OP, S_OP, U_OP) \
@@ -267,7 +332,7 @@ template<typename T1, typename T2, typename = typename std::enable_if_t< is_ev_v
 constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
     using t1 = i_t<T1>; \
     using t2 = i_t<T2>; \
-    static_assert(std::is_arithmetic_v<t1> && std::is_arithmetic_v<t2>, "Expected arithmetic types in comparison"); \
+    static_assert(std::is_scalar_v<t1> && std::is_scalar_v<t2>, "Expected scalar types in comparison!"); \
  \
     constexpr bool t1_fp = std::is_floating_point_v<t1>; \
     constexpr bool t2_fp = std::is_floating_point_v<t2>; \
@@ -317,6 +382,9 @@ CMP_OPERATOR(<,  LT, ULT, SLT)
 CMP_OPERATOR(<=, LE, ULE, SLE)
 CMP_OPERATOR(>,  GT, UGT, SGT)
 CMP_OPERATOR(>=, GE, UGE, SGE)
+
+
+// todo: bitshift
 
 
 //template<typename T1>

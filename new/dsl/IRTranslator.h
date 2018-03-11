@@ -203,21 +203,21 @@ public: // Values
 
     template<typename Td>
     void accept(const ETakeAddr<Td>& e) {
-        // it is enough to just do that -- then on the stack should be addr
-        e.pointee.toIR(*this);
+        e.pointee.toIR(*this); // addr is on top of the stack
+        push_val(pop_addr().first); // re-push addr as value
     }
 
     template<typename Td>
     void accept(const EDeref<Td>& e) {
         // it is memory access, isn't it? so, it is DANGEROUS. emit warning when dereferencing unknown Ptr and not ETakeAddr
 
-        // avoid allocating ptr in e.ptr.toIR(*this)
-        e.ptr.pointee.toIR(*this);
+        // avoid allocating ptr in e.ptr.toIR(*this) -- works only for const Ptr
+//        e.ptr.pointee.toIR(*this);
 
         // another, more explicit way
-/*        e.ptr.toIR(*this);
+        e.ptr.toIR(*this);
         auto pointee_addr = pop_val();
-        push_addr(pointee_addr, e.ptr.pointee.volatile_q);*/
+        push_addr(pointee_addr, e.ptr.elt_volatile_q);
     }
 
 private:
@@ -602,6 +602,28 @@ public: // Operations and Casts
 //    template<BinOps bOp>
 //    void accept(const EBinOpLogical<bOp> &e) {
 //    }
+
+    template<BinOps bOp, typename TdPtr, typename Td>
+    void accept(const EBinPtrOp<bOp, TdPtr, Td>& e) {
+        using target_size_t = HETARCH_TARGET_ADDRT;
+        auto ty = llvm_map.get_type<target_size_t>();
+
+        e.operand.toIR(*this);
+        auto n = pop_val();
+        e.ptr.toIR(*this);
+        auto addr = pop_val();
+
+        auto pointee_size = llvm_map.get_const<target_size_t>(sizeof(typename std::remove_reference_t<TdPtr>::element_t));
+        auto n_casted = cur_builder->CreateSExt(n, ty);
+        auto val = cur_builder->CreateMul(n_casted, pointee_size);
+
+        auto addr_val = cur_builder->CreatePtrToInt(addr, ty);
+        auto new_addr_val = cur_builder->CreateBinOp(bOp, addr_val, val);
+        auto new_addr = cur_builder->CreateIntToPtr(new_addr_val, addr->getType());
+
+        push_val(new_addr); // it is manipulation with Values of PointerType, not with pointers (i.e. memory)
+//        push_addr(new_addr, false);
+    };
 
     template<OtherOps Op, Predicate P, typename TdLhs, typename TdRhs>
     void accept(const EBinCmp<Op, P, TdLhs, TdRhs>& e) {
