@@ -231,7 +231,7 @@ std::string to_string(const std::array<T, N>& x) {
 
 TEST_F(CodeLoaderTest, loadGlobal) {
     auto load_tester = [&](auto&& g) {
-        auto r = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite, g);
+        auto r = CodeLoader::load(g, conn, memMgr, mem::MemType::ReadWrite);
 
         EXPECT_TRUE(std::is_move_constructible_v<decltype(r)>)
                             << "ResidentGlobal must be move-constructible!"
@@ -303,8 +303,28 @@ TEST_F(CodeLoaderTest, loadAndCall) {
     };
     auto remoteRes = generic_caller(factorial_gen, 5u);
     EXPECT_TRUE(120 == remoteRes) << "invalid result: " << remoteRes << std::endl;
+
+    std::cerr << "end of codegen test" << std::endl;
 }
 
+TEST_F(CodeLoaderTest, readGPIO) {
+    // Test only for arm
+    if (config.triple.find("arm") != std::string::npos) {
+
+        // Get gpio configuration register addr
+        auto gpio_conf_reg_addr = conn.mmap(0x13400000);
+        EXPECT_TRUE(gpio_conf_reg_addr != 0) << "shouldn't return zero mmapped gpio configuration register!";
+
+        // Create global volatile val at specified addr
+        DSLGlobal gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
+        EXPECT_TRUE(gcr.x.const_q && gcr.x.volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
+        auto remoteGCR = CodeLoader::getLoadedResident(gcr, gpio_conf_reg_addr, conn, memMgr);
+//        EXPECT_TRUE(remoteGCR.memRegion().start != 0) << "failed at loading " << utils::type_name<decltype(gcr)>();
+
+    } else {
+        std::cerr << "Not arm; not running this test" << std::endl;
+    }
+}
 
 // todo: various kinds of symbol conflicts related tests
 

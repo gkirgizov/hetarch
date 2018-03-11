@@ -78,28 +78,46 @@ public:
     }*/
 
     template<typename AddrT>
-    inline static auto getResident(conn::IConnection<AddrT> &conn,
+    inline static auto getResident(const dsl::VoidExpr& v,
+                                   conn::IConnection<AddrT> &conn,
                                    mem::MemManager<AddrT> &memManager,
                                    mem::MemRegion<AddrT> memRegion,
-                                   const dsl::VoidExpr& v)
+                                   bool unloadable = true)
     { return v; };
 
     template<typename AddrT, typename Td>
-    static auto load(conn::IConnection<AddrT> &conn,
+    inline static auto getLoadedResident(const dsl::DSLGlobal<Td>& g,
+                                         AddrT addr,
+                                         conn::IConnection<AddrT> &conn,
+                                         mem::MemManager<AddrT> &memManager,
+                                         mem::MemType memType = mem::MemType::ReadWrite,
+                                         bool unloadable = false)
+
+    {
+        using val_type = dsl::f_t<Td>;
+        const auto size = static_cast<AddrT>(sizeof(val_type));
+        mem::MemRegion<AddrT> memRegion{addr, size, memType};
+        return getResident(g.x, conn, memManager, memRegion, unloadable);
+    };
+
+    template<typename AddrT, typename Td>
+    static auto load(const dsl::DSLGlobal<Td>& g,
+                     AddrT addr,
+                     conn::IConnection<AddrT> &conn,
                      mem::MemManager<AddrT> &memManager,
-                     mem::MemRegion<AddrT> memRegion,
-                     const dsl::DSLGlobalPreallocated<AddrT, Td>& g)
+                     mem::MemType memType = mem::MemType::ReadWrite)
     {
         using val_type = dsl::f_t<Td>;
 
-        auto actualMemRegion = memManager.tryAlloc(memRegion);
         const auto size = static_cast<AddrT>(sizeof(val_type));
+        mem::MemRegion<AddrT> memRegion{addr, size, memType};
+        auto actualMemRegion = memManager.tryAlloc(memRegion);
         if (actualMemRegion.size >= size) {
             if (g.x.initialised()) {
                 // todo: endianness?
                 conn.write(actualMemRegion.start, size, utils::toBytes(g.x.initial_val()));
             }
-            return getResident(conn, memManager, actualMemRegion, g.x);
+            return getResident(g.x, conn, memManager, actualMemRegion, true);
 
         } else {
             // todo: handle tryAlloc errors
@@ -107,10 +125,11 @@ public:
     };
 
     template<typename AddrT, typename Td>
-    static auto load(conn::IConnection<AddrT> &conn,
+    static auto load(const dsl::DSLGlobal<Td>& g,
+                     conn::IConnection<AddrT> &conn,
                      mem::MemManager<AddrT> &memManager,
-                     mem::MemType memType,
-                     const dsl::DSLGlobal<Td>& g)
+                     mem::MemType memType = mem::MemType::ReadWrite)
+
     {
         using val_type = dsl::f_t<Td>;
 
@@ -121,7 +140,7 @@ public:
                 // todo: endianness?
                 conn.write(memRegion.start, size, utils::toBytes(g.x.initial_val()));
             }
-            return getResident(conn, memManager, memRegion, g.x);
+            return getResident(g.x, conn, memManager, memRegion, true);
 
         } else {
             // todo: handle not enough mem
@@ -129,27 +148,30 @@ public:
     };
 
     template<typename AddrT, typename T, bool is_const, bool is_volatile>
-    inline static auto getResident(conn::IConnection<AddrT> &conn,
+    inline static auto getResident(const dsl::Var<T, is_const, is_volatile>& g,
+                                   conn::IConnection<AddrT> &conn,
                                    mem::MemManager<AddrT> &memManager,
                                    mem::MemRegion<AddrT> memRegion,
-                                   const dsl::Var<T, is_const, is_volatile>& g)
+                                   bool unloadable = true)
+
     {
-        // todo: is it always unloadable
         // todo: what about is_const for func params? it is an error (not being able to .write() to it)
         return dsl::ResidentVar<AddrT, T, false, is_volatile>{
-                conn, memManager, memRegion, true,
+                conn, memManager, memRegion, unloadable,
                 g.initial_val(), g.name()
         };
     };
 
     template<typename AddrT, typename TdElem, std::size_t N, bool is_const>
-    inline static auto getResident(conn::IConnection<AddrT> &conn,
+    inline static auto getResident(const dsl::Array<TdElem, N, is_const>& g,
+                                   conn::IConnection<AddrT> &conn,
                                    mem::MemManager<AddrT> &memManager,
                                    mem::MemRegion<AddrT> memRegion,
-                                   const dsl::Array<TdElem, N, is_const>& g)
+                                   bool unloadable = true)
+
     {
         return dsl::ResidentArray<AddrT, TdElem, N, false>{
-                conn, memManager, memRegion, true,
+                conn, memManager, memRegion, unloadable,
                 g.initial_val(), g.name()
         };
     };
@@ -215,10 +237,10 @@ public:
                         // Load everything we need
                         conn.write(memForText.start, contentsSize, reinterpret_cast<const unsigned char*>(contents.data()));
                         static_assert((std::is_default_constructible_v<TdRet> && ... && std::is_default_constructible_v<TdArgs>));
-                        auto retLoaded = getResident(conn, memManager, memForRetVal, TdRet{});
+                        auto retLoaded = getResident(TdRet{}, conn, memManager, memForRetVal, true);
                         // Load arguments (use apply to unpack memForArgs)
                         auto argsLoaded = std::apply([&](auto... memForArg){
-                            return std::tuple{ getResident(conn, memManager, memForArg, TdArgs{})... };
+                            return std::tuple{ getResident(TdArgs{}, conn, memManager, memForArg, true)... };
                         }, memForArgs);
 
                         // Create unloadable resident
