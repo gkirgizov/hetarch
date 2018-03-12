@@ -73,7 +73,7 @@ struct ECast : public Expr<i_t<TdTo>> {
     using From = i_t<TdFrom>;
 
     const TdFrom src;
-    explicit constexpr ECast(TdFrom&& src) : src{std::forward<TdFrom>(src)} {}
+    explicit constexpr ECast(TdFrom src) : src{src} {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
@@ -89,7 +89,7 @@ template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
 struct EBinOp : public Expr<f_t<TdLhs>> {
     const TdLhs lhs;
     const TdRhs rhs;
-    constexpr EBinOp(TdLhs&& lhs, TdRhs&& rhs) : lhs{std::forward<TdLhs>(lhs)}, rhs{std::forward<TdRhs>(rhs)} {}
+    constexpr EBinOp(TdLhs lhs, TdRhs rhs) : lhs{lhs}, rhs{rhs} {}
     IR_TRANSLATABLE
 };
 
@@ -111,11 +111,13 @@ struct EBinPtrOp : public get_base_t< TdPtr, EBinPtrOp<Op, TdPtr, Td> >
     using this_t = EBinPtrOp<Op, TdPtr, Td>;
     using Value<this_t, type, std::remove_reference_t<TdPtr>::const_q>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr EBinPtrOp(this_t&&) = default;
+    constexpr EBinPtrOp(const this_t&) = default;
 
     const TdPtr ptr;
     const Td operand;
-    constexpr EBinPtrOp(TdPtr&& ptr, Td&& operand)
-            : ptr{std::forward<TdPtr>(ptr)}, operand{std::forward<Td>(operand)} {}
+    constexpr EBinPtrOp(TdPtr ptr, Td operand)
+            : ptr{ptr}, operand{operand} {}
     IR_TRANSLATABLE
 };
 
@@ -127,7 +129,7 @@ struct EBinCmp : public Expr<bool> {
 //    constexpr static OtherOps opKind{P < 32 ? OtherOps::FCmp : OtherOps::ICmp};
     const TdLhs lhs;
     const TdRhs rhs;
-    constexpr EBinCmp(TdLhs&& lhs, TdRhs&& rhs) : lhs{std::forward<TdLhs>(lhs)}, rhs{std::forward<TdRhs>(rhs)} {}
+    constexpr EBinCmp(TdLhs lhs, TdRhs rhs) : lhs{lhs}, rhs{rhs} {}
     IR_TRANSLATABLE
 };
 
@@ -139,13 +141,13 @@ using EBinICmp = EBinCmp<OtherOps::ICmp, P, TdLhs, TdRhs>;
 
 #define UNARY_OP(SYM, OP) \
 template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >> \
-constexpr auto operator SYM (T1&& lhs) { \
+constexpr auto operator SYM (T1 lhs) { \
     using t1 = i_t<T1>; \
     using const_t = DSLConst<t1>; \
     constexpr bool is_fp = std::is_floating_point_v<t1>; \
     return EBinOp<(is_fp ? BinOps::F##OP: BinOps:: OP), const_t, T1>{ \
             const_t{0}, \
-            std::forward<T1>(lhs) \
+            lhs \
     }; \
 }
 
@@ -159,7 +161,7 @@ UNARY_OP(-, Sub)
 template<typename T1, typename T2 \
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> > \
 > \
-constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
+constexpr auto operator SYM (T1 lhs, T2 rhs) { \
     using t1 = f_t<T1>; \
     using t2 = f_t<T2>; \
     if constexpr (std::is_pointer_v<t1>) { \
@@ -170,7 +172,7 @@ constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
             static_assert(std::is_integral_v<t2>); \
             return EBinPtrOp<BinOps:: I_OP , T1, T2>{ \
                     lhs, \
-                    std::forward<T2>(rhs) \
+                    rhs \
             }; \
         } \
     } else if constexpr (std::is_pointer_v<t2>) { \
@@ -178,25 +180,25 @@ constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
         assert( BinOps:: I_OP != BinOps::Sub && "Substracting pointer from value is disallowed!"); \
         return EBinPtrOp<BinOps:: I_OP , T2, T1>{ \
                 rhs, \
-                std::forward<T1>(lhs) \
+                lhs \
         }; \
     } else if constexpr (std::is_floating_point_v<t1>) { \
         using cast_t = ECast<T1, T2>; \
         return EBinOp<BinOps:: F_OP , T1, cast_t>{ \
-            std::forward<T1>(lhs), \
-            cast_t{std::forward<T2>(rhs)} \
+            lhs, \
+            cast_t{rhs} \
         }; \
     } else if constexpr (std::is_floating_point_v<t2>) { \
         using cast_t = ECast<T2, T1>; \
         return EBinOp<BinOps:: F_OP , cast_t, T2>{ \
-            cast_t{std::forward<T1>(lhs)}, \
-            std::forward<T2>(rhs) \
+            cast_t{lhs}, \
+            rhs \
         }; \
     } else { \
         using cast_t = ECast<T1, T2>; \
         return EBinOp<BinOps:: I_OP , T1, cast_t>{ \
-            std::forward<T1>(lhs), \
-            cast_t{std::forward<T2>(rhs)} \
+            lhs, \
+            cast_t{rhs} \
         }; \
     } \
 }
@@ -205,26 +207,26 @@ constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
 template<typename T1, typename T2 \
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> > \
 > \
-constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
+constexpr auto operator SYM (T1 lhs, T2 rhs) { \
     using t1 = f_t<T1>; \
     using t2 = f_t<T2>; \
     if constexpr (std::is_floating_point_v<t1>) { \
         using cast_t = ECast<T1, T2>; \
         return EBinOp<BinOps:: F_OP , T1, cast_t>{ \
-            std::forward<T1>(lhs), \
-            cast_t{std::forward<T2>(rhs)} \
+            lhs, \
+            cast_t{rhs} \
         }; \
     } else if constexpr (std::is_floating_point_v<t2>) { \
         using cast_t = ECast<T2, T1>; \
         return EBinOp<BinOps:: F_OP , cast_t, T2>{ \
-            cast_t{std::forward<T1>(lhs)}, \
-            std::forward<T2>(rhs) \
+            cast_t{lhs}, \
+            rhs \
         }; \
     } else { \
         using cast_t = ECast<T1, T2>; \
         return EBinOp<BinOps:: S_OP , T1, cast_t>{ \
-            std::forward<T1>(lhs), \
-            cast_t{std::forward<T2>(rhs)} \
+            lhs, \
+            cast_t{rhs} \
         }; \
     } \
 }
@@ -242,12 +244,12 @@ MULTIPLICATIVE_OP(*, FMul, Mul, Mul)
 template<typename T1, typename T2 \
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> > \
 > \
-constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
+constexpr auto operator SYM (T1 lhs, T2 rhs) { \
     static_assert(std::is_integral_v<i_t<T1>> && std::is_integral_v<i_t<T2>>, "Bitwise operations expect integral types!"); \
     static_assert(std::is_same_v<i_t<T1>, i_t<T2>>, "Bitwise operations expect same integral type!"); \
     return EBinOp<BinOps:: OP , T1, T2>{ \
-            std::forward<T1>(lhs), \
-            std::forward<T2>(rhs) \
+            lhs, \
+            rhs \
     }; \
 };
 
@@ -255,6 +257,21 @@ constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
 BITWISE_OP(&, And)
 BITWISE_OP(|, Or)
 BITWISE_OP(^, Xor)
+
+/// Bitwise Neg
+template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >>
+constexpr auto operator~ (T1 x) {
+    using t1 = f_t<T1>;
+    static_assert(std::is_arithmetic_v<t1>, "Bitwise negation expects arithmetic type!");
+    if constexpr (std::is_integral_v<t1>) {
+        DSLConst zero{static_cast<i_t<T1>>(0)};
+        return EBinOp<BinOps::Sub, T1, decltype(zero)>{ zero, x };
+    } else if constexpr (std::is_floating_point_v<f_t<T1>>) {
+        DSLConst zero{static_cast<i_t<T1>>(-0.0)};
+        return EBinOp<BinOps::FSub, T1, decltype(zero)>{ zero, x };
+    }
+};
+
 
 /*/// Bitwise And
 template<typename T1, typename T2
@@ -294,12 +311,13 @@ constexpr auto operator^(T1&& lhs, T2&& rhs) {
 
 
 
+
 /// Logical Not
 template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >>
-constexpr auto operator!(T1&& lhs) {
+constexpr auto operator!(T1 lhs) {
     using const_t = DSLConst<bool>;
     return EBinOpLogical<BinOps::Xor, bool_cast<T1>, const_t>{
-            bool_cast<T1>{std::forward<T1>(lhs)},
+            bool_cast<T1>{lhs},
             const_t{true}
     };
 };
@@ -308,10 +326,10 @@ constexpr auto operator!(T1&& lhs) {
 template<typename T1, typename T2 = T1
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
 >
-constexpr auto operator&&(T1&& lhs, T2&& rhs) {
+constexpr auto operator&&(T1 lhs, T2 rhs) {
     return EBinOpLogical<BinOps::And, bool_cast<T1>, bool_cast<T2>>{
-            bool_cast<T1>{std::forward<T1>(lhs)},
-            bool_cast<T2>{std::forward<T2>(rhs)}
+            bool_cast<T1>{lhs},
+            bool_cast<T2>{rhs}
     };
 };
 
@@ -319,10 +337,10 @@ constexpr auto operator&&(T1&& lhs, T2&& rhs) {
 template<typename T1, typename T2 = T1
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
 >
-constexpr auto operator||(T1&& lhs, T2&& rhs) {
+constexpr auto operator||(T1 lhs, T2 rhs) {
     return EBinOpLogical<BinOps::Or, bool_cast<T1>, bool_cast<T2>>{
-            bool_cast<T1>{std::forward<T1>(lhs)},
-            bool_cast<T2>{std::forward<T2>(rhs)}
+            bool_cast<T1>{lhs},
+            bool_cast<T2>{rhs}
     };
 };
 
@@ -332,7 +350,7 @@ constexpr auto operator||(T1&& lhs, T2&& rhs) {
 // todo: handle unordered floats comparisons
 #define CMP_OPERATOR(SYM, F_OP, S_OP, U_OP) \
 template<typename T1, typename T2, typename = typename std::enable_if_t< is_ev_v<T1, T2> >> \
-constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
+constexpr auto operator SYM (T1 lhs, T2 rhs) { \
     using t1 = i_t<T1>; \
     using t2 = i_t<T2>; \
     static_assert(std::is_scalar_v<t1> && std::is_scalar_v<t2>, "Expected scalar types in comparison!"); \
@@ -344,37 +362,37 @@ constexpr auto operator SYM (T1&& lhs, T2&& rhs) { \
  \
     if constexpr (t1_fp && t2_fp) { \
         return EBinFCmp<Predicate::FCMP_O##F_OP, T1, T2>{ \
-                std::forward<T1>(lhs), \
-                std::forward<T2>(rhs) \
+                lhs, \
+                rhs \
         }; \
     } else if constexpr (t1_fp) { \
         using cast_t = ECast<T1, T2>; \
         return EBinFCmp<Predicate::FCMP_O##F_OP, T1, cast_t>{ \
-                std::forward<T1>(lhs), \
-                cast_t{std::forward<T2>(rhs)} \
+                lhs, \
+                cast_t{rhs} \
         }; \
     } else if constexpr (t2_fp) { \
         using cast_t = ECast<T2, T1>; \
         return EBinFCmp<Predicate::FCMP_O##F_OP, cast_t, T2>{ \
-                cast_t{std::forward<T1>(lhs)}, \
-                std::forward<T2>(rhs) \
+                cast_t{lhs}, \
+                rhs \
         }; \
     } else if constexpr (t1_u && t2_u) { \
         return EBinICmp<Predicate::ICMP_##U_OP, T1, T2>{ \
-                std::forward<T1>(lhs), \
-                std::forward<T2>(rhs) \
+                lhs, \
+                rhs \
         }; \
     } else if constexpr (!t1_u) { \
         using cast_t = ECast<T1, T2>; \
         return EBinICmp<Predicate::ICMP_##S_OP, T1, cast_t>{ \
-                std::forward<T1>(lhs), \
-                cast_t{std::forward<T2>(rhs)} \
+                lhs, \
+                cast_t{rhs} \
         }; \
     } else if constexpr (!t2_u) { \
         using cast_t = ECast<T2, T1>; \
         return EBinICmp<Predicate::ICMP_##S_OP, cast_t, T2>{ \
-                cast_t{std::forward<T1>(lhs)}, \
-                std::forward<T2>(rhs) \
+                cast_t{lhs}, \
+                rhs \
         }; \
     } \
 };

@@ -27,8 +27,8 @@ struct byRef : public ValueBase {
     static const bool volatile_q = Td::volatile_q;
     static const bool const_q = Td::const_q;
 
-    const Td& arg;
-    explicit constexpr byRef(const Td& arg) : arg{arg} {}
+    const Td arg;
+    explicit constexpr byRef(Td arg) : arg{arg} {}
 };
 
 
@@ -99,17 +99,17 @@ struct ECall : public Expr<typename std::remove_reference_t<TdCallable>::ret_t> 
     const TdCallable& callee;
     const std::tuple<ArgExprs...> args;
 
-    explicit constexpr ECall(const TdCallable& callee, ArgExprs&&... args)
+    explicit constexpr ECall(const TdCallable& callee, ArgExprs... args)
             : callee{callee}
-            , args{std::forward<ArgExprs>(args)...}
+            , args{args...}
     {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<typename TdCallable, typename... ArgExprs>
-constexpr auto makeCall(const TdCallable& callable, ArgExprs&&... args) {
-    return ECall<TdCallable, ArgExprs...>{callable, std::forward<ArgExprs>(args)...};
+constexpr auto makeCall(const TdCallable& callable, ArgExprs... args) {
+    return ECall<TdCallable, ArgExprs...>{callable, args...};
 };
 
 
@@ -118,7 +118,7 @@ constexpr auto makeCall(const TdCallable& callable, ArgExprs&&... args) {
 template<typename TdRet, typename ...TdArgs>
 struct Recurse : public Expr<f_t<TdRet>> {
     const std::tuple<TdArgs...> args;
-    explicit constexpr Recurse(TdArgs&&... args): args{std::forward<TdArgs>(args)...} {}
+    explicit constexpr Recurse(TdArgs... args) : args{args...} {}
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
@@ -162,15 +162,15 @@ struct DSLCallable : public CallableBase {
                     validateArgs<ArgExprs...>()
             >
     >
-    inline constexpr auto call(ArgExprs&&... args) const {
+    inline constexpr auto call(ArgExprs... args) const {
 //        return ECall<TdCallable, ArgExprs...>(
         return makeCall(
                 static_cast<const TdCallable&>(*this),
-                std::forward<ArgExprs>(args)...
+                args...
         );
     }
     template<typename... ArgExprs>
-    inline constexpr auto operator()(ArgExprs&&... args) const { return this->call(std::forward<ArgExprs>(args)...); }
+    inline constexpr auto operator()(ArgExprs... args) const { return this->call(args...); }
 
 };
 
@@ -180,13 +180,13 @@ namespace {
 template<typename Td>
 struct ReturnImpl : public Expr<f_t<Td>> {
     const Td returnee;
-    explicit constexpr ReturnImpl(Td&& r) : returnee{std::forward<Td>(r)} {}
+    explicit constexpr ReturnImpl(Td r) : returnee{r} {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<typename Td>
-constexpr auto Return(Td&& r) { return ReturnImpl<Td>{std::forward<Td>(r)}; }
+constexpr auto Return(Td r) { return ReturnImpl<Td>{r}; }
 constexpr auto Return() { return ReturnImpl<const VoidExpr&>{Unit}; }
 
 }
@@ -232,19 +232,19 @@ struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs
 //    const funargs_t args;
     const ReturnImpl<TdBody> body;
 
-    constexpr DSLFunction(std::string_view name, TdBody&& body)
-            : Named{name}, args{}, body{std::forward<TdBody>(body)} {}
-    constexpr DSLFunction(std::string_view name, funargs_t&& args, TdBody&& body)
-            : Named{name}, args{std::forward<funargs_t>(args)}, body{std::forward<TdBody>(body)} {}
+    constexpr DSLFunction(std::string_view name, TdBody body)
+            : Named{name}, args{}, body{body} {}
+    constexpr DSLFunction(std::string_view name, funargs_t args, TdBody body)
+            : Named{name}, args{args}, body{body} {}
 
     template<typename BodyGenerator
             , typename = typename std::enable_if_t<
                     std::is_invocable_v<BodyGenerator, TdArgs...>
             >
     >
-    constexpr DSLFunction(std::string_view name, funargs_t&& args, BodyGenerator&& body_builder)
+    constexpr DSLFunction(std::string_view name, funargs_t args, BodyGenerator&& body_builder)
             : Named{name}
-            , args{std::forward<funargs_t>(args)}
+            , args{args}
             , body(std::apply(std::forward<BodyGenerator>(body_builder), this->args))
     {
         // makes sense when generators are pure: always return their body as expression; don't use side-effects
@@ -275,7 +275,7 @@ struct build_dsl_fun_type_from_args {
 
 // Explicit deduction guide
 template<typename BodyGenerator, typename ...TdArgs>
-DSLFunction(std::string_view, std::tuple<TdArgs...>&&, BodyGenerator&&) ->
+DSLFunction(std::string_view, std::tuple<TdArgs...>, BodyGenerator&&) ->
 //typename build_dsl_fun_type<BodyGenerator, TdArgs...>::type;
 DSLFunction< std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
 

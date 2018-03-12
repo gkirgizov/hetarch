@@ -331,8 +331,8 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
         return If(!x, DSLConst(false), DSLConst(true));
     };
 
-    Var<int> res{1};
     auto factorial_gen = [&](auto&& n){
+        Var<int> res{1};
         return (While(
                 n > DSLConst(0u),
                 (res = res * n, n = n - DSLConst(1u))

@@ -35,7 +35,20 @@ struct ExprBase : public ESBase {};
 template<typename T>
 struct Expr : public ExprBase { using type = T; };
 
-struct ValueBase : public DSLBase {};
+namespace {
+    std::size_t val_counter{0};
+}
+
+struct ValueBase : public DSLBase {
+    using iid_t = std::size_t;
+    const iid_t iid;
+
+    ValueBase() : iid{ val_counter++ } {
+        if constexpr (utils::is_debug) {
+            std::cerr << "construct ValueBase with iid=" << iid << std::endl;
+        }
+    }
+};
 
 struct CallableBase : public DSLBase {
     CallableBase() = default;
@@ -66,8 +79,8 @@ struct DSLConst : public Expr<T> {
 
 #define MEMBER_ASSIGN_OP(TD, SYM) \
 template<typename T2> \
-constexpr auto operator SYM##= (T2&& rhs) const { \
-    return this->assign( static_cast<const TD &>(*this) SYM std::forward<T2>(rhs)); \
+constexpr auto operator SYM##= (T2 rhs) const { \
+    return this->assign( static_cast<const TD &>(*this) SYM rhs); \
 }
 
 #define MEMBER_XX_OP(TD, X) \

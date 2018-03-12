@@ -23,9 +23,9 @@ struct WhileExpr: public Expr<f_t<TdBody>> {
     const TdCond cond_expr;
     const TdBody body_expr;
 
-    constexpr WhileExpr(TdCond&& cond_expr, TdBody&& body_expr)
-            : cond_expr{std::forward<TdCond>(cond_expr)}
-            , body_expr{std::forward<TdBody>(body_expr)}
+    constexpr WhileExpr(TdCond cond_expr, TdBody body_expr)
+            : cond_expr{cond_expr}
+            , body_expr{body_expr}
     {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
@@ -33,10 +33,10 @@ struct WhileExpr: public Expr<f_t<TdBody>> {
 
 
 template<typename TdCond, typename TdBody>
-constexpr auto While(TdCond&& cond_expr, TdBody&& body_expr) {
+constexpr auto While(TdCond cond_expr, TdBody body_expr) {
     return WhileExpr<TdCond, TdBody>{
-            std::forward<TdCond>(cond_expr),
-            std::forward<TdBody>(body_expr),
+            cond_expr,
+            body_expr,
     };
 };
 

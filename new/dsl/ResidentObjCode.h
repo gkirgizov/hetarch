@@ -51,8 +51,8 @@ public:
             , Named{name}
             , callAddr(callAddr)
             , conn{conn}
-            , remoteRet{std::move(ret)}
-            , remoteArgs{std::move(args)}
+            , remoteRet{ret}
+            , remoteArgs{args}
     {}
 
     auto getCaller() const {
@@ -86,17 +86,17 @@ public:
     }
 
     template<typename ...Args>
-    void sendArgs(Args&&... actualArgs) {
+    void sendArgs(Args... actualArgs) {
         using Inds = std::make_integer_sequence<AddrT, sizeof...(TdArgs)>;
-        sendArgsImpl(Inds{}, std::forward<Args>(actualArgs)...);
+        sendArgsImpl(Inds{}, actualArgs...);
     }
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 
 private:
     template<AddrT ...I, typename ...Args>
-    void sendArgsImpl(std::integer_sequence<AddrT, I...>, Args&&... actualArgs) {
-        std::make_tuple( 0, ( std::get<I>(remoteArgs).write(std::forward<Args>(actualArgs)) , 0)... );
+    void sendArgsImpl(std::integer_sequence<AddrT, I...>, Args... actualArgs) {
+        std::make_tuple( 0, ( std::get<I>(remoteArgs).write(actualArgs) , 0)... );
     }
 
 };

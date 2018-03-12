@@ -29,9 +29,11 @@ struct EDeref : public get_base_t< get_dsl_element_t<TdPtr>, EDeref<TdPtr> >
     using this_t = EDeref<TdPtr>;
     using Value<this_t, type, std::remove_reference_t<TdPtr>::elt_const_q>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr EDeref(this_t&&) = default;
+    constexpr EDeref(const this_t&) = default;
 
     const TdPtr ptr;
-    explicit constexpr EDeref(TdPtr&& ptr) : ptr{std::forward<TdPtr>(ptr)} {}
+    explicit constexpr EDeref(TdPtr ptr) : ptr{ptr} {}
 
     IR_TRANSLATABLE
 };
@@ -71,7 +73,7 @@ public:
     constexpr bool initialised() const { return m_initialised; }
     constexpr val_type initial_val() const { return m_initial_val; }
 
-    constexpr auto operator*() const { return EDeref<const TdPtr&>{static_cast<const TdPtr&>(*this)}; }
+    constexpr auto operator*() const { return EDeref<TdPtr>{static_cast<const TdPtr&>(*this)}; }
 
     MEMBER_ASSIGN_OP(TdPtr, +)
     MEMBER_ASSIGN_OP(TdPtr, -)
@@ -88,6 +90,7 @@ struct RawPtr: public PtrBase< RawPtr<Td, is_const>, Td, is_const >
     using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
     constexpr RawPtr(this_t&&) = default;
+    constexpr RawPtr(const this_t&) = default;
 
     using PtrBase< this_t, Td, is_const >::PtrBase;
 
@@ -106,6 +109,7 @@ struct ResidentPtr
     using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
     constexpr ResidentPtr(this_t&&) = default;
+    constexpr ResidentPtr(const this_t&) = default;
 
     constexpr ResidentPtr(
             conn::IConnection<AddrT>& conn,

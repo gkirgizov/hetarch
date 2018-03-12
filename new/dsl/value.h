@@ -24,10 +24,10 @@ template<typename TdLhs, typename TdRhs
         >
 >
 struct EAssign : public Expr<f_t<TdLhs>> {
-    const TdLhs& lhs;
+    const TdLhs lhs;
     const TdRhs rhs;
 
-    constexpr EAssign(const TdLhs& lhs, TdRhs&& rhs) : lhs{lhs}, rhs{std::forward<TdRhs>(rhs)} {}
+    constexpr EAssign(TdLhs lhs, TdRhs rhs) : lhs{lhs}, rhs{rhs} {}
 
     IR_TRANSLATABLE
 };
@@ -36,8 +36,8 @@ struct EAssign : public Expr<f_t<TdLhs>> {
 template< typename Td
         , typename = typename std::enable_if_t< is_val_v<Td> >>
 struct ETakeAddr: public Expr<f_t<Td>*> {
-    const Td& pointee;
-    explicit constexpr ETakeAddr(const Td& pointee) : pointee{pointee} {}
+    const Td pointee;
+    explicit constexpr ETakeAddr(Td pointee) : pointee{pointee} {}
     IR_TRANSLATABLE
 };
 
@@ -50,7 +50,8 @@ struct Value : public ValueBase {
 //    static const bool const_q = is_const;
 
     Value() = default;
-//    Value(this_t&&) = default; // allow move and implicitly delete copy ctor
+    Value(const this_t&) = default;
+    Value(this_t&&) = default;
 
     // todo: better & more correct check instead of the_same
     // todo: some sane casting
@@ -60,16 +61,16 @@ struct Value : public ValueBase {
 //            std::is_same_v<remove_cvref_t< std::remove_pointer_t<T> >, i_t<Td>>
             true
     >>
-    constexpr auto assign(Td&& rhs) const {
+    constexpr auto assign(Td rhs) const {
         static_assert(!is_const, "Assigning to const!");
-        return EAssign<Tw, Td>{static_cast<const Tw&>(*this), std::forward<Td>(rhs)};
+        return EAssign<Tw, Td>{static_cast<const Tw&>(*this), rhs};
     }
 
     template<typename Td, typename = typename std::enable_if_t<
             !std::is_convertible_v<Tw, Td>
 //            !std::is_base_of_v<this_t, remove_cvref_t<Td>>
     >>
-    constexpr auto operator=(Td&& rhs) const { return this->assign(std::forward<Td>(rhs)); }
+    constexpr auto operator=(Td rhs) const { return this->assign(rhs); }
 
     // Member function templates never suppress generation of special member functions
     //  so, explicitly define copy assignment to avoid default behaviour and make it behave as assign()

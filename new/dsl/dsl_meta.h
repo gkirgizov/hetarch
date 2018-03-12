@@ -47,14 +47,14 @@ constexpr auto make_dsl_fun_from_arg_types(GLambda&& dsl_gen) {
     static_assert(std::is_invocable_v<GLambda, ArgExprs...>, "DSL Generator cannot be invoked with provided arguments!");
     constexpr auto fun_name = "generic_name";
 
-    auto&& formal_params = std::tuple<param_for_arg_t<ArgExprs>...>{};
-    return DSLFunction{make_bsv(fun_name), std::move(formal_params), std::forward<GLambda>(dsl_gen)};
+    auto formal_params = std::tuple<param_for_arg_t<ArgExprs>...>{};
+    return DSLFunction{make_bsv(fun_name), formal_params, std::forward<GLambda>(dsl_gen)};
 //    return DSLFunction{make_bsv(fun_name), std::tuple<param_for_arg_t<ArgExprs>...>{}, std::forward<GLambda>(dsl_gen)};
 };
 
 // Overload with type deduction for ArgExprs
 template<typename ...ArgExprs, typename GLambda>
-constexpr auto make_dsl_fun_from_arg_types(GLambda&& dsl_gen, ArgExprs&&...){
+constexpr auto make_dsl_fun_from_arg_types(GLambda&& dsl_gen, ArgExprs...){
     return make_dsl_fun_from_arg_types<ArgExprs...>(std::forward<GLambda>(dsl_gen));
 };
 

@@ -21,11 +21,11 @@ struct DSLGlobal : public ValueBase {
     const Td x;
     explicit DSLGlobal() = default;
     // only rvalues allowed
-    explicit constexpr DSLGlobal(Td&& x) : x{std::move(x)} {}
+    explicit constexpr DSLGlobal(Td x) : x{x} {}
     IR_TRANSLATABLE
 };
 
-// when user wants to load global on specific addr (e.g. in case of volatile var-s)
+/*// when user wants to load global on specific addr (e.g. in case of volatile var-s)
 template<typename AddrT
         , typename Td
         , typename = typename std::enable_if_t< is_val_v<Td> >>
@@ -34,9 +34,9 @@ struct DSLGlobalPreallocated : public ValueBase {
     const AddrT addr;
 
     explicit constexpr DSLGlobalPreallocated(AddrT addr) : x{}, addr{addr} {}
-    explicit constexpr DSLGlobalPreallocated(AddrT addr, Td&& x) : x{std::move(x)}, addr{addr} {}
+    explicit constexpr DSLGlobalPreallocated(AddrT addr, Td x) : x{x}, addr{addr} {}
     IR_TRANSLATABLE
-};
+};*/
 
 
 
@@ -56,7 +56,7 @@ public:
     static const bool const_q = is_const;
 
     constexpr void initialise(T value) {
-        m_initial_val = std::move(value);
+        m_initial_val = value;
         m_initialised = true;
     }
     constexpr bool initialised() const { return m_initialised; }
@@ -85,6 +85,7 @@ struct Var : public VarBase< Var<T, is_const, is_volatile>, T, is_const, is_vola
     using Value<this_t, T, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
     constexpr Var(this_t&&) = default;
+    constexpr Var(const this_t&) = default;
 
 //    using VarBase<this_t, T, is_const, is_volatile>::VarBase; // breaks template arg deduction from constructor
     explicit constexpr Var() = default;
@@ -111,6 +112,7 @@ struct ResidentVar
     using Value<this_t, T, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
     constexpr ResidentVar(this_t&&) = default;
+    constexpr ResidentVar(const this_t&) = default;
 
     constexpr ResidentVar(
             conn::IConnection<AddrT>& conn,

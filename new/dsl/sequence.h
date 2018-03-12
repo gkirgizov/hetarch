@@ -24,7 +24,7 @@ struct SeqExpr : public Expr<f_t<Td2>> {
     const Td1 e1;
     const Td2 e2;
 
-    constexpr SeqExpr(Td1&& e1, Td2&& e2) : e1{std::forward<Td1>(e1)}, e2{std::forward<Td2>(e2)} {}
+    constexpr SeqExpr(Td1 e1, Td2 e2) : e1{e1}, e2{e2} {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
@@ -33,8 +33,8 @@ struct SeqExpr : public Expr<f_t<Td2>> {
 template<typename Td1, typename Td2
         , typename = typename std::enable_if_t< is_ev_v<Td1, Td2> >
 >
-constexpr auto Seq(Td1&& e1, Td2&& e2) {
-    return SeqExpr<Td1, Td2>{std::forward<Td1>(e1), std::forward<Td2>(e2)};
+constexpr auto Seq(Td1 e1, Td2 e2) {
+    return SeqExpr<Td1, Td2>{e1, e2};
 }
 
 
@@ -42,8 +42,8 @@ constexpr auto Seq(Td1&& e1, Td2&& e2) {
 template<typename Td1, typename Td2
         , typename = typename std::enable_if_t< is_ev_v<Td1, Td2> >
 >
-constexpr auto operator,(Td1&& e1, Td2&& e2) {
-    return SeqExpr<Td1, Td2>{std::forward<Td1>(e1), std::forward<Td2>(e2)};
+constexpr auto operator,(Td1 e1, Td2 e2) {
+    return SeqExpr<Td1, Td2>{e1, e2};
 };
 
 

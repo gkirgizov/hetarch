@@ -49,7 +49,8 @@ class IRTranslator {
     struct Frame {
         llvm::Function* fun;
         std::stack<llvm::Value*> val_stack{};
-        std::unordered_map<const ValueBase*, llvm::Value*> allocated{};
+//        std::unordered_map<const ValueBase*, llvm::Value*> allocated{};
+        std::unordered_map<ValueBase::iid_t, llvm::Value*> allocated{};
 
         std::stack<ValSpec> valspec_stack{};
 
@@ -130,18 +131,18 @@ public: // Values
     void accept_value(const TdVal& val, llvm::Value* init_val = nullptr, bool is_volatile = false) {
         llvm::Value* val_addr = nullptr;
 
-        auto known = frame->allocated.find(&val);
+        auto known = frame->allocated.find(val.iid);
         if (known == std::end(frame->allocated)) {
             if constexpr (utils::is_debug)
-                std::cerr << "--alloca for " << std::hex << &val << "; T=" << utils::type_name<decltype(val)>() << std::endl;
+                std::cerr << "--alloca for " << val.iid << "; T=" << utils::type_name<decltype(val)>() << std::endl;
 
             auto ty = llvm_map.get_type<f_t<TdVal>>();
             val_addr = allocate(ty, init_val, is_volatile, val.name());
 
-            frame->allocated[&val] = val_addr;
+            frame->allocated[val.iid] = val_addr;
         } else { // Variable usage
             if constexpr (utils::is_debug)
-                std::cerr << "--use of" << std::hex << &val << "; T=" << utils::type_name<decltype(val)>() << std::endl;
+                std::cerr << "--use of " << val.iid << "; T=" << utils::type_name<decltype(val)>() << std::endl;
 
             val_addr = known->second;
         }
@@ -301,14 +302,14 @@ public: // dsl functions & residents
         }
 
         llvm::Value* g_ptr = nullptr;
-        auto known = frame->allocated.find(&g);
+        auto known = frame->allocated.find(g.iid);
         if (known == std::end(frame->allocated)) {
             llvm::Type* element_type = llvm_map.get_type<T>();
             llvm::PointerType* ptr_type = element_type->getPointerTo();
 
             auto g_addr = llvm_map.get_const(g.addr);
             g_ptr = cur_builder->CreateIntToPtr(g_addr, ptr_type, g.name().data());
-            frame->allocated[&g] = g_ptr;
+            frame->allocated[g.iid] = g_ptr;
         } else {
             g_ptr = known->second;
         }
@@ -422,7 +423,7 @@ private:
         // Now allocate space on stack for argument and store actual Value arg represents (as Clang does)
         auto arg_addr = allocate(arg->getType(), dsl_arg.name());
         cur_builder->CreateStore(arg, arg_addr, dsl_arg.volatile_q);
-        frame->allocated[static_cast<const ValueBase*>(&dsl_arg)] = arg_addr;
+        frame->allocated[dsl_arg.iid] = arg_addr;
     }
 
 public:

@@ -25,10 +25,10 @@ struct EArrayAccess : Value< EArrayAccess<TdArr, TdInd>
 {
     using type = typename TdArr::element_t;
 
-    const TdArr& arr;
+    const TdArr arr;
     const TdInd ind;
 
-    constexpr EArrayAccess(const TdArr& arr, TdInd&& ind) : arr{arr}, ind{std::forward<TdInd>(ind)} {}
+    constexpr EArrayAccess(TdArr arr, TdInd ind) : arr{arr}, ind{ind} {}
 
     using this_t = EArrayAccess<TdArr, TdInd>;
     using Value<this_t, type, TdArr::elt_const_q>::operator=;
@@ -60,9 +60,9 @@ public:
 
     template<typename TdInd
             , typename = typename std::enable_if_t< std::is_integral_v<f_t<TdInd>> >>
-    constexpr auto operator[](TdInd&& ind) const {
+    constexpr auto operator[](TdInd ind) const {
         return EArrayAccess<TdArr, TdInd>{
-                static_cast<const TdArr&>(*this), std::forward<TdInd>(ind)
+                static_cast<const TdArr&>(*this), ind
         };
     }
 
@@ -106,6 +106,7 @@ struct Array : public ArrayBase< Array< TdElem, N, is_const >
     using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
     constexpr Array(this_t&&) = default;
+    constexpr Array(const this_t&) = default;
 
     using ArrayBase< this_t, TdElem, N, is_const >::ArrayBase;
 
@@ -131,6 +132,7 @@ struct ResidentArray
     using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
     constexpr ResidentArray(this_t&&) = default;
+    constexpr ResidentArray(const this_t&) = default;
 
     constexpr ResidentArray(
             conn::IConnection<AddrT>& conn,

@@ -37,20 +37,20 @@ struct IfExpr : public Expr<f_t<TdThen>> {
     const TdThen then_expr;
     const TdElse else_expr;
 
-    constexpr IfExpr(TdCond&& cond_expr, TdThen&& then_expr, TdElse&& else_expr)
-              : cond_expr{std::forward<TdCond>(cond_expr)}
-              , then_expr{std::forward<TdThen>(then_expr)}
-              , else_expr{std::forward<TdElse>(else_expr)} {}
+    constexpr IfExpr(TdCond cond_expr, TdThen then_expr, TdElse else_expr)
+              : cond_expr{cond_expr}
+              , then_expr{then_expr}
+              , else_expr{else_expr} {}
 
     inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 };
 
 template<typename TdCond, typename TdThen, typename TdElse>
-constexpr auto If(TdCond&& cond_expr, TdThen&& then_expr, TdElse&& else_expr) {
+constexpr auto If(TdCond cond_expr, TdThen then_expr, TdElse else_expr) {
         return IfExpr<TdCond, TdThen, TdElse>{
-                std::forward<TdCond>(cond_expr),
-                std::forward<TdThen>(then_expr),
-                std::forward<TdElse>(else_expr)
+                cond_expr,
+                then_expr,
+                else_expr
         };
 };
 
