@@ -29,7 +29,7 @@ set(LLVM_COMPONENTS_BASE
 set(LLVM_COMPONENTS_TARGET ${MY_TARGET})
 set(LLVM_COMPONENTS_HOST ${MY_HOST})
 
-add_definitions(-DHT_ENABLE_${MY_TARGET} -DHT_ENABLE_${MY_HOST})
+add_definitions(-DHT_ENABLE_${MY_TARGET} -DHT_ENABLE_${MY_HOST} -DTARGET=${MY_TARGET})
 add_definitions(-DHETARCH_TARGET_ADDRT=uint${TARGET_BITWIDTH}_t ${MY_PLAFORM_SPECIFIC})
 message(STATUS "Building for Host=${MY_HOST}; for Target=${MY_TARGET} (bitwidth: ${TARGET_BITWIDTH})")
 
@@ -48,6 +48,7 @@ else()
     set(LLVM_DIR ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
     find_package(LLVM 5.0 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
     message(STATUS "Found local LLVM ${LLVM_PACKAGE_VERSION}")
+    add_definitions(-DIS_DEBUG)
 endif()
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
@@ -192,7 +193,7 @@ add_library(temp_target
         new/dsl/dsl_type_traits.h
         new/dsl/array.h
         new/dsl/ptr.h
-        new/dsl/dsl_meta.h new/TCPConnection.h new/conn_utils.cpp new/Executor.h new/dsl/ResidentGlobal.h new/CodeGen.cpp new/dsl/struct.h)
+        new/dsl/dsl_meta.h new/TCPConnection.h new/conn_utils.cpp new/Executor.h new/dsl/ResidentGlobal.h new/CodeGen.cpp new/dsl/struct.h new/dsl/value.h)
 
 
 add_subdirectory(examples)
