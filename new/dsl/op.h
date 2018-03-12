@@ -105,10 +105,11 @@ struct EBinOpLogical : public EBinOp<bOp, TdLhs, TdRhs> {
 template<BinOps Op, typename TdPtr, typename Td
         , typename = typename std::enable_if_t< std::is_pointer_v<f_t<TdPtr>> >
 >
-struct EBinPtrOp : public Value< EBinPtrOp<Op, TdPtr, Td>
-        , f_t<TdPtr>
-//        , std::remove_reference_t<TdPtr>::elt_const_q
->
+struct EBinPtrOp : public get_base_t< TdPtr, EBinPtrOp<Op, TdPtr, Td> >
+//struct EBinPtrOp : public Value< EBinPtrOp<Op, TdPtr, Td>
+//        , f_t<TdPtr>
+////        , std::remove_reference_t<TdPtr>::elt_const_q
+//>
 {
     const TdPtr& ptr;
     const Td operand;
@@ -234,7 +235,7 @@ MULTIPLICATIVE_OP(*, FMul, Mul, Mul)
 //MULTIPLICATIVE_OP(%, FRem, SRem, URem)
 
 
-// todo: type conversions in bitwise operations?
+// todo: type conversions in bitwise operations
 #define BITWISE_OP(SYM, OP) \
 template<typename T1, typename T2 \
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> > \

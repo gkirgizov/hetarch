@@ -50,6 +50,8 @@ class VarBase : public Value< TdVar, T, is_const >
     T m_initial_val{};
     bool m_initialised{false};
 public:
+    template<typename TdChild> using base_t = VarBase<TdChild, T, is_const, is_volatile>;
+    
     static const bool volatile_q = is_volatile;
     static const bool const_q = is_const;
 

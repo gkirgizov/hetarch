@@ -33,6 +33,7 @@ template<typename Td> using i_t = typename inner_type_stripped<Td>::type;
 
 //template<typename Td> using i_t = typename std::remove_reference_t<Td>::type;
 
+
 template<typename ...Tds>
 struct is_dsl : public std::conditional_t<
         (... && std::is_base_of_v<DSLBase, remove_cvref_t<Tds>>),
@@ -76,6 +77,26 @@ struct is_unit : public std::conditional_t<
         std::false_type
 > {};
 template<typename ...Tds> inline constexpr bool is_unit_v = is_unit<Tds...>::value;
+
+
+
+// Accessors for aggregate types (Ptr, Array, Struct)
+
+template<typename Td> struct get_dsl_element { using type = typename std::remove_reference_t<Td>::dsl_element_t; };
+template<typename Td> using get_dsl_element_t = typename get_dsl_element<Td>::type;
+
+template<typename Td> struct get_element { using type = typename std::remove_reference_t<Td>::element_t; };
+template<typename Td> using get_element_t = typename get_element<Td>::type;
+
+// Accessor to Base class of Value, which provides dsl operations (e.g. ArrayBase provides operator[])
+template< typename Td, typename TdChild
+        , typename = typename std::enable_if_t< is_val_v<Td> >>
+struct get_base {
+    using type = typename std::remove_reference_t<Td>::template base_t<TdChild>;
+};
+template< typename Td, typename TdChild >
+using get_base_t = typename get_base<Td, TdChild>::type;
+
 
 
 

@@ -155,6 +155,7 @@ TEST_F(IRTranslatorTest, compilePtr) {
                     p_yi += DSLConst(5),
                     p_yi = p_xi - DSLConst(5),
                     p_yi -= DSLConst(5),
+                    ++p_yi, --p_yi,
                     Unit
             )
     );
@@ -167,10 +168,8 @@ TEST_F(IRTranslatorTest, compilePtr) {
             "raw_ptr_arithmetic",
             MakeFunArgs(rp_vui2),
             (
-                    ++rp_vui, --rp_vui,
-//                    rp_vui += DSLConst(3),
-                    xi = *rp_vui,
-//                    rp_vui2 = rp_vui,
+                    *rp_vui |= DSLConst(1u),
+                    xi = *(rp_vui + DSLConst(3)),
                     Unit
             )
     );

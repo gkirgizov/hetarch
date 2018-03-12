@@ -49,7 +49,7 @@ class ArrayBase : public Value< TdArr, std::array<f_t<TdElem>, N>, is_const >
                 , public Named
 {
 public:
-//    template<Td> using base_t = ArrayBase<Td, TdElem, N, is_const>;
+    template<typename TdChild> using base_t = ArrayBase<TdChild, TdElem, N, is_const>;
 
     using element_t = f_t<TdElem>;
     using dsl_element_t = remove_cvref_t<TdElem>;

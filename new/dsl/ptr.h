@@ -18,10 +18,12 @@ using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 template<typename Tw, typename T, bool> struct Value;
 
 
+//template<typename TdPtr>
+//struct EDeref : public Value< EDeref<TdPtr>
+//                            , typename std::remove_reference_t<TdPtr>::element_t
+//                            , TdPtr::elt_const_q>
 template<typename TdPtr>
-struct EDeref : public Value< EDeref<TdPtr>
-                            , typename std::remove_reference_t<TdPtr>::element_t
-                            , TdPtr::elt_const_q>
+struct EDeref : public get_base_t< get_dsl_element_t<TdPtr>, EDeref<TdPtr> >
 {
     using type = typename std::remove_reference_t<TdPtr>::element_t;
     using this_t = EDeref<TdPtr>;
@@ -49,6 +51,8 @@ class PtrBase : public Value< TdPtr, f_t<TdPointee>*, is_const >
     bool m_initialised{false};
 
 public:
+    template<typename TdChild> using base_t = PtrBase<TdChild, TdPointee, is_const>;
+    
     using element_t = f_t<TdPointee>;
     using dsl_element_t = remove_cvref_t<TdPointee>;
     static const bool const_q = is_const;
