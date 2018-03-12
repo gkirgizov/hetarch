@@ -8,7 +8,8 @@
 #include <boost/fusion/container/map.hpp>
 #include <boost/fusion/include/at_key.hpp>
 
-#include <llvm/IR/Type.h>
+#include "llvm/IR/Type.h"
+#include "llvm/Support/Casting.h"
 
 #include "../dsl/dsl_type_traits.h"
 
@@ -77,11 +78,13 @@ class LLVMMapper {
         };
     }
 
+    using addr_t = HETARCH_TARGET_ADDRT;
 public:
     explicit LLVMMapper(llvm::LLVMContext& C) : type_map{get_type_map(C)} {}
 
-    template<typename T>
+    template<typename Tcv>
     inline auto get_type() {
+        using T = std::remove_cv_t<Tcv>;
         if constexpr (std::is_void_v<T> || std::is_same_v<bool, T> || std::is_floating_point_v<T>) {
             return utils::at_key<T>(type_map);
         } else if constexpr (std::is_integral_v<T>) {
@@ -142,6 +145,16 @@ public:
             return llvm::ConstantInt::getSigned(get_type<T>(), static_cast<int64_t>(val));
         }
     }
+
+/*    template<typename T, typename = typename std::enable_if_t<std::is_arithmetic_v<T>>>
+    auto get_const(T* val) {
+//        auto addr_val = reinterpret_cast<std::size_t>(val);
+        auto addr_val = static_cast<addr_t>(reinterpret_cast<std::size_t>(val));
+        auto llvm_addr_val = get_const(addr_val);
+//        auto ptr_ty = llvm_addr_val->getType()->getPointerTo();
+//        return llvm::cast<ptr_ty>(llvm_addr_val);
+        return llvm::cast<llvm::PointerType>(llvm_addr_val);
+    }*/
 
     template<typename T, std::size_t N, typename = typename std::enable_if_t<std::is_arithmetic_v<T>>>
 //    auto get_const(const T (&arr)[N]) {

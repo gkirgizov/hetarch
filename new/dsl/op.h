@@ -107,7 +107,7 @@ template<BinOps Op, typename TdPtr, typename Td
 >
 struct EBinPtrOp : public Value< EBinPtrOp<Op, TdPtr, Td>
         , f_t<TdPtr>
-        , std::remove_reference_t<TdPtr>::elt_const_q
+//        , std::remove_reference_t<TdPtr>::elt_const_q
 >
 {
     const TdPtr& ptr;

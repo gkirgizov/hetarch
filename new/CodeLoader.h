@@ -85,6 +85,8 @@ public:
                                    bool unloadable = true)
     { return v; };
 
+    /// Return ResidentGlobal residing at addr for global g; don't actually load anything.
+    /// It is a fabric for ResidentGlobals.
     template<typename AddrT, typename Td>
     inline static auto getLoadedResident(const dsl::DSLGlobal<Td>& g,
                                          AddrT addr,
@@ -100,6 +102,7 @@ public:
         return getResident(g.x, conn, memManager, memRegion, unloadable);
     };
 
+    /// Try load global g at specified addr.
     template<typename AddrT, typename Td>
     static auto load(const dsl::DSLGlobal<Td>& g,
                      AddrT addr,
@@ -124,6 +127,8 @@ public:
         }
     };
 
+
+    /// Load global g at some addr.
     template<typename AddrT, typename Td>
     static auto load(const dsl::DSLGlobal<Td>& g,
                      conn::IConnection<AddrT> &conn,
@@ -153,7 +158,6 @@ public:
                                    mem::MemManager<AddrT> &memManager,
                                    mem::MemRegion<AddrT> memRegion,
                                    bool unloadable = true)
-
     {
         // todo: what about is_const for func params? it is an error (not being able to .write() to it)
         return dsl::ResidentVar<AddrT, T, false, is_volatile>{
@@ -168,7 +172,6 @@ public:
                                    mem::MemManager<AddrT> &memManager,
                                    mem::MemRegion<AddrT> memRegion,
                                    bool unloadable = true)
-
     {
         return dsl::ResidentArray<AddrT, TdElem, N, false>{
                 conn, memManager, memRegion, unloadable,
@@ -176,6 +179,18 @@ public:
         };
     };
 
+    template<typename AddrT, typename Td, bool is_const>
+    inline static auto getResident(const dsl::RawPtr<Td, is_const>& g,
+                                   conn::IConnection<AddrT> &conn,
+                                   mem::MemManager<AddrT> &memManager,
+                                   mem::MemRegion<AddrT> memRegion,
+                                   bool unloadable = true)
+    {
+        return dsl::ResidentPtr<AddrT, Td, false>{
+                conn, memManager, memRegion, unloadable,
+                g.initial_val(), g.name()
+        };
+    }
 
     template<typename AddrT, typename TdRet, typename... TdArgs>
     static auto load(conn::IConnection<AddrT>& conn,

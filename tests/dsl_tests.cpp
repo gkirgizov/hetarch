@@ -123,17 +123,24 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
 
 TEST_F(IRTranslatorTest, compilePtr) {
     Var<int32_t> xi{1, "xi"}, yi{3, "yi"};
-    Ptr p_xi{xi};
-    Ptr p_yi{yi};
-    Ptr pp_xi{p_xi};
+    Var<uint16_t> zi{9, "zi"};
+//    Ptr p_xi{xi};
+//    Ptr p_yi{yi};
+//    Ptr pp_xi{p_xi};
+    RawPtr<decltype(xi)> p_xi{};
+    RawPtr<decltype(yi)> p_yi{};
+    RawPtr<decltype(p_xi)> pp_xi{};
 
     DSLFunction ptr_test(
             "ptr_test",
             MakeFunArgs(yi),
             (
+                    p_xi = xi.takeAddr(),
                     xi == *p_xi,
                     *p_xi = yi,
                     xi == yi,
+                    p_xi = p_yi,
+                    *p_xi == *p_yi,
                     Unit
             )
     );
@@ -152,8 +159,25 @@ TEST_F(IRTranslatorTest, compilePtr) {
             )
     );
 
+//    static_assert( std::is_convertible_v< uint16_t*, uint32_t* > );
+
+    RawPtr<Var<volatile uint32_t>> rp_vui{0x20cff, "rp_vui"};
+    RawPtr<Var<uint32_t>> rp_vui2{};
+    DSLFunction raw_ptr_arith_test(
+            "raw_ptr_arithmetic",
+            MakeFunArgs(rp_vui2),
+            (
+                    ++rp_vui, --rp_vui,
+//                    rp_vui += DSLConst(3),
+                    xi = *rp_vui,
+//                    rp_vui2 = rp_vui,
+                    Unit
+            )
+    );
+
     EXPECT_TRUE(translate_verify(irt, ptr_test));
     EXPECT_TRUE(translate_verify(irt, ptr_arith_test));
+    EXPECT_TRUE(translate_verify(irt, raw_ptr_arith_test));
 }
 
 TEST_F(IRTranslatorTest, compileDSLArray) {

@@ -64,6 +64,19 @@ struct DSLConst : public Expr<T> {
 //template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
 //constexpr auto operator"" _dsl (T val) { return DSLConst<T>{val}; };
 
+#define MEMBER_ASSIGN_OP(TD, SYM) \
+template<typename T2> \
+constexpr auto operator SYM##= (T2&& rhs) const { \
+    return this->assign( static_cast<const TD &>(*this) SYM std::forward<T2>(rhs)); \
+}
+
+#define MEMBER_XX_OP(TD, X) \
+constexpr auto operator X##X () { return this->assign(static_cast<const TD &>(*this) X DSLConst{1}); }
+// unclear what to do with postfix version
+//constexpr auto operator X##X (int) { return this->assign(static_cast<const TD &>(*this) X DSLConst{1}); } \
+
+
+
 
 class Named {
     std::string_view m_name;

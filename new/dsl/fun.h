@@ -36,7 +36,7 @@ struct byRef : public ValueBase {
 template<typename>
 struct is_dsl_ptr : public std::false_type {};
 template<typename Td, bool is_const>
-struct is_dsl_ptr<Ptr<Td, is_const>> : public std::true_type {};
+struct is_dsl_ptr<RawPtr<Td, is_const>> : public std::true_type {};
 template<typename Td>
 inline constexpr bool is_dsl_ptr_v = is_dsl_ptr<Td>::value;
 
@@ -74,9 +74,9 @@ template< typename T > struct to_dsl<T, typename std::enable_if_t<
 template< typename T > struct to_dsl<T, typename std::enable_if_t<
         std::is_pointer_v<T> >>
 {
-    using type = Ptr< to_dsl_t< std::remove_pointer_t<T> >
-                    , std::is_const_v<T>
-                    >;
+    using type = RawPtr< to_dsl_t< std::remove_pointer_t<T> >
+                       , std::is_const_v<T>
+                       >;
 };
 
 template< typename T > struct to_dsl<T, typename std::enable_if_t<

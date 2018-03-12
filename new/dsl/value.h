@@ -3,6 +3,7 @@
 
 #include "dsl_base.h"
 #include "dsl_type_traits.h"
+//#include "ptr.h"
 
 
 namespace hetarch {
@@ -14,24 +15,12 @@ using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 using dsl::remove_cvref_t;
 
 
-#define MEMBER_ASSIGN_OP(TD, SYM) \
-template<typename T2> \
-constexpr auto operator SYM##= (T2&& rhs) const { \
-    return this->assign( static_cast<const TD &>(*this) SYM std::forward<T2>(rhs)); \
-}
-
-#define MEMBER_XX_OP(TD, X) \
-constexpr auto operator X##X () { return this->assign(static_cast<const TD &>(*this) X DSLConst{1}); }
-// unclear what to do with postfix version
-//constexpr auto operator X##X (int) { return this->assign(static_cast<const TD &>(*this) X DSLConst{1}); } \
-
-
 // todo: EAssign is a Value, really. we can do (a=b)=c
 // todo: do implicit cast when not exact type match?
 template<typename TdLhs, typename TdRhs
         , typename = typename std::enable_if_t<
-                std::is_same_v<i_t<TdLhs>, i_t<TdRhs>>
-                && is_val_v<TdLhs>
+//                std::is_same_v<i_t<TdLhs>, i_t<TdRhs>> &&
+                is_val_v<TdLhs>
         >
 >
 struct EAssign : public Expr<f_t<TdLhs>> {
@@ -62,13 +51,17 @@ struct Value : public ValueBase {
 
     Value() = default;
 //    Value(this_t&&) = default; // allow move and implicitly delete copy ctor
-//    Value(const this_t&) = delete; // delete copy ctor
 
+    // todo: better & more correct check instead of the_same
+    // todo: some sane casting
     template<typename Td, typename = typename std::enable_if_t<
-            std::is_same_v<remove_cvref_t<T>, i_t<Td>>
-            && !is_const
+//            std::is_same_v<remove_cvref_t<T>, i_t<Td>>
+//            std::is_convertible_v<i_t<Td>, remove_cvref_t<T>> // doesn't work for volatile ptr-s
+//            std::is_same_v<remove_cvref_t< std::remove_pointer_t<T> >, i_t<Td>>
+            true
     >>
     constexpr auto assign(Td&& rhs) const {
+        static_assert(!is_const, "Assigning to const!");
         return EAssign<Tw, Td>{static_cast<const Tw&>(*this), std::forward<Td>(rhs)};
     }
 

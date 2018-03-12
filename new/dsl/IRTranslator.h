@@ -10,10 +10,10 @@
 #include <memory>
 #include <utility>
 
-#include <llvm/IR/Module.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/GlobalVariable.h>
+#include "llvm/IR/Module.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/GlobalVariable.h"
 
 #include "./types_map.h"
 #include "../utils.h"
@@ -191,15 +191,34 @@ public: // Values
     };
 
     template<typename Td, bool is_const>
+    void accept(const RawPtr<Td, is_const>& ptr) {
+        llvm::Value* ptr_val = nullptr;
+        if (ptr.initialised()) {
+            using addr_t = HETARCH_TARGET_ADDRT;
+            using ptr_t = f_t<RawPtr<Td, is_const>>;
+
+//            auto ptr_val_raw = reinterpret_cast<ptr_t>(ptr.initial_val());
+//            auto ptr_val = llvm_map.get_const(ptr_val_raw);
+            auto addr_val_raw = static_cast<addr_t>(ptr.initial_val());
+            auto addr_val = llvm_map.get_const(addr_val_raw);
+            ptr_val = cur_builder->CreateIntToPtr(addr_val, llvm_map.get_type<ptr_t>());
+
+            if constexpr (utils::is_debug) {
+                std::cerr << "--init ptr of type='" << utils::type_name<ptr_t>()
+                          << "' with addr 0x" << std::hex << ptr.initial_val() << std::dec << std::endl;
+            }
+        }
+        bool is_volatile = false;
+        accept_value(ptr, ptr_val, is_volatile);
+    }
+
+/*    template<typename Td, bool is_const>
     void accept(const Ptr<Td, is_const>& ptr) {
         ptr.pointee.toIR(*this);
-
         auto addr_pair = pop_addr();
-        llvm::Value* pointee_addr = addr_pair.first;
 //        bool is_volatile = addr_pair.second; // todo: do I need it for anything?
-
-        accept_value(ptr, pointee_addr, false);
-    };
+        accept_value(ptr, addr_pair.first, false);
+    };*/
 
     template<typename Td>
     void accept(const ETakeAddr<Td>& e) {
@@ -305,6 +324,11 @@ public: // dsl functions & residents
 
     template<typename AddrT, typename TdElem, std::size_t N, bool is_const>
     inline void accept(const ResidentArray<AddrT, TdElem, N, is_const>& g) {
+        accept_resident(g, is_const);
+    };
+
+    template<typename AddrT, typename Td, bool is_const>
+    inline void accept(const ResidentPtr<AddrT, Td, is_const>& g) {
         accept_resident(g, is_const);
     };
 

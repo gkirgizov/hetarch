@@ -133,6 +133,32 @@ TEST_F(CodeGenTest, dependentCompile) {
 }
 
 
+namespace hetarch {
+namespace utils {
+
+template<typename T
+        , typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
+std::string to_string(T x) {
+    return std::to_string(x);
+}
+
+template<typename T, std::size_t N>
+std::string to_string(const std::array<T, N>& x) {
+    std::string s{"{"};
+    if constexpr (N != 0) {
+        for(auto i = 0; i < N-1; ++i) {
+            s += utils::to_string(x[i]) + ", ";
+        }
+        s += utils::to_string(x[N-1]);
+
+    }
+    s += "}";
+    return s;
+}
+
+}
+}
+
 struct cg_config {
     std::string triple;
     std::string host;
@@ -187,6 +213,37 @@ public:
     IRModule<VoidExpr> do_nothing;
 //    IRModule<Var<int>, Var<int>> part1;
     IRModule<Var<int>, Var<int>, Var<int>> self_sufficient;
+
+
+//    auto generic_caller = [&](auto&& dsl_generator, auto... args) {
+    template<typename DSLGenerator, typename ...Args>
+    auto generic_caller(DSLGenerator&& dsl_generator, Args... args) {
+        // Make function from generator
+//        DSLFunction dsl_fun = make_dsl_fun_from_arg_types(dsl_generator, dsl_args...);
+        DSLFunction dsl_fun = make_dsl_fun_from_arg_types< to_dsl_t<std::remove_reference_t<decltype(args)>>... >(dsl_generator);
+
+        // Translate, compile and load it
+        IRModule translated = irt.translate(dsl_fun);
+        bool verified_ok = utils::verify_module(translated);
+        EXPECT_TRUE(verified_ok) << "failed verify with fun: " << dsl_fun.name() << std::endl;
+
+        std::cerr << std::endl << "Initial generated IR before any passes:" << std::endl;
+        translated.get().dump();
+
+        auto optLvl = CodeGen::OptLvl::O2;
+        ObjCode compiled = codeGen.compile(translated, optLvl);
+        EXPECT_TRUE(compiled) << "module for fun '" << dsl_fun.name() << "' wasn't compiled okey!" << std::endl;
+
+        std::cerr << std::endl << "IR after codeGen.compile with OptLvl=" << optLvl << ":" << std::endl;
+        translated.get().dump();
+
+        ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite,
+                                                        irt, codeGen, compiled);
+
+        // Call it with some args
+        auto result = exec.call(resident_fun, args...);
+        return result;
+    };
 };
 
 
@@ -201,32 +258,6 @@ TEST_F(CodeLoaderTest, loadCodeTrivial) {
     EXPECT_TRUE(conn.call(emptyCallable.callAddr));
     auto c2 = tester(self_sufficient);
     EXPECT_TRUE(c2.callAddr != 0);
-}
-
-namespace hetarch {
-namespace utils {
-
-template<typename T
-        , typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
-std::string to_string(T x) {
-    return std::to_string(x);
-}
-
-template<typename T, std::size_t N>
-std::string to_string(const std::array<T, N>& x) {
-    std::string s{"{"};
-    if constexpr (N != 0) {
-        for(auto i = 0; i < N-1; ++i) {
-            s += utils::to_string(x[i]) + ", ";
-        }
-        s += utils::to_string(x[N-1]);
-
-    }
-    s += "}";
-    return s;
-}
-
-}
 }
 
 TEST_F(CodeLoaderTest, loadGlobal) {
@@ -259,35 +290,6 @@ TEST_F(CodeLoaderTest, loadGlobal) {
 }
 
 TEST_F(CodeLoaderTest, loadAndCall) {
-    auto generic_caller = [&](auto&& dsl_generator, auto... args) {
-        // Make function from generator
-//        DSLFunction dsl_fun = make_dsl_fun_from_arg_types(dsl_generator, dsl_args...);
-        DSLFunction dsl_fun = make_dsl_fun_from_arg_types< Var<decltype(args)>... >(dsl_generator);
-
-        // Translate, compile and load it
-        IRModule translated = irt.translate(dsl_fun);
-        bool verified_ok = utils::verify_module(translated);
-        EXPECT_TRUE(verified_ok) << "failed verify with fun: " << dsl_fun.name() << std::endl;
-
-        std::cerr << std::endl << "Initial generated IR before any passes:" << std::endl;
-        translated.get().dump();
-
-        auto optLvl = CodeGen::OptLvl::O2;
-        ObjCode compiled = codeGen.compile(translated, optLvl);
-        EXPECT_TRUE(compiled) << "module for fun '" << dsl_fun.name() << "' wasn't compiled okey!" << std::endl;
-
-        std::cerr << std::endl << "IR after codeGen.compile with OptLvl=" << optLvl << ":" << std::endl;
-        translated.get().dump();
-
-        ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite,
-                                                        irt, codeGen, compiled);
-
-        // Call it with some args
-        auto result = exec.call(resident_fun, args...);
-        return result;
-    };
-
-    // Define some dsl functions
     auto max_dsl_generator = [](auto&& x, auto&& y) {
         return If(x > y, x, y);
     };
@@ -315,11 +317,31 @@ TEST_F(CodeLoaderTest, readGPIO) {
         auto gpio_conf_reg_addr = conn.mmap(0x13400000);
         EXPECT_TRUE(gpio_conf_reg_addr != 0) << "shouldn't return zero mmapped gpio configuration register!";
 
+//      auto name1 = "read_gpx1con_reg",
+
         // Create global volatile val at specified addr
-        DSLGlobal gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
+        // variant 1
+/*        DSLGlobal gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
         EXPECT_TRUE(gcr.x.const_q && gcr.x.volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
         auto remoteGCR = CodeLoader::getLoadedResident(gcr, gpio_conf_reg_addr, conn, memMgr);
-//        EXPECT_TRUE(remoteGCR.memRegion().start != 0) << "failed at loading " << utils::type_name<decltype(gcr)>();
+
+        RawPtr<decltype(gcr)> tmp_ptr{};
+        auto gpio_reader_gen = [&]{
+            return (tmp_ptr = remoteGCR.takeAddr() + DSLConst(0x0c20 >> 2), *tmp_ptr);
+        };*/
+
+        // variant 2
+        DSLGlobal gcr_ptr{ RawPtr<Var<const volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
+        EXPECT_TRUE(gcr_ptr.x.elt_const_q && gcr_ptr.x.elt_volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
+        auto remoteGCR = CodeLoader::load(gcr_ptr, conn, memMgr);
+
+        RawPtr<Var<uint32_t>> tmp_ptr{};
+        auto gpio_reader_gen = [&]{
+            return (tmp_ptr = remoteGCR + DSLConst(0x0c20 >> 2), *tmp_ptr);
+        };
+
+        auto res = generic_caller(gpio_reader_gen);
+        std::cerr << "Result: " << res << std::endl;
 
     } else {
         std::cerr << "Not arm; not running this test" << std::endl;
