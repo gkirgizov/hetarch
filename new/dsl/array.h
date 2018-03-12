@@ -54,7 +54,7 @@ public:
     using element_t = f_t<TdElem>;
     using dsl_element_t = remove_cvref_t<TdElem>;
     static const bool const_q = is_const;
-//    static const bool volatile_q = is_volatile;
+    static const bool volatile_q = false;
     static const bool elt_const_q = dsl_element_t::const_q;
     static const bool elt_volatile_q = dsl_element_t::volatile_q;
 

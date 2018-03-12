@@ -25,13 +25,13 @@ template<typename Tw, typename T, bool> struct Value;
 template<typename TdPtr>
 struct EDeref : public get_base_t< get_dsl_element_t<TdPtr>, EDeref<TdPtr> >
 {
-    using type = typename std::remove_reference_t<TdPtr>::element_t;
+    using type = get_element_t<TdPtr>;
     using this_t = EDeref<TdPtr>;
-    using Value<this_t, type, TdPtr::elt_const_q>::operator=;
+    using Value<this_t, type, std::remove_reference_t<TdPtr>::elt_const_q>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
 
-    const TdPtr& ptr;
-    explicit constexpr EDeref(const TdPtr& ptr) : ptr{ptr} {}
+    const TdPtr ptr;
+    explicit constexpr EDeref(TdPtr&& ptr) : ptr{std::forward<TdPtr>(ptr)} {}
 
     IR_TRANSLATABLE
 };
@@ -52,7 +52,7 @@ class PtrBase : public Value< TdPtr, f_t<TdPointee>*, is_const >
 
 public:
     template<typename TdChild> using base_t = PtrBase<TdChild, TdPointee, is_const>;
-    
+
     using element_t = f_t<TdPointee>;
     using dsl_element_t = remove_cvref_t<TdPointee>;
     static const bool const_q = is_const;
@@ -71,7 +71,7 @@ public:
     constexpr bool initialised() const { return m_initialised; }
     constexpr val_type initial_val() const { return m_initial_val; }
 
-    constexpr auto operator*() const { return EDeref<TdPtr>{static_cast<const TdPtr&>(*this)}; }
+    constexpr auto operator*() const { return EDeref<const TdPtr&>{static_cast<const TdPtr&>(*this)}; }
 
     MEMBER_ASSIGN_OP(TdPtr, +)
     MEMBER_ASSIGN_OP(TdPtr, -)

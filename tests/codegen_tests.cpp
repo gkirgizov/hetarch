@@ -334,14 +334,17 @@ TEST_F(CodeLoaderTest, readGPIO) {
         DSLGlobal gcr_ptr{ RawPtr<Var<const volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
         EXPECT_TRUE(gcr_ptr.x.elt_const_q && gcr_ptr.x.elt_volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
         auto remoteGCR = CodeLoader::load(gcr_ptr, conn, memMgr);
+        std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << remoteGCR.addr << std::dec << std::endl;
 
         RawPtr<Var<uint32_t>> tmp_ptr{};
         auto gpio_reader_gen = [&]{
             return (tmp_ptr = remoteGCR + DSLConst(0x0c20 >> 2), *tmp_ptr);
+//            return *(remoteGCR + DSLConst(0x0c20 >> 2));
         };
 
         auto res = generic_caller(gpio_reader_gen);
-        std::cerr << "Result: " << res << std::endl;
+        std::cerr << "Result: " << std::hex << utils::to_string(res)
+                  << std::dec << std::endl;
 
     } else {
         std::cerr << "Not arm; not running this test" << std::endl;

@@ -106,14 +106,16 @@ template<BinOps Op, typename TdPtr, typename Td
         , typename = typename std::enable_if_t< std::is_pointer_v<f_t<TdPtr>> >
 >
 struct EBinPtrOp : public get_base_t< TdPtr, EBinPtrOp<Op, TdPtr, Td> >
-//struct EBinPtrOp : public Value< EBinPtrOp<Op, TdPtr, Td>
-//        , f_t<TdPtr>
-////        , std::remove_reference_t<TdPtr>::elt_const_q
-//>
 {
-    const TdPtr& ptr;
+    using type = f_t<TdPtr>;
+    using this_t = EBinPtrOp<Op, TdPtr, Td>;
+    using Value<this_t, type, std::remove_reference_t<TdPtr>::const_q>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+
+    const TdPtr ptr;
     const Td operand;
-    constexpr EBinPtrOp(const TdPtr& ptr, Td&& operand) : ptr{ptr}, operand{std::forward<Td>(operand)} {}
+    constexpr EBinPtrOp(TdPtr&& ptr, Td&& operand)
+            : ptr{std::forward<TdPtr>(ptr)}, operand{std::forward<Td>(operand)} {}
     IR_TRANSLATABLE
 };
 

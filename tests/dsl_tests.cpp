@@ -141,7 +141,8 @@ TEST_F(IRTranslatorTest, compilePtr) {
                     xi == yi,
                     p_xi = p_yi,
                     *p_xi == *p_yi,
-                    Unit
+                    p_xi
+//                    Unit
             )
     );
 
@@ -206,9 +207,16 @@ TEST_F(IRTranslatorTest, compileDSLArray) {
             , Unit)
     );
 
+    DSLFunction array_return_test(
+            "array_return",
+            MakeFunArgs(arr),
+            (arr2[DSLConst(1)] = arr[DSLConst(0)], arr2)
+    );
+
     EXPECT_TRUE(translate_verify(irt, array_access_test));
     EXPECT_TRUE(translate_verify(irt, array_assign_test));
     EXPECT_TRUE(translate_verify(irt, array_assign2_test));
+    EXPECT_TRUE(translate_verify(irt, array_return_test));
 }
 
 TEST_F(IRTranslatorTest, compileDSLControlFlow) {
