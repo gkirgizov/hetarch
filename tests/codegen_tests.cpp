@@ -184,7 +184,8 @@ public:
             , codeGen(config.triple)
             , irt{}
             , ctx{irt.getContext()}
-            , conn{config.host, config.port}
+            , tr{new conn::TCPTrans<addr_t>{config.host, config.port}}
+            , conn{*tr}
             , all_mem{conn.getBuffer(0), 1024 * 1024, mem::MemType::ReadWrite}
             , memMgr{all_mem}
             , exec{conn, memMgr, irt, codeGen}
@@ -200,10 +201,8 @@ public:
     IRTranslator irt;
     LLVMContext& ctx;
 
-//    mock::MockConnection<addr_t> conn{};
-//    mock::MockMemManager<addr_t> memMgr{};
-
-    conn::TCPConnection<addr_t> conn;
+    std::unique_ptr< conn::ITransmission<addr_t> > tr;
+    conn::CmdProtocol<addr_t> conn;
     const MemRegion<addr_t> all_mem;
     mem::MemManagerBestFit<addr_t> memMgr;
 
@@ -296,8 +295,8 @@ TEST_F(CodeLoaderTest, loadAndCall) {
     int x{22}, y{11};
     EXPECT_TRUE(std::max(x, y) == generic_caller(max_dsl_generator, x, y));
 
-    Var<int> res{1};
     auto factorial_gen = [&](auto&& n){
+        Var<int> res{1};
         return (While(
                 n > DSLConst(0u),
                 (res = res * n, n = n - DSLConst(1u))
@@ -336,10 +335,23 @@ TEST_F(CodeLoaderTest, readGPIO) {
         auto remoteGCR = CodeLoader::load(gcr_ptr, conn, memMgr);
         std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << remoteGCR.addr << std::dec << std::endl;
 
-        RawPtr<Var<uint32_t>> tmp_ptr{};
+/*        auto gpio_reader_gen = [&]{
+//            RawPtr<Var<uint32_t>> tmp_ptr{};
+            return *(remoteGCR + DSLConst(0x0c20 >> 2));
+        };*/
+
         auto gpio_reader_gen = [&]{
-            return (tmp_ptr = remoteGCR + DSLConst(0x0c20 >> 2), *tmp_ptr);
-//            return *(remoteGCR + DSLConst(0x0c20 >> 2));
+            uint32_t bit = 0x1;
+            Array<Var<uint32_t>, 5> reg_data{};
+            RawPtr<Var<uint32_t>> tmp_ptr{};
+            return (
+                    tmp_ptr = remoteGCR + DSLConst(0x0c20 >> 2), reg_data[DSLConst(0)] = *tmp_ptr,
+                    *tmp_ptr |= DSLConst(bit << 8),              reg_data[DSLConst(1)] = *tmp_ptr,
+                    tmp_ptr = remoteGCR + DSLConst(0x0c24 >> 2),
+                    *tmp_ptr |= DSLConst(bit << 2),              reg_data[DSLConst(2)] = *tmp_ptr,
+                    *tmp_ptr &= ~DSLConst(bit << 2),             reg_data[DSLConst(3)] = *tmp_ptr,
+                    reg_data
+            );
         };
 
         auto res = generic_caller(gpio_reader_gen);
