@@ -58,8 +58,8 @@ void assertMemAccess(ExecutableBuffer& execBuf, addr_t addr, addr_t size = 0) {
     assert(addr + size <= buf_addr + buf_size);
 }
 
-bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
-    auto collected = detail::readBuffer(socket);
+bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
+    auto collected = tr.recv();
 
     if (!collected.size()) {
         std::cerr << "Connection closed by client" << std::endl;
@@ -88,7 +88,7 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
 
             std::vector<uint8_t> response;
             detail::vecAppend(response, addr);
-            detail::writeBuffer(socket, response);
+            tr.send(response);
             break;
         }
         case ActionRead: {
@@ -104,7 +104,7 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
 
             std::vector<uint8_t> response(cmd.size);
             std::copy((uint8_t*)cmd.addr, (uint8_t*)cmd.addr + cmd.size, response.begin());
-            detail::writeBuffer(socket, response);
+            tr.send(response);
             break;
         }
         case ActionWrite: {
@@ -121,7 +121,7 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
             std::copy(collected.begin() + offset, collected.begin() + offset + cmd.size, (uint8_t*)cmd.addr);
             std::vector<uint8_t> response;
             detail::vecAppend(response, 0); // todo: why writing zero
-            detail::writeBuffer(socket, response);
+            tr.send(response);
             break;
         }
         case ActionCall: {
@@ -139,7 +139,7 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
             fnptr(); // todo: execute in separate thread with timeout?
             std::vector<uint8_t> response;
             detail::vecAppend(response, 0); // zero for success
-            detail::writeBuffer(socket, response);
+            tr.send(response);
             break;
         }
         case ActionAddrMmap: {
@@ -172,7 +172,7 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
 
             std::vector<uint8_t> response;
             detail::vecAppend(response, ptr_val);
-            detail::writeBuffer(socket, response);
+            tr.send(response);
             break;
         }
         default: {
@@ -183,9 +183,9 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
     return true;
 }
 
-void handleClientConnection(tcp::socket &socket, ExecutableBuffer &execBuf) {
+void handleClientConnection(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
     try {
-        while (handleRequest(socket, execBuf));
+        while (handleRequest(tr, execBuf));
     }
     catch (...) {
         std::cerr << "EXCEPTION!!!" << std::endl;
@@ -204,9 +204,10 @@ void runServer(ExecutableBuffer *buf, uint16_t port) {
 
         for (;;)
         {
-            tcp::socket socket(io_service);
+            tcp::socket socket{io_service};
             acceptor.accept(socket);
-            handleClientConnection(socket, *buf);
+            TCPTrans<addr_t> tr{std::move(socket)};
+            handleClientConnection(tr, *buf);
         }
     }
     catch (std::exception& e)
