@@ -3,38 +3,41 @@
 
 #include "dsl_base.h"
 #include "dsl_type_traits.h"
-//#include "ptr.h"
 
 
 namespace hetarch {
 namespace dsl {
-
 
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 using dsl::remove_cvref_t;
 
 
-// todo: EAssign is a Value, really. we can do (a=b)=c
+template<typename Tw, typename T, bool is_const> struct Value;
+
 // todo: do implicit cast when not exact type match?
-template<typename TdLhs, typename TdRhs
-        , typename = typename std::enable_if_t<
-//                std::is_same_v<i_t<TdLhs>, i_t<TdRhs>> &&
-                is_val_v<TdLhs>
-        >
+template< typename TdLhs
+        , typename TdRhs
+        , typename = typename std::enable_if_t< is_val_v<TdLhs> >
 >
-struct EAssign : public Expr<f_t<TdLhs>> {
+struct EAssign : get_base_t< TdLhs, EAssign<TdLhs, TdRhs> > {
+    using type = f_t<TdLhs>;
+    using this_t = EAssign<TdLhs, TdRhs>;
+    using Value<this_t, type, TdLhs::const_q>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr EAssign(this_t&&) = default;
+    constexpr EAssign(const this_t&) = default;
+
     const TdLhs lhs;
     const TdRhs rhs;
-
     constexpr EAssign(TdLhs lhs, TdRhs rhs) : lhs{lhs}, rhs{rhs} {}
-
     IR_TRANSLATABLE
 };
 
 
 template< typename Td
-        , typename = typename std::enable_if_t< is_val_v<Td> >>
+        , typename = typename std::enable_if_t< is_val_v<Td> >
+>
 struct ETakeAddr: public Expr<f_t<Td>*> {
     const Td pointee;
     explicit constexpr ETakeAddr(Td pointee) : pointee{pointee} {}
@@ -49,9 +52,9 @@ struct Value : public ValueBase {
     using type = std::conditional_t<is_const, std::add_const_t<T>, T>;
 //    static const bool const_q = is_const;
 
-    Value() = default;
-    Value(const this_t&) = default;
-    Value(this_t&&) = default;
+    constexpr Value() = default;
+    constexpr Value(this_t&&) = default;
+    constexpr Value(const this_t&) = default;
 
     // todo: better & more correct check instead of the_same
     // todo: some sane casting
@@ -78,7 +81,6 @@ struct Value : public ValueBase {
 //    constexpr auto operator=(const Tw& rhs) const { return this->assign(rhs); }; // didn't work
 
     inline constexpr auto takeAddr() const { return ETakeAddr<Tw>{ static_cast<const Tw&>(*this) }; }
-//    inline constexpr auto operator&() const { return this->takeAddr(); }
 };
 
 

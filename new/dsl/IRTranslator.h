@@ -174,7 +174,6 @@ public: // Values
         accept_value(arr, init_val);
     };
 
-//    template<typename TdInd, typename TdElem, std::size_t N, bool is_const>
     template<typename TdArr, typename TdInd>
     void accept(const EArrayAccess<TdArr, TdInd>& e) {
         e.arr.toIR(*this);
@@ -212,14 +211,6 @@ public: // Values
         bool is_volatile = false;
         accept_value(ptr, ptr_val, is_volatile);
     }
-
-/*    template<typename Td, bool is_const>
-    void accept(const Ptr<Td, is_const>& ptr) {
-        ptr.pointee.toIR(*this);
-        auto addr_pair = pop_addr();
-//        bool is_volatile = addr_pair.second; // todo: do I need it for anything?
-        accept_value(ptr, addr_pair.first, false);
-    };*/
 
     template<typename Td>
     void accept(const ETakeAddr<Td>& e) {

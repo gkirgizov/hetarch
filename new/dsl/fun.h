@@ -93,7 +93,7 @@ template<typename TdExpr> using param_for_arg_t = typename to_dsl< f_t<TdExpr> >
 
 
 template<typename TdCallable, typename... ArgExprs>
-struct ECall : public Expr<typename std::remove_reference_t<TdCallable>::ret_t> {
+struct ECall : Expr<typename std::remove_reference_t<TdCallable>::ret_t> {
     using fun_t = std::remove_reference_t<TdCallable>;
 
     const TdCallable& callee;
@@ -104,7 +104,7 @@ struct ECall : public Expr<typename std::remove_reference_t<TdCallable>::ret_t> 
             , args{args...}
     {}
 
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 template<typename TdCallable, typename... ArgExprs>
@@ -116,15 +116,15 @@ constexpr auto makeCall(const TdCallable& callable, ArgExprs... args) {
 // Almost anyway need to explicitly specify return type TdRet
 //  otherwise only some kind of return type deduction magic depending on exit condition (if there is some...)
 template<typename TdRet, typename ...TdArgs>
-struct Recurse : public Expr<f_t<TdRet>> {
+struct Recurse : Expr<f_t<TdRet>> {
     const std::tuple<TdArgs...> args;
     explicit constexpr Recurse(TdArgs... args) : args{args...} {}
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 
 template<typename TdCallable, typename TdRet, typename ...TdArgs>
-struct DSLCallable : public CallableBase {
+struct DSLCallable : CallableBase {
     static_assert(is_val_v<TdRet, TdArgs...>);
 
     using dsl_ret_t = TdRet;
@@ -178,11 +178,10 @@ struct DSLCallable : public CallableBase {
 namespace {
 
 template<typename Td>
-struct ReturnImpl : public Expr<f_t<Td>> {
+struct ReturnImpl : Expr<f_t<Td>> {
     const Td returnee;
     explicit constexpr ReturnImpl(Td r) : returnee{r} {}
-
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 template<typename Td>
@@ -220,9 +219,10 @@ auto MakeFunArgs(const Tds&... args) {
 }
 
 
-// todo: accept TdBody by reference (MakeFunction?)
 template<typename TdBody, typename... TdArgs>
-struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs...>, param_for_arg_t<TdBody>, TdArgs...> {
+struct DSLFunction : Named
+                   , DSLCallable<DSLFunction<TdBody, TdArgs...>, param_for_arg_t<TdBody>, TdArgs...>
+{
     static_assert((is_val_v<TdArgs> && ...), "Formal parameters must be Values (derived from ValueBase)!");
 
 //    using funargs_t = FunArgs<TdArgs...>;
@@ -259,8 +259,7 @@ struct DSLFunction : public Named, public DSLCallable<DSLFunction<TdBody, TdArgs
     }
 
 //    constexpr void specialise(Args... args);
-
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 template<typename BodyGenerator, typename ...TdArgs>

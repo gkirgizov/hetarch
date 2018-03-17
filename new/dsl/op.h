@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <llvm/IR/Instruction.h>
 
 #include "dsl_base.h"
@@ -11,7 +10,6 @@
 namespace hetarch {
 namespace dsl {
 
-
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
@@ -20,7 +18,6 @@ using BinOps = llvm::Instruction::BinaryOps;
 using Casts = llvm::Instruction::CastOps;
 using OtherOps = llvm::Instruction::OtherOps;
 using Predicate = llvm::CmpInst::Predicate;
-
 
 
 template<typename To, typename From>
@@ -67,15 +64,17 @@ constexpr Casts get_llvm_cast() {
 //template<typename To> constexpr auto get_llvm_cast<To, To>() {};
 
 
-template<typename TdTo, typename TdFrom, Casts Op = get_llvm_cast<i_t<TdTo>, i_t<TdFrom>>()>
-struct ECast : public Expr<i_t<TdTo>> {
+template< typename TdTo
+        , typename TdFrom
+        , Casts Op = get_llvm_cast<i_t<TdTo>, i_t<TdFrom>>()
+>
+struct ECast : Expr<i_t<TdTo>> {
     using To = i_t<TdTo>;
     using From = i_t<TdFrom>;
 
     const TdFrom src;
     explicit constexpr ECast(TdFrom src) : src{src} {}
-
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 
@@ -86,7 +85,7 @@ template<typename T> using bool_cast = ECast<Expr<bool>, T>;
 template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
         , typename = typename std::enable_if_t< is_ev_v<TdLhs, TdRhs> >
 >
-struct EBinOp : public Expr<f_t<TdLhs>> {
+struct EBinOp : Expr<f_t<TdLhs>> {
     const TdLhs lhs;
     const TdRhs rhs;
     constexpr EBinOp(TdLhs lhs, TdRhs rhs) : lhs{lhs}, rhs{rhs} {}
@@ -96,7 +95,7 @@ struct EBinOp : public Expr<f_t<TdLhs>> {
 template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
         , typename = typename std::enable_if_t< is_same_raw_v<bool, TdLhs, TdRhs> >
 >
-struct EBinOpLogical : public EBinOp<bOp, TdLhs, TdRhs> {
+struct EBinOpLogical : EBinOp<bOp, TdLhs, TdRhs> {
     using EBinOp<bOp, TdLhs, TdRhs>::EBinOp;
     IR_TRANSLATABLE
 };
@@ -105,7 +104,7 @@ struct EBinOpLogical : public EBinOp<bOp, TdLhs, TdRhs> {
 template<BinOps Op, typename TdPtr, typename Td
         , typename = typename std::enable_if_t< std::is_pointer_v<f_t<TdPtr>> >
 >
-struct EBinPtrOp : public get_base_t< TdPtr, EBinPtrOp<Op, TdPtr, Td> >
+struct EBinPtrOp : get_base_t< TdPtr, EBinPtrOp<Op, TdPtr, Td> >
 {
     using type = f_t<TdPtr>;
     using this_t = EBinPtrOp<Op, TdPtr, Td>;
@@ -125,8 +124,7 @@ struct EBinPtrOp : public get_base_t< TdPtr, EBinPtrOp<Op, TdPtr, Td> >
 template<OtherOps Op, Predicate P, typename TdLhs, typename TdRhs
         , typename = typename std::enable_if_t< is_ev_v<TdLhs, TdRhs> >
 >
-struct EBinCmp : public Expr<bool> {
-//    constexpr static OtherOps opKind{P < 32 ? OtherOps::FCmp : OtherOps::ICmp};
+struct EBinCmp : Expr<bool> {
     const TdLhs lhs;
     const TdRhs rhs;
     constexpr EBinCmp(TdLhs lhs, TdRhs rhs) : lhs{lhs}, rhs{rhs} {}
@@ -235,6 +233,7 @@ constexpr auto operator SYM (T1 lhs, T2 rhs) { \
 ADDITIVE_OP(+, FAdd, Add)
 ADDITIVE_OP(-, FSub, Sub)
 MULTIPLICATIVE_OP(*, FMul, Mul, Mul)
+// todo: ensure these operations
 //MULTIPLICATIVE_OP(/, FDiv, SDiv, UDiv)
 //MULTIPLICATIVE_OP(%, FRem, SRem, URem)
 
@@ -263,53 +262,13 @@ template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >>
 constexpr auto operator~ (T1 x) {
     using t1 = f_t<T1>;
     static_assert(std::is_arithmetic_v<t1>, "Bitwise negation expects arithmetic type!");
+    using zero_t = DSLConst<i_t<T1>>;
     if constexpr (std::is_integral_v<t1>) {
-        DSLConst zero{static_cast<i_t<T1>>(0)};
-        return EBinOp<BinOps::Sub, T1, decltype(zero)>{ zero, x };
+        return EBinOp<BinOps::Sub, zero_t, T1>{ zero_t{0}, x };
     } else if constexpr (std::is_floating_point_v<f_t<T1>>) {
-        DSLConst zero{static_cast<i_t<T1>>(-0.0)};
-        return EBinOp<BinOps::FSub, T1, decltype(zero)>{ zero, x };
+        return EBinOp<BinOps::FSub, zero_t, T1>{ zero_t{-0.0}, x };
     }
 };
-
-
-/*/// Bitwise And
-template<typename T1, typename T2
-        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
->
-constexpr auto operator&(T1&& lhs, T2&& rhs) {
-    static_assert(std::is_integral_v<i_t<T1>> && std::is_integral_v<i_t<T2>>, "Bitwise operations expect integral types!");
-    return EBinOp<BinOps::And, T1, T2>{
-            std::forward<T1>(lhs),
-            std::forward<T2>(rhs)
-    };
-};
-
-/// Bitwise Or
-template<typename T1, typename T2
-        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
->
-constexpr auto operator|(T1&& lhs, T2&& rhs) {
-    static_assert(std::is_integral_v<i_t<T1>> && std::is_integral_v<i_t<T2>>, "Bitwise operations expect integral types!");
-    return EBinOp<BinOps::Or, T1, T2>{
-            std::forward<T1>(lhs),
-            std::forward<T2>(rhs)
-    };
-};
-
-/// Bitwise Xor
-template<typename T1, typename T2
-        , typename = typename std::enable_if_t< is_ev_v<T1, T2> >
->
-constexpr auto operator^(T1&& lhs, T2&& rhs) {
-    static_assert(std::is_integral_v<i_t<T1>> && std::is_integral_v<i_t<T2>>, "Bitwise operations expect integral types!");
-    return EBinOp<BinOps::Xor, T1, T2>{
-            std::forward<T1>(lhs),
-            std::forward<T2>(rhs)
-    };
-};*/
-
-
 
 
 /// Logical Not
@@ -406,15 +365,6 @@ CMP_OPERATOR(>=, GE, UGE, SGE)
 
 
 // todo: bitshift
-
-
-//template<typename T1>
-//struct Operand : public Expr<T1> {
-//    template<typename T2 = T1>
-//    constexpr auto operator+=(const Expr<T2> &rhs) {
-//        return EAssign<T1>{*this, EBinOp<BinOps::Add, T1, T2>{*this, rhs}};
-//    }
-//};
 
 
 //void test() {

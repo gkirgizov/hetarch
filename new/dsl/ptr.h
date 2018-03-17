@@ -10,20 +10,14 @@
 namespace hetarch {
 namespace dsl {
 
-
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 using dsl::f_t; // by some reasons CLion can't resolve it automatically.
-
 
 template<typename Tw, typename T, bool> struct Value;
 
 
-//template<typename TdPtr>
-//struct EDeref : public Value< EDeref<TdPtr>
-//                            , typename std::remove_reference_t<TdPtr>::element_t
-//                            , TdPtr::elt_const_q>
 template<typename TdPtr>
-struct EDeref : public get_base_t< get_dsl_element_t<TdPtr>, EDeref<TdPtr> >
+struct EDeref : get_base_t< get_dsl_element_t<TdPtr>, EDeref<TdPtr> >
 {
     using type = get_element_t<TdPtr>;
     using this_t = EDeref<TdPtr>;
@@ -43,7 +37,7 @@ struct EDeref : public get_base_t< get_dsl_element_t<TdPtr>, EDeref<TdPtr> >
 template< typename TdPtr
         , typename TdPointee
         , bool is_const = false
-        , typename = typename std::enable_if_t<std::is_base_of_v<ValueBase, TdPointee>>
+        , typename = typename std::enable_if_t< is_val_v<TdPointee> >
 >
 class PtrBase : public Value< TdPtr, f_t<TdPointee>*, is_const >
               , public Named
@@ -83,7 +77,7 @@ public:
 
 
 template<typename Td, bool is_const = false>
-struct RawPtr: public PtrBase< RawPtr<Td, is_const>, Td, is_const >
+struct RawPtr: PtrBase< RawPtr<Td, is_const>, Td, is_const >
 {
     using type = f_t<Td>*;
     using this_t = RawPtr<Td, is_const>;
@@ -99,8 +93,8 @@ struct RawPtr: public PtrBase< RawPtr<Td, is_const>, Td, is_const >
 
 template<typename AddrT, typename Td, bool is_const = false>
 struct ResidentPtr
-        : public PtrBase< ResidentPtr<AddrT, Td, is_const>, Td, is_const >
-        , public ResidentGlobal<AddrT, f_t<Td>*, is_const>
+        : PtrBase< ResidentPtr<AddrT, Td, is_const>, Td, is_const >
+        , ResidentGlobal<AddrT, f_t<Td>*, is_const>
 {
     using val_type = size_t;
 

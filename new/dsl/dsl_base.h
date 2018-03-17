@@ -22,11 +22,7 @@ template<typename T> inline void toIRImpl(const T &irTranslatable, IRTranslator 
 inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
 
 
-struct DSLBase {
-//    virtual inline void toIR(IRTranslator &irTranslator) const {
-//        std::cerr << "called base class toIR()" << std::endl;
-//    }
-};
+struct DSLBase {};
 
 struct ESBase : public DSLBase {}; // Expression or Statement
 
@@ -60,8 +56,7 @@ struct CallableBase : public DSLBase {
 
 struct VoidExpr : public ValueBase {
     using type = void;
-//struct VoidExpr : public Expr<void> {
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 const VoidExpr Unit{};
 
@@ -73,7 +68,6 @@ struct DSLConst : public Expr<T> {
     constexpr DSLConst(T val) : val{val} {}
     IR_TRANSLATABLE
 };
-
 //template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
 //constexpr auto operator"" _dsl (T val) { return DSLConst<T>{val}; };
 
@@ -87,8 +81,6 @@ constexpr auto operator SYM##= (T2 rhs) const { \
 constexpr auto operator X##X () { return this->assign(static_cast<const TD &>(*this) X DSLConst{1}); }
 // unclear what to do with postfix version
 //constexpr auto operator X##X (int) { return this->assign(static_cast<const TD &>(*this) X DSLConst{1}); } \
-
-
 
 
 class Named {

@@ -10,34 +10,19 @@
 namespace hetarch {
 namespace dsl {
 
-
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
+using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 using dsl::remove_cvref_t;
 
 
 template<typename Td
         , typename = typename std::enable_if_t< is_val_v<Td> >>
-struct DSLGlobal : public ValueBase {
+struct DSLGlobal : ValueBase {
     const Td x;
     explicit DSLGlobal() = default;
-    // only rvalues allowed
     explicit constexpr DSLGlobal(Td x) : x{x} {}
     IR_TRANSLATABLE
 };
-
-/*// when user wants to load global on specific addr (e.g. in case of volatile var-s)
-template<typename AddrT
-        , typename Td
-        , typename = typename std::enable_if_t< is_val_v<Td> >>
-struct DSLGlobalPreallocated : public ValueBase {
-    const Td x;
-    const AddrT addr;
-
-    explicit constexpr DSLGlobalPreallocated(AddrT addr) : x{}, addr{addr} {}
-    explicit constexpr DSLGlobalPreallocated(AddrT addr, Td x) : x{x}, addr{addr} {}
-    IR_TRANSLATABLE
-};*/
-
 
 
 template<typename TdVar, typename T
@@ -78,8 +63,12 @@ public:
 };
 
 
-template<typename T, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T> >
-struct Var : public VarBase< Var<T, is_const, is_volatile>, T, is_const, is_volatile >
+template< typename T
+        , bool is_const = std::is_const_v<T>
+        , bool is_volatile = std::is_volatile_v<T>
+>
+struct Var : VarBase< Var< T, is_const, is_volatile >
+                         , T, is_const, is_volatile >
 {
     using this_t = Var<T, is_const, is_volatile>;
     using Value<this_t, T, is_const>::operator=;
@@ -101,12 +90,15 @@ template<typename T, bool is_volatile = false>
 using Const = Var<T, true, is_volatile>;
 
 
-template<typename AddrT
-        , typename T, bool is_const = std::is_const_v<T>, bool is_volatile = std::is_volatile_v<T>
+template< typename AddrT
+        , typename T
+        , bool is_const = std::is_const_v<T>
+        , bool is_volatile = std::is_volatile_v<T>
 >
 struct ResidentVar
-        : public VarBase< ResidentVar<AddrT, T, is_const, is_volatile>, T, is_const, is_volatile >
-        , public ResidentGlobal< AddrT, T, is_const >
+        : VarBase< ResidentVar< AddrT, T, is_const, is_volatile >
+                                     , T, is_const, is_volatile >
+        , ResidentGlobal< AddrT, T, is_const >
 {
     using this_t = ResidentVar<AddrT, T, is_const, is_volatile>;
     using Value<this_t, T, is_const>::operator=;

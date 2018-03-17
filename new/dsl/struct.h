@@ -20,9 +20,7 @@ using struct_impl_t = std::tuple<Tds...>;
 
 
 template<typename TdStruct, std::size_t I>
-//struct EStructAccess : public typename TdStruct::dsl_element_t::typename
-//                                                                base_t< EStructAccess<TdStruct, I> >
-struct EStructAccess : public get_base_t< get_dsl_element_t<TdStruct>, EStructAccess<TdStruct, I> >
+struct EStructAccess : get_base_t< get_dsl_element_t<TdStruct>, EStructAccess<TdStruct, I> >
 {
     const TdStruct& s;
     explicit constexpr EStructAccess(const TdStruct& s) : s{s} {}
@@ -78,8 +76,8 @@ private:
 
 
 template<bool is_const, bool is_volatile, typename ...Tds>
-struct xStruct : public StructBase< Struct< is_const, is_volatile, Tds... >
-                                         , is_const, is_volatile, Tds... >
+struct xStruct : StructBase< Struct< is_const, is_volatile, Tds... >
+                                   , is_const, is_volatile, Tds... >
 {
     using type = struct_impl_t<Tds...>;
     using this_t = xStruct<is_const, is_volatile, Tds...>;

@@ -20,13 +20,11 @@ using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
 
 template<typename Td1, typename Td2>
-struct SeqExpr : public Expr<f_t<Td2>> {
+struct SeqExpr : Expr<f_t<Td2>> {
     const Td1 e1;
     const Td2 e2;
-
     constexpr SeqExpr(Td1 e1, Td2 e2) : e1{e1}, e2{e2} {}
-
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 
@@ -45,7 +43,6 @@ template<typename Td1, typename Td2
 constexpr auto operator,(Td1 e1, Td2 e2) {
     return SeqExpr<Td1, Td2>{e1, e2};
 };
-
 
 
 }

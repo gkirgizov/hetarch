@@ -15,28 +15,26 @@ using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
 
-template< typename TdArr
-        , typename TdInd
-        , typename = typename std::enable_if_t< std::is_integral_v<f_t<TdInd>> >>
-struct EArrayAccess : Value< EArrayAccess<TdArr, TdInd>
-                           , typename TdArr::element_t
-                           , TdArr::elt_const_q
-                           >
+template< typename TdArr, typename TdInd >
+struct EArrayAccess : get_base_t< get_dsl_element_t<TdArr>, EArrayAccess<TdArr, TdInd> >
 {
-    using type = typename TdArr::element_t;
-
-    const TdArr arr;
-    const TdInd ind;
-
-    constexpr EArrayAccess(TdArr arr, TdInd ind) : arr{arr}, ind{ind} {}
-
+    using type = get_element_t<TdArr>;
     using this_t = EArrayAccess<TdArr, TdInd>;
     using Value<this_t, type, TdArr::elt_const_q>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr EArrayAccess(this_t&&) = default;
+    constexpr EArrayAccess(const this_t&) = default;
+
+    const TdArr arr;
+    const TdInd ind;
+    constexpr EArrayAccess(TdArr arr, TdInd ind) : arr{arr}, ind{ind} {}
 
     IR_TRANSLATABLE
 };
 
+
+template<typename TdElem, std::size_t N>
+using arr_impl_t = std::array<f_t<TdElem>, N>;
 
 template< typename TdArr
         , typename TdElem
@@ -73,21 +71,20 @@ public:
 //    }
 
 private:
-    using arr_impl_t = std::array<element_t, N>; // equiv. to Value::type
-
-    arr_impl_t m_initial_val{};
+    using arr_t = arr_impl_t<TdElem, N>; // equiv. to Value::type
+    arr_t m_initial_val{};
     bool m_initialised{false};
 
 public:
-    constexpr void initialise(const arr_impl_t& value) {
+    constexpr void initialise(const arr_t& value) {
         m_initial_val = value;
         m_initialised = true;
     }
     constexpr bool initialised() const { return m_initialised; }
-    constexpr const arr_impl_t& initial_val() const { return m_initial_val; }
+    constexpr const arr_t& initial_val() const { return m_initial_val; }
 
     explicit constexpr ArrayBase() = default;
-    explicit constexpr ArrayBase(const arr_impl_t& a, const std::string_view& name = "")
+    explicit constexpr ArrayBase(const arr_t& a, const std::string_view& name = "")
             : m_initial_val{a}, m_initialised{true}
             , Named{name} {}
 };
@@ -98,10 +95,10 @@ template< typename TdElem
         , bool is_const = false
 //        , bool is_volatile = false
 >
-struct Array : public ArrayBase< Array< TdElem, N, is_const >
-                                      , TdElem, N, is_const >
+struct Array : ArrayBase< Array< TdElem, N, is_const >
+                               , TdElem, N, is_const >
 {
-    using type = std::array<f_t<TdElem>, N>;
+    using type = arr_impl_t<TdElem, N>;
     using this_t = Array<TdElem, N, is_const>;
     using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
@@ -121,13 +118,13 @@ template< typename AddrT
 //        , bool is_volatile = false
 >
 struct ResidentArray
-        : public ArrayBase< ResidentArray< AddrT, TdElem, N, is_const >
-                                                , TdElem, N, is_const >
-        , public ResidentGlobal< AddrT
-                               , std::array<f_t<TdElem>, N>
-                               , is_const >
+        : ArrayBase< ResidentArray< AddrT, TdElem, N, is_const >
+                                         , TdElem, N, is_const >
+        , ResidentGlobal< AddrT
+                        , arr_impl_t<TdElem, N>
+                        , is_const >
 {
-    using type = std::array<f_t<TdElem>, N>;
+    using type = arr_impl_t<TdElem, N>;
     using this_t = ResidentArray<AddrT, TdElem, N, is_const>;
     using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };

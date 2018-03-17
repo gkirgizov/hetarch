@@ -7,32 +7,19 @@
 namespace hetarch {
 namespace dsl {
 
+
 using dsl::i_t; // by some reasons CLion can't resolve it automatically.
 using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
-// 'if-else' statement
-/*struct IfElse : public ESBase {
-    const Expr<bool> &cond;
-    const ESBase &then_body;
-    const ESBase &else_body;
 
-    constexpr IfElse(Expr<bool> &&cond, ESBase &&then_body)
-            : cond{cond}, then_body{then_body}, else_body{Unit} {}
-    constexpr IfElse(Expr<bool> &&cond, ESBase &&then_body, ESBase &&else_body)
-            : cond{cond}, then_body{then_body}, else_body{else_body} {}
-
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
-};*/
-
-
-// todo move enable_if to static_assert with friendly err message
-// todo: should both branches always have the same underlying ::type?
-template<typename TdCond, typename TdThen, typename TdElse
-        , typename = typename std::enable_if_t<
-                std::is_same_v<bool, i_t<TdCond>> && std::is_same_v<i_t<TdThen>, i_t<TdElse>>
-        >
+template< typename TdCond, typename TdThen, typename TdElse
+        , typename = typename std::enable_if_t< is_ev_v<TdCond, TdThen, TdElse> >
 >
-struct IfExpr : public Expr<f_t<TdThen>> {
+struct IfExpr : Expr<f_t<TdThen>> {
+// todo: should both branches always have the same underlying ::type?
+    static_assert(std::is_same_v<bool, i_t<TdCond>> && std::is_same_v<f_t<TdThen>, f_t<TdElse>>,
+                  "Both branches of If expression must have the same type!");
+
     const TdCond cond_expr;
     const TdThen then_expr;
     const TdElse else_expr;
@@ -42,7 +29,7 @@ struct IfExpr : public Expr<f_t<TdThen>> {
               , then_expr{then_expr}
               , else_expr{else_expr} {}
 
-    inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslator); }
+    IR_TRANSLATABLE
 };
 
 template<typename TdCond, typename TdThen, typename TdElse>
