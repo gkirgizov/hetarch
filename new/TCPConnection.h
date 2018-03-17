@@ -1,19 +1,24 @@
 #pragma once
 
-#include <iostream>
 #include <cstdint>
-#include <sys/mman.h>
 #include <asio.hpp>
 
-#include "IConnection.h"
 #include "Transmission.h"
-#include "ht_proto.h"
 #include "conn_utils.h"
 #include "utils.h"
 
 
 namespace hetarch {
 namespace conn {
+
+
+namespace detail {
+
+std::vector<uint8_t> readBuffer(asio::ip::tcp::socket &socket);
+
+std::size_t writeBuffer(asio::ip::tcp::socket &socket, const std::vector<uint8_t> &buffer);
+
+}
 
 
 template<typename AddrT>

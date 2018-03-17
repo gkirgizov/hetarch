@@ -24,7 +24,7 @@ target_link_libraries(gtests gtest ${llvm_libs_base})
 target_compile_options(gtests PUBLIC "-fno-rtti")
 
 add_executable(gtests2 main.cpp
-        ../new/conn_utils.cpp
+        ../new/TCPConnection.cpp
         ../new/CodeGen.cpp
         test_utils.cpp
         mocks.h

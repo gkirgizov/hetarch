@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <vector>
-#include <asio.hpp>
 
 #include "utils.h"
 #include "addr_typedef.h"
@@ -30,11 +29,6 @@ inline void vecAppend(std::vector<unsigned char> &vec, T value) {
     const unsigned char* bytes = utils::toBytes(value);
     vec.insert(vec.end(), bytes, bytes + sizeof(T));
 }
-
-
-std::vector<uint8_t> readBuffer(asio::ip::tcp::socket &socket);
-
-std::size_t writeBuffer(asio::ip::tcp::socket &socket, const std::vector<uint8_t> &buffer);
 
 }
 
