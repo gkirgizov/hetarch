@@ -2,6 +2,8 @@
 
 #include <iostream>
 
+#include "ht_proto.h"
+
 
 using asio::ip::tcp;
 
@@ -11,6 +13,7 @@ namespace conn {
 
 
 namespace detail {
+
 
 std::vector<uint8_t> readBuffer(tcp::socket &socket) {
     size_t expected = 0;
@@ -26,7 +29,7 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
         asio::error_code error;
         size_t len = socket.read_some(asio::buffer(buf), error);
         if constexpr (utils::is_debug) {
-            std::cerr << " called, read: " << len
+            std::cerr << " read: " << len
                       << std::endl;
         }
 
@@ -41,15 +44,28 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
         }
 
         auto beg = buf.begin();
-        if (expected == 0) { // read total size of expected data
-            expected = vecRead(buf, 0);
-            beg += sizeof(addr_t);
-            len -= sizeof(addr_t);
+        if (expected == 0) { // read command header
+            if constexpr (utils::is_debug) {
+                std::cerr << "conn::detail::readBuffer  : "
+                          << "reading msg_header...";
+            }
+            // tmp
+            assert(len >= sizeof(msg_header_t));
+
+            auto cmd_header = vecRead<msg_header_t>(buf);
+            beg += sizeof(cmd_header);
+            len -= sizeof(cmd_header);
+            expected = cmd_header.size;
+
+            if constexpr (utils::is_debug) {
+                std::cerr << " expecting " << expected << " bytes" << std::endl;
+            }
         }
         // read data
         collected.insert(collected.end(), beg, beg + len);
         expected -= len;
     } while (expected > 0);
+
     if constexpr (utils::is_debug) {
         std::cerr << "conn::detail::readBuffer  : "
                   << "return collected of size " << collected.size()
@@ -58,28 +74,33 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
     return collected;
 }
 
-void writeBuffer(tcp::socket &socket, const std::vector<uint8_t> &buffer) {
-    std::vector<unsigned char> dataToSend;
-    vecWrite(dataToSend, 0, static_cast<addr_t>(buffer.size()));
+std::size_t writeBuffer(tcp::socket &socket, const std::vector<uint8_t> &buffer) {
+    std::vector<uint8_t> dataToSend;
+
+    msg_header_t cmd_header = { buffer.size() };
+    detail::vecAppend(dataToSend, cmd_header);
     dataToSend.insert(dataToSend.end(), buffer.begin(), buffer.end());
 
     if constexpr (utils::is_debug) {
-        std::cerr << "conn::detail::writeBuffer : "
-                  << "call asio::write... ";
+        std::cerr << "conn::detail::writeBuffer :"
+                  << " payload size " << cmd_header.size
+                  << " total size " << dataToSend.size()
+                  << " call asio::write... ";
     }
     asio::error_code ignored_error;
     std::size_t written = asio::write(socket, asio::buffer(dataToSend), ignored_error);
     if constexpr (utils::is_debug) {
-        std::cerr << " called, written: " << written
-                  << std::endl;
+        std::cerr << " written " << written << std::endl;
     }
 
     if (written != dataToSend.size()) {
-        std::cerr << "Warning: conn::detail::writeBuffer : "
-                  << "written != dataToSend.size()"
+        std::cerr << "Warning: conn::detail::writeBuffer :"
+                  << " written != dataToSend.size()"
                   << " (" << written << " != " << dataToSend.size() << ")"
                   << std::endl;
     }
+
+    return written;
 }
 
 }

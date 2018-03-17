@@ -11,6 +11,7 @@
 #include <cxxopts.hpp>
 
 #include "../new/conn_utils.h"
+#include "../new/ht_proto.h"
 
 
 using namespace hetarch::conn;
@@ -49,6 +50,13 @@ public:
     ~ExecutableBuffer() { if (_data) { free(_data); }}
 };
 
+void assertMemAccess(ExecutableBuffer& execBuf, addr_t addr, addr_t size = 0) {
+    auto buf_addr = reinterpret_cast<size_t>(execBuf.data());
+    auto buf_size = reinterpret_cast<size_t>(execBuf.size());
+    assert(addr >= buf_addr);
+    assert(addr + size <= buf_addr + buf_size);
+}
+
 bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
     auto collected = detail::readBuffer(socket);
 
@@ -60,94 +68,90 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
 
     auto actionFlags = detail::vecRead<action_int_t>(collected, 0);
     addr_t offset = sizeof(action_int_t);
-    auto action = static_cast<hetarch::conn::Actions>(actionFlags & 0xFF);
+//    auto action = static_cast<action_t>(actionFlags & 0xFF);
+    auto action = static_cast<action_t>(actionFlags);
     switch (action) {
-        case hetarch::conn::Actions::GetBuffAddr: {
-            auto bufIdx = detail::vecRead<unsigned>(collected, offset);
+        case ActionGetBuffer: {
+            std::cerr << "Request is: GetBuffAddr:";
+
+            auto cmd = detail::vecRead<cmd_get_buffer_t>(collected, offset);
+            offset += sizeof(cmd);
+
             auto addr0 = reinterpret_cast<size_t>(execBuf.data());
             auto addr = static_cast<addr_t>(addr0);
 
-            std::cerr << "Request is: GetBuffAddr:"
+            std::cerr << " idx " << cmd.id
+                      << " size " << cmd.size
                       << " responding with addr 0x" << std::hex << addr
                       << std::dec << std::endl;
-            assert(addr == addr0 && "casting to smaller integer type! (sizeof(addr_t) < sizeof(size_t))");
 
-//            std::vector<uint8_t> response(sizeof(addr));
             std::vector<uint8_t> response;
             detail::vecAppend(response, addr);
             detail::writeBuffer(socket, response);
             break;
         }
-        case hetarch::conn::Actions::AddrRead: {
+        case ActionRead: {
             std::cerr << "Request is: AddrRead:";
 
-            auto addr = detail::vecRead<addr_t>(collected, offset);
-            offset+=sizeof(addr);
-            auto size = detail::vecRead<addr_t>(collected, offset);
-            offset+=sizeof(size);
+            auto cmd = detail::vecRead<cmd_read_t>(collected, offset);
+            offset += sizeof(cmd);
 
-            std::cerr << std::hex << " addr 0x" << addr
-                      << std::hex << " size 0x" << size
-                      << std::dec << std::endl;
-            auto buf_addr = reinterpret_cast<size_t>(execBuf.data());
-            assert(addr >= buf_addr && addr + size <= buf_addr + execBuf.size());
+            std::cerr << std::hex << " addr 0x" << cmd.addr
+                      << std::dec << " size " << cmd.size
+                      << std::endl;
+            assertMemAccess(execBuf, cmd.addr, cmd.size);
 
-            std::vector<uint8_t> response(static_cast<addr_t>(size));
-            std::copy((uint8_t*)addr, (uint8_t*)addr + size, response.begin());
+            std::vector<uint8_t> response(cmd.size);
+            std::copy((uint8_t*)cmd.addr, (uint8_t*)cmd.addr + cmd.size, response.begin());
             detail::writeBuffer(socket, response);
             break;
         }
-        case hetarch::conn::Actions::AddrWrite: {
+        case ActionWrite: {
             std::cerr << "Request is: AddrWrite:";
 
-            auto addr = detail::vecRead<addr_t>(collected, offset);
-            offset+=sizeof(addr);
-            auto size = detail::vecRead<addr_t>(collected, offset);
-            offset+=sizeof(size);
+            auto cmd = detail::vecRead<cmd_write_t>(collected, offset);
+            offset += sizeof(cmd);
 
-            std::cerr << std::hex << " addr 0x" << addr
-                      << std::hex << " size 0x" << size
-                      << std::dec << std::endl;
-            auto buf_addr = reinterpret_cast<size_t>(execBuf.data());
-            assert(addr >= buf_addr && addr + size <= buf_addr + execBuf.size());
+            std::cerr << std::hex << " addr 0x" << cmd.addr
+                      << std::dec << " size " << cmd.size
+                      << std::endl;
+            assertMemAccess(execBuf, cmd.addr, cmd.size);
 
-            std::copy(collected.begin() + offset, collected.begin() + offset + size, (uint8_t*)addr);
+            std::copy(collected.begin() + offset, collected.begin() + offset + cmd.size, (uint8_t*)cmd.addr);
             std::vector<uint8_t> response;
-            detail::vecAppend(response, 0);
+            detail::vecAppend(response, 0); // todo: why writing zero
             detail::writeBuffer(socket, response);
             break;
         }
-        case hetarch::conn::Actions::Call: {
+        case ActionCall: {
             std::cerr << "Request is: Call: ";
 
-            auto addr = detail::vecRead<addr_t>(collected, offset);
-            offset+=sizeof(addr);
+            // todo: receive timeout?
+            auto cmd = detail::vecRead<cmd_call_t>(collected, offset);
+            offset += sizeof(cmd);
 
-            std::cerr << std::hex << "addr 0x" << addr
+            std::cerr << std::hex << "addr 0x" << cmd.addr
                       << std::dec << std::endl;
-            auto buf_addr = reinterpret_cast<size_t>(execBuf.data());
-            assert(addr >= buf_addr && addr <= buf_addr + execBuf.size());
+            assertMemAccess(execBuf, cmd.addr);
 
+            auto fnptr = (void(*)())(cmd.addr);
+            fnptr(); // todo: execute in separate thread with timeout?
             std::vector<uint8_t> response;
-            auto fnptr = (int(*)())(addr);
-            auto callRes = fnptr();
-            detail::vecAppend(response, callRes);
+            detail::vecAppend(response, 0); // zero for success
             detail::writeBuffer(socket, response);
             break;
         }
-        case hetarch::conn::Actions::AddrMmap: {
+        case ActionAddrMmap: {
             std::cerr << "Request is: AddrMmap: ";
 
-            auto addr = detail::vecRead<addr_t>(collected, offset);
-            offset+=sizeof(addr);
-            auto mmap_rights = detail::vecRead<hetarch::conn::mmap_rights_t>(collected, offset);
-            offset+=sizeof(mmap_rights);
+            auto cmd = detail::vecRead<cmd_mmap_t>(collected, offset);
+            offset += sizeof(cmd);
 
-            std::cerr << std::hex << " addr 0x" << addr
-                      << std::hex << " prot 0x" << mmap_rights
+            std::cerr << std::hex << " addr 0x" << cmd.addr
+                      << std::hex << " prot 0x" << cmd.prot
                       << std::dec << std::endl;
 
-            // todo: check sanity of mmap_rights; get PROT_X; get according file perm-s for open()
+            // todo: check sanity of prot; get PROT_X; get according file perm-s for open()
             const auto dev = "/dev/mem";
             int fd = -1;
             if ((fd = open(dev, O_RDWR | O_SYNC)) < 0) {
@@ -155,7 +159,8 @@ bool handleRequest(tcp::socket &socket, ExecutableBuffer &execBuf) {
                 // todo: return-send error
             }
 
-            auto ptr = mmap(0, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, addr);
+//            auto ptr = mmap(0, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, cmd.addr);
+            auto ptr = mmap(0, getpagesize(), cmd.prot, MAP_SHARED, fd, cmd.addr);
             auto ptr_val = reinterpret_cast<addr_t>(ptr);
             std::cerr << "mmap returned addr 0x" << std::hex << ptr_val << std::dec << std::endl;
             if (ptr_val < 0) {

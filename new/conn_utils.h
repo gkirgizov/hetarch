@@ -5,24 +5,11 @@
 #include <asio.hpp>
 
 #include "utils.h"
+#include "addr_typedef.h"
 
 
 namespace hetarch {
 namespace conn {
-
-using addr_t = HETARCH_TARGET_ADDRT;
-using mmap_rights_t = addr_t;
-
-
-using action_int_t = uint16_t;
-enum class Actions : action_int_t {
-    AddrRead = 1,
-    AddrWrite,
-    GetBuffAddr,
-    Call,
-    AddrMmap,
-};
-
 
 namespace detail {
 
@@ -47,7 +34,7 @@ inline void vecAppend(std::vector<unsigned char> &vec, T value) {
 
 std::vector<uint8_t> readBuffer(asio::ip::tcp::socket &socket);
 
-void writeBuffer(asio::ip::tcp::socket &socket, const std::vector<uint8_t> &buffer);
+std::size_t writeBuffer(asio::ip::tcp::socket &socket, const std::vector<uint8_t> &buffer);
 
 }
 
