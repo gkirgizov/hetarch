@@ -45,19 +45,25 @@ struct cg_config {
     std::string cpu;
     std::string host;
     std::string port;
+    bool is_thumb;
 };
 
 cg_config read_config() {
     std::ifstream test_config{ress + "test_config.txt"};
-    std::string triple;
-    std::string cpu;
-    std::string host;
-    std::string port;
+    cg_config cfg;
 
-    test_config >> triple >> cpu >> host >> port;
-    std::cerr << "Tests: using: host: " << host << "; port: " << port
-              << "; triple: " << triple << "; cpu: " << cpu << std::endl;
-    return {triple, cpu, host, port};
+    test_config >> cfg.triple >> cfg.cpu >> cfg.host >> cfg.port;
+    if (cfg.triple.find("arm") != std::string::npos || cfg.triple.find("thumb") != std::string::npos) {
+        cfg.is_thumb = true;
+    }
+    std::cerr << "Tests: using"
+              << ": host: " << cfg.host
+              << "; port: " << cfg.port
+              << "; triple: " << cfg.triple
+              << "; cpu: " << cfg.cpu
+              << "; is_thumb: " << cfg.is_thumb
+              << std::endl;
+    return cfg;
 }
 
 
@@ -93,7 +99,7 @@ public:
             , self_sufficient{utils::loadModule(ir0, ctx), "pow_naive"}
             , part1{utils::loadModule(ir1, ctx), "square"}
             , part2{utils::loadModule(ir2, ctx), "pow_smart"}
-            , irt{}
+            , irt{config.is_thumb}
     {}
 
     const cg_config config;
@@ -190,7 +196,7 @@ public:
     explicit CodeLoaderTest()
             : config{read_config()}
             , codeGen(config.triple)
-            , irt{}
+            , irt{config.is_thumb}
             , ctx{irt.getContext()}
 #ifdef HT_ENABLE_STM32
             , tr{new conn::VCPConnection<addr_t>{config.port.c_str()}}

@@ -107,11 +107,18 @@ class IRTranslator {
 
     utils::LLVMMapper llvm_map;
 
+    /* For workaround around generation of calls to func ptrs for Thumb instruction set in Arm processors.
+     *   Need to set the bit#0 in call address to 1 to choose Thumb instr set.
+     * maybe llvm codegen bug; maybe misuse of llvm.
+     */
+    bool isThumb;
 public:
-    explicit IRTranslator()
-            : context{}, cur_builder{new llvm::IRBuilder<>{context}}, llvm_map{context} {}
-//    explicit IRTranslator(llvm::LLVMContext &context)
-//            : context{context}, cur_builder{new llvm::IRBuilder<>{context}}, llvm_map{context} {}
+    explicit IRTranslator(bool isThumb = false)
+            : context{}
+            , cur_builder{new llvm::IRBuilder<>{context}}
+            , llvm_map{context}
+            , isThumb{isThumb}
+    {}
 
     void clear() {
         cur_module.release();
@@ -528,7 +535,9 @@ public:
         using args_t = typename fun_t::args_t;
 
         llvm::FunctionType* fty = llvm_map.get_func_type<ret_t, args_t>();
-        auto addr_value = llvm_map.get_const(e.callee.callAddr);
+        auto callAddr = e.callee.callAddr;
+        if (isThumb) { callAddr |= 0b1; }
+        auto addr_value = llvm_map.get_const(callAddr);
         auto fun_ptr = cur_builder->CreateIntToPtr(addr_value, fty->getPointerTo(), "fun_ptr");
 
         llvm::CallInst* inst = cur_builder->CreateCall(
