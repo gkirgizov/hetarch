@@ -72,8 +72,17 @@ bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
 //    auto action = static_cast<action_t>(actionFlags & 0xFF);
     auto action = static_cast<action_t>(actionFlags);
     switch (action) {
+        case ActionEcho: {
+            std::cerr << "Request is: ActionEcho:"
+                      << " len " << collected.size() - offset
+                      << " data: '" << reinterpret_cast<const char*>(collected.data()) + offset << "'"
+                      << std::endl;
+            std::vector<uint8_t> response{collected.begin() + offset, collected.end()};
+            tr.send(response);
+            break;
+        }
         case ActionGetBuffer: {
-            std::cerr << "Request is: GetBuffAddr:";
+            std::cerr << "Request is: ActionGetBuffer:";
 
             auto cmd = detail::vecRead<cmd_get_buffer_t>(collected, offset);
             offset += sizeof(cmd);
@@ -81,7 +90,7 @@ bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
             auto addr0 = reinterpret_cast<size_t>(execBuf.data());
             auto addr = static_cast<addr_t>(addr0);
 
-            std::cerr << " idx " << cmd.id
+            std::cerr << " idx " << static_cast<unsigned>(cmd.id)
                       << " size " << cmd.size
                       << " responding with addr 0x" << std::hex << addr
                       << std::dec << std::endl;
@@ -92,7 +101,7 @@ bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
             break;
         }
         case ActionRead: {
-            std::cerr << "Request is: AddrRead:";
+            std::cerr << "Request is: ActionRead:";
 
             auto cmd = detail::vecRead<cmd_read_t>(collected, offset);
             offset += sizeof(cmd);
@@ -108,7 +117,7 @@ bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
             break;
         }
         case ActionWrite: {
-            std::cerr << "Request is: AddrWrite:";
+            std::cerr << "Request is: ActionWrite:";
 
             auto cmd = detail::vecRead<cmd_write_t>(collected, offset);
             offset += sizeof(cmd);
@@ -120,12 +129,12 @@ bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
 
             std::copy(collected.begin() + offset, collected.begin() + offset + cmd.size, (uint8_t*)cmd.addr);
             std::vector<uint8_t> response;
-            detail::vecAppend(response, 0); // todo: why writing zero
+            detail::vecAppend(response, cmd.size);
             tr.send(response);
             break;
         }
         case ActionCall: {
-            std::cerr << "Request is: Call: ";
+            std::cerr << "Request is: ActionCall: ";
 
             // todo: receive timeout?
             auto cmd = detail::vecRead<cmd_call_t>(collected, offset);
@@ -137,13 +146,14 @@ bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
 
             auto fnptr = (void(*)())(cmd.addr);
             fnptr(); // todo: execute in separate thread with timeout?
+
             std::vector<uint8_t> response;
-            detail::vecAppend(response, 0); // zero for success
+            detail::vecAppend(response, CallOK);
             tr.send(response);
             break;
         }
         case ActionAddrMmap: {
-            std::cerr << "Request is: AddrMmap: ";
+            std::cerr << "Request is: ActionAddrMmap: ";
 
             auto cmd = detail::vecRead<cmd_mmap_t>(collected, offset);
             offset += sizeof(cmd);
@@ -152,31 +162,53 @@ bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
                       << std::hex << " prot 0x" << cmd.prot
                       << std::dec << std::endl;
 
+            addr_t ptr_val = 0;
             // todo: check sanity of prot; get PROT_X; get according file perm-s for open()
             const auto dev = "/dev/mem";
             int fd = -1;
             if ((fd = open(dev, O_RDWR | O_SYNC)) < 0) {
                 std::cerr << "Unable to open " << dev << std::endl;
-                // todo: return-send error
             }
 
 //            auto ptr = mmap(0, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, fd, cmd.addr);
             auto ptr = mmap(0, getpagesize(), cmd.prot, MAP_SHARED, fd, cmd.addr);
-            auto ptr_val = reinterpret_cast<addr_t>(ptr);
-            std::cerr << "mmap returned addr 0x" << std::hex << ptr_val << std::dec << std::endl;
-            if (ptr_val < 0) {
+            if (ptr) {
+                ptr_val = reinterpret_cast<addr_t>(ptr);
+                std::cerr << "mmap returned addr 0x" << std::hex << ptr_val << std::dec << std::endl;
+            } else {
                 std::cerr << "mmap failed" << std::endl;
-                // todo: return-send error
-                ptr_val = 0;
             }
 
             std::vector<uint8_t> response;
             detail::vecAppend(response, ptr_val);
             tr.send(response);
+//            if (fd > 0) { close(fd); } // need it?
+            break;
+        }
+        case ActionCall2: {
+            std::cerr << "Request is: ActionCall2: ";
+
+            auto cmd = detail::vecRead<cmd_call2_t>(collected, offset);
+            offset += sizeof(cmd);
+
+            std::cerr << std::hex << "addr 0x" << cmd.addr
+                      << std::dec << "; x1=" << cmd.x1
+                      << std::dec << ", x2=" << cmd.x2
+                      << "... ";
+            auto fnptr = (addr_t(*)(addr_t, addr_t))(cmd.addr);
+            addr_t res = fnptr(cmd.x1, cmd.x2);
+            std::cerr << std::dec << "result=" << res << std::endl;
+
+            std::vector<uint8_t> response;
+            detail::vecAppend(response, res);
+            tr.send(response);
             break;
         }
         default: {
             std::cerr << "Request is: unknown - do nothing" << std::endl;
+//            std::vector<uint8_t> response;
+//            detail::vecAppend(response, 666);
+//            tr.send(response);
             break;
         }
     }
@@ -223,7 +255,7 @@ int main(int argc, char* argv[]) {
             ("p,port", "port to listen for incoming connections",
              cxxopts::value<uint16_t>()->default_value("1334"))
             ("s,size", "size of the buffer to allocate",
-             cxxopts::value<unsigned>()->default_value(std::to_string(1024*1024)))
+             cxxopts::value<unsigned>()->default_value(std::to_string(1024)))
             ;
     auto result = opts.parse(argc, argv);
     auto buf_size = result["size"].as<unsigned>();
