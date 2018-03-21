@@ -6,6 +6,7 @@
 #include "Transmission.h"
 #include "conn_utils.h"
 #include "utils.h"
+#include "addr_typedef.h"
 
 
 namespace hetarch {
@@ -15,13 +16,14 @@ namespace conn {
 namespace detail {
 
 std::vector<uint8_t> readBuffer(asio::ip::tcp::socket &socket);
+std::size_t readBuffer(asio::ip::tcp::socket &socket, uint8_t* out_buf, std::size_t size);
 
-std::size_t writeBuffer(asio::ip::tcp::socket &socket, const std::vector<uint8_t> &buffer);
+std::size_t writeBuffer(asio::ip::tcp::socket &socket, const uint8_t* buf, std::size_t size);
 
 }
 
 
-template<typename AddrT>
+template<typename AddrT = addr_t>
 class TCPTrans: public ITransmission<AddrT> {
     asio::ip::tcp::socket socket;
 
@@ -45,13 +47,28 @@ public:
         socket.shutdown(asio::ip::tcp::socket::shutdown_both);
     }
 
-    AddrT send(const std::vector<uint8_t>& buf) override {
-        return static_cast<AddrT>(detail::writeBuffer(socket, buf));
-    }
-
     std::vector<uint8_t> recv() override {
         return detail::readBuffer(socket);
     }
+
+private:
+    AddrT sendImpl(const uint8_t* buf, AddrT size) override {
+        return static_cast<AddrT>(detail::writeBuffer(socket, buf, size));
+    }
+
+/*    AddrT recvImpl(const uint8_t* buf) {
+        uint8_t msg_header_buf[sizeof(msg_header_t)] = { 0 };
+        auto header_read = detail::readBuffer(socket, msg_header_buf, sizeof(msg_header_t));
+        assert(header_read >= 0, "msg header read failed");
+        assert(header_read == sizeof(msg_header_t));
+        msg_header_t header = *reinterpret_cast<msg_header_t*>(msg_header_buf);
+
+        auto n_read = readBuffer(socket, buf, header.size);
+        assert(n_read > 0, "data read failed");
+        assert(n_read == header.size && "read less bytes than expected!");
+        return n_read;
+    }*/
+
 };
 
 

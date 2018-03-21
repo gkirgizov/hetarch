@@ -15,6 +15,47 @@ namespace conn {
 namespace detail {
 
 
+std::size_t readBuffer(tcp::socket &socket, uint8_t* out_buf, std::size_t size) {
+    const std::size_t buf_size = 512;
+    size_t collected = 0;
+    std::vector<uint8_t> buf(std::min(buf_size, size));
+    do {
+        if constexpr (utils::is_debug) {
+            std::cerr << "conn::detail::readBuffer  : "
+                      << "call socket.read_some... ";
+        }
+
+        asio::error_code error;
+        size_t received = socket.read_some(asio::buffer(buf), error);
+        if constexpr (utils::is_debug) {
+            std::cerr << " read: " << received << std::endl;
+        }
+
+        if (error == asio::error::eof) {
+            break; // Connection closed cleanly by peer.
+        } else if (error) {
+            if constexpr (utils::is_debug) {
+                std::cerr << "conn::detail::readBuffer  : "
+                          << "asio::error: " << error << std::endl;
+            }
+            throw asio::system_error(error); // Some other error.
+        }
+
+        // read data, no more than allowed (size argument)
+        auto len = received < size ? received : size;
+        std::copy(buf.begin(), buf.begin() + len, out_buf + collected);
+        size -= len;
+    } while (size > 0);
+
+    if constexpr (utils::is_debug) {
+        std::cerr << "conn::detail::readBuffer  : "
+                  << "collected " << collected
+                  << std::endl;
+    }
+    return collected;
+}
+
+
 std::vector<uint8_t> readBuffer(tcp::socket &socket) {
     size_t expected = 0;
     std::vector<uint8_t> collected;
@@ -27,9 +68,9 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
                       << "call socket.read_some... ";
         }
         asio::error_code error;
-        size_t len = socket.read_some(asio::buffer(buf), error);
+        size_t received = socket.read_some(asio::buffer(buf), error);
         if constexpr (utils::is_debug) {
-            std::cerr << " read: " << len
+            std::cerr << " read: " << received
                       << std::endl;
         }
 
@@ -44,6 +85,7 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
         }
 
         auto beg = buf.begin();
+        auto len = received;
         if (expected == 0) { // read command header
             if constexpr (utils::is_debug) {
                 std::cerr << "conn::detail::readBuffer  : "
@@ -74,12 +116,12 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
     return collected;
 }
 
-std::size_t writeBuffer(tcp::socket &socket, const std::vector<uint8_t> &buffer) {
+std::size_t writeBuffer(tcp::socket &socket, const uint8_t* buf, std::size_t size) {
     std::vector<uint8_t> dataToSend;
 
-    msg_header_t cmd_header = { buffer.size() };
+    msg_header_t cmd_header = { static_cast<addr_t>(size) };
     detail::vecAppend(dataToSend, cmd_header);
-    dataToSend.insert(dataToSend.end(), buffer.begin(), buffer.end());
+    dataToSend.insert(dataToSend.end(), buf, buf + size);
 
     if constexpr (utils::is_debug) {
         std::cerr << "conn::detail::writeBuffer :"

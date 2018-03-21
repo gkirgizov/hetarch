@@ -18,6 +18,7 @@ typedef enum {
     ActionRead,
     ActionWrite,
     ActionCall,
+    ActionCall2,
     ActionAddrMmap = 21
 } action_t;
 
@@ -25,6 +26,19 @@ typedef struct {
     addr_t size;
 } msg_header_t;
 
+typedef enum {
+    ErrRead = -1,
+    // ErrWrite = -1,
+    ErrCall = -1,
+    ErrBuf = 0,
+    Err = 0,
+    CallOK = 1
+} cmd_ret_code_t;
+
+
+/*typedef struct {
+    addr_t size;
+} cmd_echo_t;*/
 
 typedef struct {
     uint8_t id;
@@ -44,6 +58,12 @@ typedef struct {
 typedef struct {
     addr_t addr;
 } cmd_call_t;
+
+typedef struct {
+    addr_t addr;
+    addr_t x1;
+    addr_t x2;
+} cmd_call2_t;
 
 typedef struct {
     addr_t addr;

@@ -6,6 +6,10 @@ extern "C" {
 #endif
 
 
+#ifndef HETARCH_TARGET_ADDRT
+#include <stddef.h>
+# define HETARCH_TARGET_ADDRT size_t
+#endif
 typedef HETARCH_TARGET_ADDRT addr_t;
 
 
