@@ -25,7 +25,7 @@ struct MemRegion {
     explicit MemRegion() : size{0}, start{0}, end{0}, memType{MemType::Undefined} {};  // for constructing false-y value
 
     MemRegion(AddrT start, AddrT size, MemType memType)
-    : size{size}, start{start}, end{start+size}, memType{memType}
+    : size{size}, start{start}, end{static_cast<AddrT>(start + size)}, memType{memType}
     {}
 
     const AddrT size;
