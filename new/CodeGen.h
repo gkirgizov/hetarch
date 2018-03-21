@@ -15,6 +15,7 @@
 //#include "llvm/ADT/Triple.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetOptions.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
 
@@ -31,11 +32,16 @@ namespace hetarch {
 
 class CodeGen {
     using CGOptLvl = llvm::CodeGenOpt::Level;
+    using FloatABI = llvm::FloatABI::ABIType;
 public:
     using llvm_obj_t = llvm::object::OwningBinary<llvm::object::ObjectFile>;
     using OptLvl = llvm::PassBuilder::OptimizationLevel;
 
-    explicit CodeGen(const std::string &targetName);
+    CodeGen(const std::string& targetName,
+            const std::string& cpu = "generic",
+            const std::string& fpu = "",
+            llvm::FloatABI::ABIType float_abi = llvm::FloatABI::Default
+    );
 
     template<typename RetT, typename... Args>
     inline ObjCode<RetT, Args...> compile(IRModule<RetT, Args...> &irModule, OptLvl optLvl = OptLvl::O2) const {
@@ -53,6 +59,10 @@ public:
 
 private:
     const std::string targetName;
+    const std::string cpuStr{"generic"};
+    FloatABI float_abi{FloatABI::Default};
+    const std::string fpuStr{};
+
     const llvm::Target* target{nullptr};
     const llvm::PassRegistry* pm{nullptr};
 

@@ -12,9 +12,10 @@
 #include "../new/supportingClasses.h"
 #include "../new/CodeGen.h"
 #include "../new/CodeLoader.h"
-#include "../new/TCPConnection.h"
 #include "../new/MemoryManager.h"
 #include "../new/Executor.h"
+#include "../new/TCPConnection.h"
+#include "../new/VCPConnection.h"
 
 #include "../new/dsl.h"
 
@@ -37,6 +38,27 @@ string do_nothing_ll(ress + "do_nothing.ll");
 string ir0{ress + "self_sufficient.ll"};
 string ir1{ress + "part1.ll"};
 string ir2{ress + "part2.ll"};
+
+
+struct cg_config {
+    std::string triple;
+    std::string cpu;
+    std::string host;
+    std::string port;
+};
+
+cg_config read_config() {
+    std::ifstream test_config{ress + "test_config.txt"};
+    std::string triple;
+    std::string cpu;
+    std::string host;
+    std::string port;
+
+    test_config >> triple >> cpu >> host >> port;
+    std::cerr << "Tests: using: host: " << host << "; port: " << port
+              << "; triple: " << triple << "; cpu: " << cpu << std::endl;
+    return {triple, cpu, host, port};
+}
 
 
 TEST(utilsTest, loadModule) {
@@ -63,7 +85,9 @@ TEST(IRModuleTest, constructible) {
 class CodeGenTest : public ::testing::Test {
 public:
     explicit CodeGenTest()
-            : codeGen("x86_64-unknown-linux-gnu")
+            : config{read_config()}
+            , codeGen(config.triple, config.cpu)
+//            , codeGen("x86_64-unknown-linux-gnu")
             , optLvl{CodeGen::OptLvl::O0}
             , main_entry{utils::loadModule(main_entry_ll, ctx), "main"}
             , self_sufficient{utils::loadModule(ir0, ctx), "pow_naive"}
@@ -72,6 +96,7 @@ public:
             , irt{}
     {}
 
+    const cg_config config;
     LLVMContext ctx{};
 //    IIRModule main_entry;
     IRModule<VoidExpr> main_entry;
@@ -159,23 +184,6 @@ std::string to_string(const std::array<T, N>& x) {
 }
 }
 
-struct cg_config {
-    std::string triple;
-    std::string host;
-    uint16_t port;
-};
-
-cg_config read_config() {
-    std::ifstream test_config{ress + "test_config.txt"};
-    std::string triple;
-    std::string host;
-    uint16_t port;
-
-    test_config >> triple >> host >> port;
-    std::cerr << "Tests: using: host: " << host << "; port: " << port << "; triple: " << triple << std::endl;
-    return {triple, host, port};
-}
-
 
 class CodeLoaderTest : public ::testing::Test {
 public:
@@ -184,16 +192,30 @@ public:
             , codeGen(config.triple)
             , irt{}
             , ctx{irt.getContext()}
-            , tr{new conn::TCPTrans<addr_t>{config.host, config.port}}
+#ifdef HT_ENABLE_STM32
+            , tr{new conn::VCPConnection<addr_t>{config.port.c_str()}}
+#else
+            , tr{new conn::TCPTrans<addr_t>{ config.host, static_cast<uint16_t>(std::stoul(config.port)) }}
+#endif
             , conn{*tr}
-            , all_mem{conn.getBuffer(0), 1024 * 1024, mem::MemType::ReadWrite}
+            , echo_pretest{conn.echo("give me echo")}
+            , all_mem{conn.getBuffer(0), 1024, mem::MemType::ReadWrite}
             , memMgr{all_mem}
             , exec{conn, memMgr, irt, codeGen}
             , main_entry{utils::loadModule(main_entry_ll, ctx), "main"}
             , do_nothing{utils::loadModule(do_nothing_ll, ctx), "do_nothing"}
 //            , part1{utils::loadModule(ir1, ctx), "square"}
             , self_sufficient{utils::loadModule(ir0, ctx), "pow_naive"}
-    {}
+    {
+#ifdef HT_ENABLE_STM32
+        std::cerr << "target is stm32" << std::endl;
+#elif HT_ENABLE_ARM
+        std::cerr << "target is arm" << std::endl;
+#else
+        std::cerr << "target is likely x86" << std::endl;
+#endif
+
+    }
 
     const cg_config config;
 
@@ -203,6 +225,8 @@ public:
 
     std::unique_ptr< conn::ITransmission<addr_t> > tr;
     conn::CmdProtocol<addr_t> conn;
+    const bool echo_pretest;
+
     const MemRegion<addr_t> all_mem;
     mem::MemManagerBestFit<addr_t> memMgr;
 
@@ -243,8 +267,25 @@ public:
         auto result = exec.call(resident_fun, args...);
         return result;
     };
+
+    template<typename DSLFun>
+    auto simple_loader(DSLFun&& dsl_fun) {
+        IRModule translated = irt.translate(dsl_fun);
+        bool verified_ok = utils::verify_module(translated);
+        EXPECT_TRUE(verified_ok) << "failed verify with fun: " << dsl_fun.name() << std::endl;
+        auto optLvl = CodeGen::OptLvl::O0; // don't need it here
+        ObjCode compiled = codeGen.compile(translated, optLvl);
+        ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite,
+                                                        irt, codeGen, compiled);
+        return resident_fun;
+    };
 };
 
+
+TEST_F(CodeLoaderTest, echoTest) {
+    EXPECT_TRUE(echo_pretest);
+    EXPECT_TRUE(conn.echo("hello, slave."));
+}
 
 TEST_F(CodeLoaderTest, loadCodeTrivial) {
     auto tester = [&](auto&& irModule) {
@@ -293,7 +334,7 @@ TEST_F(CodeLoaderTest, loadAndCall) {
         return If(x > y, x, y);
     };
     int x{22}, y{11};
-    EXPECT_TRUE(std::max(x, y) == generic_caller(max_dsl_generator, x, y));
+    EXPECT_EQ(std::max(x, y), generic_caller(max_dsl_generator, x, y));
 
     auto factorial_gen = [&](auto&& n){
         Var<int> res{1};
@@ -303,64 +344,121 @@ TEST_F(CodeLoaderTest, loadAndCall) {
         ), res);
     };
     auto remoteRes = generic_caller(factorial_gen, 5u);
-    EXPECT_TRUE(120 == remoteRes) << "invalid result: " << remoteRes << std::endl;
+    EXPECT_EQ(120, remoteRes);
 
+    std::cerr << "end of codegen test" << std::endl;
+}
+
+TEST_F(CodeLoaderTest, callDslFromDsl) {
+    using val_t = int;
+
+    auto max_dsl_generator = [](auto&& x, auto&& y) {
+        return If(x > y, x, y);
+    };
+    DSLFunction dsl_max = make_dsl_fun_from_arg_types<Var<val_t>, Var<val_t>>(max_dsl_generator);
+//    auto resident_max = simple_loader(dsl_max);
+
+    auto max4_dsl_generator = [&](auto x1, auto x2, auto x3, auto x4) {
+        return dsl_max(dsl_max(x1, x2), dsl_max(x3, x4));
+    };
+
+    val_t x1{22}, x2{11}, x3{42}, x4{69};
+    val_t true_res = 69;
+    auto result = generic_caller(max4_dsl_generator, x1, x2, x3, x4);
+    EXPECT_EQ(result, true_res);
+    std::cerr << "end of codegen test" << std::endl;
+}
+
+TEST_F(CodeLoaderTest, callResidentFromDsl) {
+    using val_t = int;
+
+    auto max_dsl_generator = [](auto&& x, auto&& y) {
+        return If(x > y, x, y);
+    };
+    DSLFunction dsl_max = make_dsl_fun_from_arg_types<Var<val_t>, Var<val_t>>(max_dsl_generator);
+    auto resident_max = simple_loader(dsl_max);
+
+    auto max4_dsl_generator = [&](auto x1, auto x2, auto x3, auto x4) {
+        return resident_max(resident_max(x1, x2), resident_max(x3, x4));
+    };
+//    DSLFunction dsl_max4 = make_dsl_fun_from_arg_types<Var<addr_t>, Var<addr_t>, Var<addr_t>, Var<addr_t>>(max4_dsl_generator);
+//    auto resident_max4 = simple_loader(dsl_max4);
+
+    val_t x1{22}, x2{11}, x3{42}, x4{69};
+//    auto true_res = std::max(x1, x2, x3, x4);
+    val_t true_res = 69;
+    auto result = generic_caller(max4_dsl_generator, x1, x2, x3, x4);
+    EXPECT_EQ(result, true_res);
+    std::cerr << "end of codegen test" << std::endl;
+}
+
+TEST_F(CodeLoaderTest, loadAndCall2) {
+    auto max_dsl_generator = [](auto&& x, auto&& y) {
+        return If(x > y, x, y);
+    };
+    DSLFunction dsl_max = make_dsl_fun_from_arg_types<Var<addr_t>, Var<addr_t>>(max_dsl_generator);
+    auto resident_max = simple_loader(dsl_max);
+
+    // Call it with some args
+    addr_t x{22}, y{11};
+    auto true_res = std::max(x, y);
+    auto result = conn.call2(resident_max.callAddr, x, y);
+    EXPECT_EQ(result, true_res);
     std::cerr << "end of codegen test" << std::endl;
 }
 
 TEST_F(CodeLoaderTest, readGPIO) {
     // Test only for arm
-    if (config.triple.find("arm") != std::string::npos) {
-
-        // Get gpio configuration register addr
-        auto gpio_conf_reg_addr = conn.mmap(0x13400000);
-        EXPECT_TRUE(gpio_conf_reg_addr != 0) << "shouldn't return zero mmapped gpio configuration register!";
+#ifdef HT_ENABLE_ARM
+    // Get gpio configuration register addr
+    auto gpio_conf_reg_addr = conn.mmap(0x13400000);
+    EXPECT_TRUE(gpio_conf_reg_addr != 0) << "shouldn't return zero mmapped gpio configuration register!";
 
 //      auto name1 = "read_gpx1con_reg",
 
-        // Create global volatile val at specified addr
-        // variant 1
+    // Create global volatile val at specified addr
+    // variant 1
 /*        DSLGlobal gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
-        EXPECT_TRUE(gcr.x.const_q && gcr.x.volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
-        auto remoteGCR = CodeLoader::getLoadedResident(gcr, gpio_conf_reg_addr, conn, memMgr);
+    EXPECT_TRUE(gcr.x.const_q && gcr.x.volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
+    auto remoteGCR = CodeLoader::getLoadedResident(gcr, gpio_conf_reg_addr, conn, memMgr);
 
-        RawPtr<decltype(gcr)> tmp_ptr{};
-        auto gpio_reader_gen = [&]{
-            return (tmp_ptr = remoteGCR.takeAddr() + DSLConst(0x0c20 >> 2), *tmp_ptr);
-        };*/
+    RawPtr<decltype(gcr)> tmp_ptr{};
+    auto gpio_reader_gen = [&]{
+        return (tmp_ptr = remoteGCR.takeAddr() + DSLConst(0x0c20 >> 2), *tmp_ptr);
+    };*/
 
-        // variant 2
-        DSLGlobal gcr_ptr{ RawPtr<Var<const volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
-        EXPECT_TRUE(gcr_ptr.x.elt_const_q && gcr_ptr.x.elt_volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
-        auto remoteGCR = CodeLoader::load(gcr_ptr, conn, memMgr);
-        std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << remoteGCR.addr << std::dec << std::endl;
+    // variant 2
+    DSLGlobal gcr_ptr{ RawPtr<Var<const volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
+    EXPECT_TRUE(gcr_ptr.x.elt_const_q && gcr_ptr.x.elt_volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
+    auto remoteGCR = CodeLoader::load(gcr_ptr, conn, memMgr);
+    std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << remoteGCR.addr << std::dec << std::endl;
 
 /*        auto gpio_reader_gen = [&]{
 //            RawPtr<Var<uint32_t>> tmp_ptr{};
-            return *(remoteGCR + DSLConst(0x0c20 >> 2));
-        };*/
+        return *(remoteGCR + DSLConst(0x0c20 >> 2));
+    };*/
 
-        auto gpio_reader_gen = [&]{
-            uint32_t bit = 0x1;
-            Array<Var<uint32_t>, 5> reg_data{};
-            RawPtr<Var<uint32_t>> tmp_ptr{};
-            return (
-                    tmp_ptr = remoteGCR + DSLConst(0x0c20 >> 2), reg_data[DSLConst(0)] = *tmp_ptr,
-                    *tmp_ptr |= DSLConst(bit << 8),              reg_data[DSLConst(1)] = *tmp_ptr,
-                    tmp_ptr = remoteGCR + DSLConst(0x0c24 >> 2),
-                    *tmp_ptr |= DSLConst(bit << 2),              reg_data[DSLConst(2)] = *tmp_ptr,
-                    *tmp_ptr &= ~DSLConst(bit << 2),             reg_data[DSLConst(3)] = *tmp_ptr,
-                    reg_data
-            );
-        };
+    auto gpio_reader_gen = [&]{
+        uint32_t bit = 0x1;
+        Array<Var<uint32_t>, 5> reg_data{};
+        RawPtr<Var<uint32_t>> tmp_ptr{};
+        return (
+                tmp_ptr = remoteGCR + DSLConst(0x0c20 >> 2), reg_data[DSLConst(0)] = *tmp_ptr,
+                *tmp_ptr |= DSLConst(bit << 8),              reg_data[DSLConst(1)] = *tmp_ptr,
+                tmp_ptr = remoteGCR + DSLConst(0x0c24 >> 2),
+                *tmp_ptr |= DSLConst(bit << 2),              reg_data[DSLConst(2)] = *tmp_ptr,
+                *tmp_ptr &= ~DSLConst(bit << 2),             reg_data[DSLConst(3)] = *tmp_ptr,
+                reg_data
+        );
+    };
 
-        auto res = generic_caller(gpio_reader_gen);
-        std::cerr << "Result: " << std::hex << utils::to_string(res)
-                  << std::dec << std::endl;
+    auto res = generic_caller(gpio_reader_gen);
+    std::cerr << "Result: " << std::hex << utils::to_string(res)
+              << std::dec << std::endl;
 
-    } else {
-        std::cerr << "Not arm; not running this test" << std::endl;
-    }
+#else
+    std::cerr << "Not arm; not running this test" << std::endl;
+#endif
 }
 
 // todo: various kinds of symbol conflicts related tests

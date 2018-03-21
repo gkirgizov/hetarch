@@ -14,11 +14,17 @@ namespace hetarch {
 //    LLVMInitialize##X##TargetMC(); \
 //    LLVMInitialize##X##AsmPrinter();
 
-
-CodeGen::CodeGen(const std::string &targetName)
+CodeGen::CodeGen(const std::string &targetName,
+                 const std::string &cpu,
+                 const std::string &fpu,
+                 FloatABI float_abi
+)
         : targetName(llvm::Triple::normalize(llvm::StringRef(targetName)))
-          , target(initTarget(this->targetName))
-          , pm{initPasses()}
+        , cpuStr{cpu}
+        , fpuStr{fpu}
+        , float_abi{float_abi}
+        , target(initTarget(this->targetName))
+        , pm{initPasses()}
 {}
 
 const llvm::Target* CodeGen::initTarget(const std::string &targetName) {
@@ -69,11 +75,14 @@ const llvm::PassRegistry* CodeGen::initPasses() {
 
 llvm::TargetMachine* CodeGen::getTargetMachine(OptLvl optLvl) const {
     // CPU
-    std::string cpuStr = "generic";
     std::string featuresStr = "";
 
     // todo: do something with options
     llvm::TargetOptions options = InitTargetOptionsFromCodeGenFlags();
+    options.ExceptionModel = llvm::ExceptionHandling::None; // don't need eh sections
+    options.ThreadModel = llvm::ThreadModel::Single;
+    options.NoSignedZerosFPMath = false; // dsl operation Neg depends on it (todo: not tested)
+    options.FloatABIType = float_abi;
 
     llvm::Reloc::Model relocModel = llvm::Reloc::PIC_;
     auto codeModel = llvm::CodeModel::Default;
