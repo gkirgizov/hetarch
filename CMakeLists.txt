@@ -14,6 +14,10 @@ if(${MY_TARGET} MATCHES X86)
     set(TARGET_BITWIDTH 64)
 elseif(${MY_TARGET} MATCHES ARM)
     set(TARGET_BITWIDTH 32)
+elseif(${MY_TARGET} MATCHES STM32)
+    set(MY_TARGET ARM)
+    set(TARGET_BITWIDTH 32)
+    add_definitions(-DHT_ENABLE_STM32)
 elseif(${MY_TARGET} MATCHES MSP430)
     set(TARGET_BITWIDTH 16)
 else()
@@ -179,12 +183,14 @@ add_library(temp_target
         new/supportingClasses.h
         new/CodeLoader.h
         new/CodeGen.h
+        new/CodeGen.cpp
         new/dsl/types_map.h
         new/dsl/IRTranslator.h
         new/utils.h
         new/dsl/dsl_base.h
         new/dsl/fun.h
         new/dsl/ResidentObjCode.h
+        new/dsl/ResidentGlobal.h
         new/dsl/sequence.h
         new/dsl/if_else.h
         new/dsl/loops.h
@@ -193,7 +199,16 @@ add_library(temp_target
         new/dsl/dsl_type_traits.h
         new/dsl/array.h
         new/dsl/ptr.h
-        new/dsl/dsl_meta.h new/TCPConnection.h new/TCPConnection.cpp new/Executor.h new/dsl/ResidentGlobal.h new/CodeGen.cpp new/dsl/struct.h new/dsl/value.h new/addr_typedef.h new/Transmission.h)
+        new/dsl/dsl_meta.h
+        new/dsl/struct.h
+        new/dsl/value.h
+        new/Executor.h
+        new/addr_typedef.h
+        new/TCPConnection.h
+        new/TCPConnection.cpp
+        new/VCPConnection.h
+        new/Transmission.h
+        )
 
 
 add_subdirectory(examples)
