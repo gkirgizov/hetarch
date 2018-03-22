@@ -57,7 +57,7 @@ public:
         // todo: check more formally; like in DSLCallable::call
         using fun_t = dsl::ResidentObjCode<AddrT, TdRet, TdArgs...>;
         using params_t = typename fun_t::args_t;
-        using args_t = std::tuple< std::remove_reference_t<Args>... >;
+        using args_t = std::tuple< dsl::remove_cvref_t<Args>... >;
         static_assert(std::is_same_v<params_t, args_t>, "Incorrect arguments!");
 
         // Send arguments
@@ -87,7 +87,9 @@ public:
 //                )
 //        );
 
-        return f.remoteRet.read();
+        if constexpr (!dsl::is_unit_v<TdRet>) {
+            return f.remoteRet.read();
+        }
     }
 
 
