@@ -238,18 +238,33 @@ MULTIPLICATIVE_OP(*, FMul, Mul, Mul)
 //MULTIPLICATIVE_OP(%, FRem, SRem, URem)
 
 
-// todo: type conversions in bitwise operations
 #define BITWISE_OP(SYM, OP) \
 template<typename T1, typename T2 \
         , typename = typename std::enable_if_t< is_ev_v<T1, T2> > \
 > \
 constexpr auto operator SYM (T1 lhs, T2 rhs) { \
-    static_assert(std::is_integral_v<i_t<T1>> && std::is_integral_v<i_t<T2>>, "Bitwise operations expect integral types!"); \
-    static_assert(std::is_same_v<i_t<T1>, i_t<T2>>, "Bitwise operations expect same integral type!"); \
-    return EBinOp<BinOps:: OP , T1, T2>{ \
-            lhs, \
-            rhs \
-    }; \
+    using t1 = f_t<T1>; \
+    using t2 = f_t<T2>; \
+    static_assert(std::is_integral_v<t1> && std::is_integral_v<t2>, "Bitwise operations expect integral types!"); \
+    \
+    if constexpr (sizeof(t1) > sizeof(t2)) { \
+        using cast_t = ECast<T1, T2>; \
+        return EBinOp<BinOps:: OP , T1, cast_t>{ \
+                lhs, \
+                cast_t{rhs} \
+        }; \
+    } else if constexpr (sizeof(t1) < sizeof(t2)) { \
+        using cast_t = ECast<T2, T1>; \
+        return EBinOp<BinOps:: OP , cast_t, T2>{ \
+                cast_t{lhs}, \
+                rhs \
+        }; \
+    } else { \
+        return EBinOp<BinOps:: OP , T1, T2>{ \
+                lhs, \
+                rhs \
+        }; \
+    }\
 };
 
 
