@@ -5,6 +5,7 @@
 #include <fstream>
 #include <vector>
 #include <utility>
+#include <unistd.h>
 
 //#include "llvm/IR/Module.h"
 //#include "llvm/IR/LLVMContext.h"
@@ -275,15 +276,24 @@ public:
     };
 
     template<typename DSLFun>
-    auto simple_loader(DSLFun&& dsl_fun) {
+    auto simple_loader(DSLFun&& dsl_fun, bool dump = false) {
         IRModule translated = irt.translate(dsl_fun);
+
         bool verified_ok = utils::verify_module(translated);
         EXPECT_TRUE(verified_ok) << "failed verify with fun: " << dsl_fun.name() << std::endl;
+        if (dump) { translated.get().dump(); }
+
         auto optLvl = CodeGen::OptLvl::O0; // don't need it here
         ObjCode compiled = codeGen.compile(translated, optLvl);
         ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite,
                                                         irt, codeGen, compiled);
         return resident_fun;
+    };
+
+    template<typename DSLGen, typename ...Args>
+    auto generic_loader(DSLGen&& dsl_gen, Args... args) {
+        DSLFunction dsl_fun = make_dsl_fun_from_arg_types< to_dsl_t<std::remove_reference_t<decltype(args)>>... >(dsl_gen);
+        return simple_loader(dsl_fun, true);
     };
 };
 
@@ -420,29 +430,19 @@ TEST_F(CodeLoaderTest, readGPIO) {
     auto gpio_conf_reg_addr = conn.mmap(0x13400000);
     EXPECT_TRUE(gpio_conf_reg_addr != 0) << "shouldn't return zero mmapped gpio configuration register!";
 
-//      auto name1 = "read_gpx1con_reg",
-
     // Create global volatile val at specified addr
     // variant 1
-/*        DSLGlobal gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
-    EXPECT_TRUE(gcr.x.const_q && gcr.x.volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
-    auto remoteGCR = CodeLoader::getLoadedResident(gcr, gpio_conf_reg_addr, conn, memMgr);
-
-    RawPtr<decltype(gcr)> tmp_ptr{};
-    auto gpio_reader_gen = [&]{
-        return (tmp_ptr = remoteGCR.takeAddr() + DSLConst(0x0c20 >> 2), *tmp_ptr);
-    };*/
-
+//    DSLGlobal gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
+//    auto remoteGCR = CodeLoader::getLoadedResident(gcr, gpio_conf_reg_addr, conn, memMgr);
     // variant 2
     DSLGlobal gcr_ptr{ RawPtr<Var<const volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
-    EXPECT_TRUE(gcr_ptr.x.elt_const_q && gcr_ptr.x.elt_volatile_q) << "dsl inconsistency: tried to create cv, got not-cv!";
     auto remoteGCR = CodeLoader::load(gcr_ptr, conn, memMgr);
+
     std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << remoteGCR.addr << std::dec << std::endl;
 
-/*        auto gpio_reader_gen = [&]{
-//            RawPtr<Var<uint32_t>> tmp_ptr{};
-        return *(remoteGCR + DSLConst(0x0c20 >> 2));
-    };*/
+//    auto gpio_reader_gen = [&]{
+//        return *(remoteGCR + DSLConst(0x0c20 >> 2));
+//    };
 
     auto gpio_reader_gen = [&]{
         uint32_t bit = 0x1;
@@ -466,6 +466,65 @@ TEST_F(CodeLoaderTest, readGPIO) {
     std::cerr << "Not arm; not running this test" << std::endl;
 #endif
 }
+
+#ifdef HT_ENABLE_STM32
+
+// Some structs & typedefs
+namespace device {
+
+//#include "stm32f4/Drivers/CMSIS/Include/stm32f429xx.h"
+#define     __IO    volatile             /*!< Defines 'read / write' permissions */
+
+//#include "stm32f4/Drivers/CMSIS/Device/ST/STM32F4xx/Include/stm32f429xx.h"
+typedef struct
+{
+    __IO uint32_t MODER;    /*!< GPIO port mode register,               Address offset: 0x00      */
+    __IO uint32_t OTYPER;   /*!< GPIO port output type register,        Address offset: 0x04      */
+    __IO uint32_t OSPEEDR;  /*!< GPIO port output speed register,       Address offset: 0x08      */
+    __IO uint32_t PUPDR;    /*!< GPIO port pull-up/pull-down register,  Address offset: 0x0C      */
+    __IO uint32_t IDR;      /*!< GPIO port input data register,         Address offset: 0x10      */
+    __IO uint32_t ODR;      /*!< GPIO port output data register,        Address offset: 0x14      */
+    __IO uint32_t BSRR;     /*!< GPIO port bit set/reset register,      Address offset: 0x18      */
+    __IO uint32_t LCKR;     /*!< GPIO port configuration lock register, Address offset: 0x1C      */
+    __IO uint32_t AFR[2];   /*!< GPIO alternate function registers,     Address offset: 0x20-0x24 */
+} GPIO_TypeDef;
+/*!< Peripheral memory map */
+#define PERIPH_BASE           0x40000000U /*!< Peripheral base address in the alias region                                */
+#define APB1PERIPH_BASE       PERIPH_BASE
+#define APB2PERIPH_BASE       (PERIPH_BASE + 0x00010000U)
+#define AHB1PERIPH_BASE       (PERIPH_BASE + 0x00020000U)
+#define AHB2PERIPH_BASE       (PERIPH_BASE + 0x10000000U)
+#define GPIOG_BASE            (AHB1PERIPH_BASE + 0x1800U)
+
+//#include "stm32f4/Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_gpio.h"
+#define GPIO_PIN_13                ((uint16_t)0x2000)  /* Pin 13 selected   */
+#define GPIO_PIN_14                ((uint16_t)0x4000)  /* Pin 14 selected   */
+
+}
+
+TEST_F(CodeLoaderTest, stm32f4_LED) {
+    const auto led_green = GPIO_PIN_13;
+    const auto led_red = GPIO_PIN_14;
+
+    const auto gpiog_odr_addr = GPIOG_BASE + offsetof(device::GPIO_TypeDef, ODR);
+//    DSLGlobal { RawPtr<Var<volatile uint32_t>>{gpiog_bsrr, "gpiog_bsrr"} };
+//    DSLGlobal { to_dsl_t<volatile uint32_t *> {gpiog_bsrr} };
+//    auto r = CodeLoader::load(gpiog_bsrr, conn, memMgr);
+//    std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << r.addr << std::dec << std::endl;
+
+    auto toggle_gpiog_pin = [](auto gpio_pin){
+        to_dsl_t<volatile uint32_t *> gpiog_odr_ptr{gpiog_odr_addr};
+        return (*gpiog_odr_ptr ^= gpio_pin, Unit);
+    };
+
+    auto fr = generic_loader(toggle_gpiog_pin, led_green);
+
+    const decltype(led_green) both_leds = led_red | led_green;
+    exec.call(fr, both_leds);
+    usleep(1000 * 1000); // sleep for N microseconds
+    exec.call(fr, both_leds);
+}
+#endif
 
 // todo: various kinds of symbol conflicts related tests
 
