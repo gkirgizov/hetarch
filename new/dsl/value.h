@@ -3,6 +3,7 @@
 
 #include "dsl_base.h"
 #include "dsl_type_traits.h"
+#include "cast.h"
 
 
 namespace hetarch {
@@ -44,10 +45,14 @@ struct ETakeAddr: public Expr<f_t<Td>*> {
     IR_TRANSLATABLE
 };
 
+template<class T1, class T2> struct CanAssign {
+    static void constraints(T1 a, T2 b) { a = b; }
+    CanAssign() { void(*p)(T1, T2) = constraints; }
+};
 
 //template<typename Tw, typename T, bool is_const = false, bool is_volatile = false>
 template<typename Tw, typename T, bool is_const = false>
-struct Value : public ValueBase {
+struct Value : ValueBase {
     using this_t = Value<Tw, T, is_const>;
     using type = std::conditional_t<is_const, std::add_const_t<T>, T>;
 //    static const bool const_q = is_const;
@@ -56,28 +61,20 @@ struct Value : public ValueBase {
     constexpr Value(this_t&&) = default;
     constexpr Value(const this_t&) = default;
 
-    // todo: better & more correct check instead of the_same
-    // todo: some sane casting
-    template<typename Td, typename = typename std::enable_if_t<
-//            std::is_same_v<remove_cvref_t<T>, i_t<Td>>
-//            std::is_convertible_v<i_t<Td>, remove_cvref_t<T>> // doesn't work for volatile ptr-s
-//            std::is_same_v<remove_cvref_t< std::remove_pointer_t<T> >, i_t<Td>>
-            true
-    >>
-    constexpr auto assign(Td rhs) const {
-        static_assert(!is_const, "Assigning to const!");
-        return EAssign<Tw, Td>{static_cast<const Tw&>(*this), rhs};
+    template<typename Td>
+    inline constexpr auto assign(Td rhs) const {
+        CanAssign<type, f_t<Td>>{};
+        return EAssign{ static_cast<const Tw&>(*this), Cast<Tw>(rhs) };
     }
 
     template<typename Td, typename = typename std::enable_if_t<
             !std::is_convertible_v<Tw, Td>
-//            !std::is_base_of_v<this_t, remove_cvref_t<Td>>
     >>
-    constexpr auto operator=(Td rhs) const { return this->assign(rhs); }
+    inline constexpr auto operator=(Td rhs) const { return this->assign(rhs); }
 
     // Member function templates never suppress generation of special member functions
     //  so, explicitly define copy assignment to avoid default behaviour and make it behave as assign()
-    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    inline constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
 //    constexpr auto operator=(const Tw& rhs) const { return this->assign(rhs); }; // didn't work
 
     inline constexpr auto takeAddr() const { return ETakeAddr<Tw>{ static_cast<const Tw&>(*this) }; }

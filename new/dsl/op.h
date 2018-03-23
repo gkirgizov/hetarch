@@ -5,6 +5,7 @@
 #include "dsl_base.h"
 #include "dsl_type_traits.h"
 #include "value.h"
+#include "cast.h"
 
 
 namespace hetarch {
@@ -15,71 +16,8 @@ using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
 
 using BinOps = llvm::Instruction::BinaryOps;
-using Casts = llvm::Instruction::CastOps;
 using OtherOps = llvm::Instruction::OtherOps;
 using Predicate = llvm::CmpInst::Predicate;
-
-
-template<typename To, typename From>
-constexpr Casts get_llvm_cast() {
-    if constexpr (std::is_floating_point<To>::value && std::is_floating_point<From>::value) {
-        if constexpr (sizeof(To) < sizeof(From)) {
-            return Casts::FPTrunc;
-        } else {
-            return Casts::FPExt;
-        }
-    } else if constexpr (std::is_floating_point<To>::value && std::is_integral<From>::value) {
-        if constexpr (std::is_unsigned<From>::value) {
-            return Casts::UIToFP;
-        } else {
-            return Casts::SIToFP;
-        }
-    } else if constexpr (std::is_integral<To>::value && std::is_floating_point<From>::value) {
-        if constexpr (std::is_unsigned<To>::value) {
-            return Casts::FPToUI;
-        } else {
-            return Casts::FPToSI;
-        }
-    } else if constexpr (std::is_integral<To>::value && std::is_integral<From>::value) {
-        if constexpr (sizeof(To) < sizeof(From)) {
-            return Casts::Trunc;
-        } else {
-            return Casts::SExt;
-            // Casts::ZExt;
-        }
-    } else if constexpr (std::is_integral<To>::value && std::is_pointer<From>::value) {
-        return Casts::PtrToInt;
-    } else if constexpr (std::is_pointer<To>::value && std::is_integral<From>::value) {
-        return Casts::IntToPtr;
-    } else {
-        static_assert(false && "Uncastable types:" && From::from_this_type && To::to_this_type);
-//        static_assert(false && "Uncastable types:");
-    }
-
-    // cases left
-    // Casts::BitCast;
-    // Casts::AddrSpaceCast;
-};
-
-//template<typename To> constexpr auto get_llvm_cast<To, To>() {};
-
-
-template< typename TdTo
-        , typename TdFrom
-        , Casts Op = get_llvm_cast<i_t<TdTo>, i_t<TdFrom>>()
->
-struct ECast : Expr<i_t<TdTo>> {
-    using To = i_t<TdTo>;
-    using From = i_t<TdFrom>;
-
-    const TdFrom src;
-    explicit constexpr ECast(TdFrom src) : src{src} {}
-    IR_TRANSLATABLE
-};
-
-
-using dsl::Expr; // wtf CLion doesn't see exactly here
-template<typename T> using bool_cast = ECast<Expr<bool>, T>;
 
 
 template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs

@@ -63,7 +63,7 @@ TEST_F(IRTranslatorTest, compileDSLCommon) {
 //            Return(tmp)
     );
 
-    DSLFunction assign_test(
+    DSLFunction simple_assign_test(
             "swap",
             MakeFunArgs(x, y),
             (tmp = x, x = y, y = tmp, Unit)
@@ -77,7 +77,7 @@ TEST_F(IRTranslatorTest, compileDSLCommon) {
 
     EXPECT_TRUE(translate_verify(irt, empty_test));
     EXPECT_TRUE(translate_verify(irt, pass_through));
-    EXPECT_TRUE(translate_verify(irt, assign_test));
+    EXPECT_TRUE(translate_verify(irt, simple_assign_test));
     EXPECT_TRUE(translate_verify(irt, call_test));
 }
 
@@ -85,6 +85,7 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
     Var<int32_t> xi{1}, yi{3};
     Var<uint64_t> xui{1}, yui{3};
     Var xf{2.0}, yf{4.0};
+    Var<const int32_t> cxi{1}, cyi{3};
 
     DSLFunction simple_ops_test(
             "simple_ops",
@@ -115,10 +116,21 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
             )
     );
 
+    DSLFunction assign_test(
+            "assign_test",
+            MakeFunArgs(x, y),
+            (
+                    xi = yi, xui = yi, xi = yui,
+//                    cxi = cyi, // fails at compilation
+                    xf = yf, xf = yui, xui = yf,
+                    Unit
+            )
+    );
 
     EXPECT_TRUE(translate_verify(irt, simple_ops_test));
     EXPECT_TRUE(translate_verify(irt, assign_ops_test));
     EXPECT_TRUE(translate_verify(irt, cmp_test));
+    EXPECT_TRUE(translate_verify(irt, assign_test));
 }
 
 TEST_F(IRTranslatorTest, compilePtr) {
