@@ -54,11 +54,13 @@ public:
 
     template<typename TdRet, typename ...TdArgs, typename ...Args>
     auto call(dsl::ResidentObjCode<AddrT, TdRet, TdArgs...>& f, Args&&... args) {
-        // todo: check more formally; like in DSLCallable::call
-        using fun_t = dsl::ResidentObjCode<AddrT, TdRet, TdArgs...>;
-        using params_t = typename fun_t::args_t;
-        using args_t = std::tuple< dsl::remove_cvref_t<Args>... >;
-        static_assert(std::is_same_v<params_t, args_t>, "Incorrect arguments!");
+        // Causes strange syntax error.
+//        using fun_t = dsl::ResidentObjCode<AddrT, TdRet, TdArgs...>;
+//        constexpr bool suitable_args = fun_t::validateArgs< std::remove_reference_t<Args> ... >();
+//        static_assert( suitable_args, "Invalid argument types for function call!");
+
+        using fun_t = void( dsl::f_t<TdArgs>... );
+        static_assert( std::is_invocable_v< fun_t, Args... > );
 
         // Send arguments
         f.sendArgs(std::forward<Args>(args)...);

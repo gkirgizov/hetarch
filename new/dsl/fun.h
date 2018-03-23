@@ -132,37 +132,26 @@ struct DSLCallable : CallableBase {
     using ret_t = f_t<TdRet>;
     using args_t = std::tuple<f_t<TdArgs>...>;
 
-    template<typename ...ArgExprs>
+    template<typename ...Args>
     constexpr static bool validateArgs() {
-//        return ( ... && validateArg< TdArgs, ArgExprs, std::index_sequence_for<TdArgs...>{} >() );
-        return ( ... && validateArg<TdArgs, ArgExprs>() );
+//        using fun_t = void( f_t<TdArgs>... );
+//        return std::is_invocable_t< fun_t, f_t<ArgExprs> >;
+        // Fail at first inappropriate argument to provide more information
+        return ( ... && validateArg<f_t<TdArgs>, Args>() );
     }
 
-    template<typename TdArg, typename ArgExpr, std::size_t arg_i = 0>
+    template<typename Param, typename Arg>
     constexpr static bool validateArg() {
-        static_assert(std::is_same_v<i_t<TdArg>, i_t<ArgExpr>>,
-                      "Type mismatch in arguments");
-        // Makes sense to check cv-qualifiers when passing NOT by value
-        // Only Value-like dsl types have cv-qualifiers
-        if constexpr (is_val_v<ArgExpr> && !is_byval_v<TdArg>) {
-            static_assert(!(ArgExpr::const_q && !TdArg::const_q),
-                          "Passing const value as non-const (discards qualifier)!");
-            static_assert(!(ArgExpr::volatile_q && !TdArg::volatile_q),
-                          "Passing volatile value as non-const (discards qualifier)!");
-            // separate rule for non-const ptr to const
-            static_assert(!(is_dsl_ptr_v<TdArg> && ArgExpr::const_pointee_q && !TdArg::const_pointee_q),
-                          "Passing ptr-to-const as ptr-to-non-const (discards qualifier)!");
-        }
+        using fun_t = void(Param);
+        static_assert(std::is_invocable_v< fun_t, Arg >, "Passing argument of invalid type!");
         return true;
     }
 
-    template<typename... ArgExprs
-            , typename = typename std::enable_if_t<
-//                    is_ev_v<ArgExprs...> &&
-                    validateArgs<ArgExprs...>()
-            >
-    >
+    template< typename... ArgExprs >
     inline constexpr auto call(ArgExprs... args) const {
+        static_assert(is_ev_v<ArgExprs...>, "Expected DSL types for DSL function call!");
+        static_assert(validateArgs<f_t<ArgExprs>...>(), "Invalid argument types for function call!");
+
 //        return ECall<TdCallable, ArgExprs...>(
         return makeCall(
                 static_cast<const TdCallable&>(*this),

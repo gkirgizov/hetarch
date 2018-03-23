@@ -41,26 +41,15 @@ bool translate_verify(IRTranslator& irt, const DSLFunction<TdBody, Args...> &f) 
 
 
 TEST_F(IRTranslatorTest, compileDSLCommon) {
-
-//    constexpr std::string_view name2{"some_string"}; // fails!
-//    constexpr std::string_view name = make_bsv("some_string"); // succeeds.
-
-    // test in-dsl takeAddr and deref
-//    Ptr dsl_ptr = tmp.takeAddr();
-//    EDeref derefd = *dsl_ptr;
-//    assert(&tmp == &derefd.x);
-
     DSLFunction empty_test(
             "empty",
             VoidExpr{}
-//            Return()
     );
 
     DSLFunction pass_through(
             "pass_through",
             MakeFunArgs(tmp),
             (tmp, tmp)
-//            Return(tmp)
     );
 
     DSLFunction simple_assign_test(
@@ -73,6 +62,16 @@ TEST_F(IRTranslatorTest, compileDSLCommon) {
             "call_thing",
             MakeFunArgs(x),
             (tmp = pass_through(x), tmp)
+    );
+
+    RawPtr<Var<int>> xi_ptr{};
+    DSLFunction invalid_call_test(
+            "invalid_call",
+            MakeFunArgs(),
+            (
+//                    pass_through(xi_ptr), // this must fail at compilation
+                    Unit
+            )
     );
 
     EXPECT_TRUE(translate_verify(irt, empty_test));
