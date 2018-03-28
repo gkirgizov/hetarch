@@ -41,12 +41,14 @@ template< typename TdArr
         , std::size_t N
         , bool is_const = false
 //        , bool is_volatile = false
-        , typename = typename std::enable_if_t< is_val_v<TdElem> >
 >
 class ArrayBase : public Value< TdArr, std::array<f_t<TdElem>, N>, is_const >
                 , public Named
 {
 public:
+    // actually, class can't be isntantiated if TdElem is not DSL type, so this assert won't be checked ever
+    static_assert(is_val_v<TdElem>, "DSL Array element type must be DSL type!");
+
     template<typename TdChild> using base_t = ArrayBase<TdChild, TdElem, N, is_const>;
 
     using element_t = f_t<TdElem>;

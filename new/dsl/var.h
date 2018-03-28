@@ -21,6 +21,7 @@ struct DSLGlobal : ValueBase {
     const Td x;
     explicit DSLGlobal() = default;
     explicit constexpr DSLGlobal(Td x) : x{x} {}
+//    explicit constexpr DSLGlobal(f_t<Td> x_init) : x{x_init} {}
     IR_TRANSLATABLE
 };
 

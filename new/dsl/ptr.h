@@ -119,5 +119,12 @@ struct ResidentPtr
 };
 
 
+template<typename>
+struct is_dsl_ptr : std::false_type {};
+template< typename TdPtr, typename TdPointee, bool is_const >
+struct is_dsl_ptr< PtrBase<TdPtr, TdPointee, is_const> > : std::true_type {};
+template<typename Td> inline constexpr bool is_dsl_ptr_v = is_dsl_ptr<Td>::value;
+
+
 }
 }

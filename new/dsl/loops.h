@@ -15,7 +15,7 @@ template< typename TdCond, typename TdBody
         , typename = typename std::enable_if_t< is_ev_v<TdCond, TdBody> >
 >
 struct WhileExpr: Expr<f_t<TdBody>> {
-    static_assert(std::is_same_v<bool, i_t<TdCond>>, "Loop cond_exprition must return boolean value!");
+    static_assert(std::is_same_v<bool, i_t<TdCond>>, "Loop condition expression must return boolean value!");
 
     const TdCond cond_expr;
     const TdBody body_expr;
