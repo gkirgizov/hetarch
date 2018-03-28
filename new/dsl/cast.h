@@ -78,7 +78,10 @@ template<typename T> using bool_cast = ECast<Expr<bool>, T>;
 
 template< typename TdTo, typename TdFrom >
 inline constexpr auto Cast(TdFrom x) {
-    if constexpr (std::is_same_v< i_t<TdTo>, i_t<TdFrom> >) {
+    // don't need cast when both are same or both are pointers
+    if constexpr (std::is_same_v< i_t<TdTo>, i_t<TdFrom> >
+                  || (std::is_pointer_v< i_t<TdTo> > && std::is_pointer_v< i_t<TdFrom> >))
+    {
         return x;
     } else {
         return ECast<TdTo, TdFrom>{x};
