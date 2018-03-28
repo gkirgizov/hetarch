@@ -5,7 +5,7 @@
 #include <tuple>
 
 #include "CodeLoader.h"
-#include "IConnection.h"
+#include "conn/IConnection.h"
 #include "MemoryManager.h"
 #include "dsl/dsl_type_traits.h"
 #include "dsl/dsl_base.h"

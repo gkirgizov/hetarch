@@ -3,7 +3,7 @@
 #include <numeric>
 
 #include "supportingClasses.h"
-#include "IConnection.h"
+#include "conn/IConnection.h"
 #include "MemoryManager.h"
 #include "MemResident.h"
 #include "CodeGen.h"

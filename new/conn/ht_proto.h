@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include "addr_typedef.h"
+#include "../addr_typedef.h"
 
 
 //typedef uint16_t addr_t; // temp

@@ -5,8 +5,8 @@
 
 #include "Transmission.h"
 #include "conn_utils.h"
-#include "utils.h"
-#include "addr_typedef.h"
+#include "../utils.h"
+#include "../addr_typedef.h"
 
 
 namespace hetarch {

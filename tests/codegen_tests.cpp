@@ -15,8 +15,8 @@
 #include "../new/CodeLoader.h"
 #include "../new/MemoryManager.h"
 #include "../new/Executor.h"
-#include "../new/TCPConnection.h"
-#include "../new/VCPConnection.h"
+#include "../new/conn/TCPConnection.h"
+#include "../new/conn/VCPConnection.h"
 
 #include "../new/dsl.h"
 

@@ -4,7 +4,7 @@
 #include <array>
 #include <tuple>
 
-#include "../IConnection.h"
+#include "../conn/IConnection.h"
 #include "../MemResident.h"
 
 #include "dsl_type_traits.h"

@@ -4,7 +4,7 @@
 
 #include <boost/format.hpp>
 
-#include "../new/IConnection.h"
+#include "../new/conn/IConnection.h"
 #include "../new/MemoryManager.h"
 
 
