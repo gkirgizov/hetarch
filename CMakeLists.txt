@@ -7,9 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ### LLVM CONFIG ###
 
-#set(MY_TARGET X86)
-#set(MY_HOST X86)
-
 if(${MY_TARGET} MATCHES X86)
     set(TARGET_BITWIDTH 64)
 elseif(${MY_TARGET} MATCHES ARM)
@@ -22,6 +19,25 @@ elseif(${MY_TARGET} MATCHES MSP430)
     set(TARGET_BITWIDTH 16)
 else()
     message(FATAL_ERROR "Unknown Target!")
+endif()
+
+if(MY_HOST MATCHES ARM)
+    set(CMAKE_CROSSCOMPILING True)
+    set(TARGET_TRIPLE arm-linux-gnueabihf)
+    set(CMAKE_SYSTEM_PROCESSOR arm)
+    set(CMAKE_SYSTEM_NAME Linux)
+
+    set(GCC_PREFIX ${TARGET_TRIPLE}-)
+    set(CMAKE_C_COMPILER ${GCC_PREFIX}gcc)
+    set(CMAKE_CXX_COMPILER ${GCC_PREFIX}g++)
+#    set(CMAKE_ASM_COMPILER ${GCC_PREFIX}as)
+
+    # Compiler target options
+    set(SYSROOT /usr/${TARGET_TRIPLE})
+    set(GCC_FLAGS "-march=armv7-a -mfloat-abi=hard -mfpu=neon-vfpv4 --sysroot=${SYSROOT}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${GCC_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GCC_FLAGS}")
+else()
 endif()
 
 # Set needed llvm libs
@@ -37,23 +53,25 @@ add_definitions(-DHT_ENABLE_${MY_TARGET} -DHT_ENABLE_${MY_HOST} -DTARGET=${MY_TA
 add_definitions(-DHETARCH_TARGET_ADDRT=uint${TARGET_BITWIDTH}_t ${MY_PLAFORM_SPECIFIC})
 message(STATUS "Building for Host=${MY_HOST}; for Target=${MY_TARGET} (bitwidth: ${TARGET_BITWIDTH})")
 
+
 # Find LLVM
-# TODO: link llvm statically
+
 if(CMAKE_BUILD_TYPE MATCHES Release)
-    # Default system LLVM should support all targets
-    find_package(LLVM 5.0 REQUIRED)
-    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+#    find_package(LLVM 5.0 REQUIRED)
 else()
-    # Debug LLVM version support needed targets (x86, arm, msp430)
-    set(BASE_DIR /home/hades/projects)
-    #set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
-    #find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
-    set(LLVM_INSTALL_DIR ${BASE_DIR}/llvms/llvm_50/install_dir)
-    set(LLVM_DIR ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
-    find_package(LLVM 5.0 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
-    message(STATUS "Found local LLVM ${LLVM_PACKAGE_VERSION}")
     add_definitions(-DIS_DEBUG)
+    set(CMAKE_BUILD_TYPE Debug)
+    #set(TARGET_TRIPLE x86_64-unknown-linux-gnu)
 endif()
+
+set(BASE_DIR /home/hades/projects)
+#set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
+#find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
+set(LLVM_INSTALL_DIR ${BASE_DIR}/llvms/llvm_50/install_dir_${TARGET_TRIPLE}_${CMAKE_BUILD_TYPE})
+
+set(LLVM_DIR ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
+find_package(LLVM 5.0 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 # Get libnames for linking
@@ -83,14 +101,13 @@ find_package(Threads)
 
 # Set some compiler flags & change linker
 
-#if(CMAKE_BUILD_TYPE MATCHES Debug)
 message(STATUS "using compiler: ${CMAKE_CXX_COMPILER_ID}")
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
     set(LD_OPT "-fuse-ld=lld")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(LD_OPT "-fuse-ld=gold")
 endif()
-#endif()
+
 # need -fpermissive to allow casts which lose precision
 # need -fno-rtti because of LLVM compiled with -D LLVM_ENABLE_RTTI=OFF
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive ${LD_OPT}")
@@ -208,7 +225,8 @@ add_library(temp_target
         new/TCPConnection.cpp
         new/VCPConnection.h
         new/Transmission.h
-        )
+        new/dsl/cast.h
+        new/dsl/to_dsl_trait.h)
 
 
 add_subdirectory(examples)
