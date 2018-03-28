@@ -22,8 +22,6 @@ struct IRTranslatorTest: public ::testing::Test {
 
     IRTranslator irt;
 
-//    static constexpr Var<char> a{'a', make_bsv("char1")};
-//    static constexpr Var<char> b{'b', make_bsv("char2")};
     Var<int> x{69, make_bsv("x")}, y{42, "y"}, tmp{0, "tmp"};
 };
 
@@ -247,11 +245,18 @@ TEST_F(IRTranslatorTest, compileDSLControlFlow) {
             MakeFunArgs(x, y),
             (While(x == zero,
                    x = x - one
-            ), VoidExpr())
+            ), Unit)
+    );
+
+    DSLFunction loop_not_run_test(
+            "",
+            MakeFunArgs(x),
+            While(one == zero, x + one)
     );
 
     EXPECT_TRUE(translate_verify(irt, if_else_test));
     EXPECT_TRUE(translate_verify(irt, while_test));
+    EXPECT_TRUE(translate_verify(irt, loop_not_run_test));
 }
 
 
@@ -280,14 +285,9 @@ auto get_generic_caller = [](const auto& callee) {
 };
 
 
+/* // leave for historical reasons..
 TEST_F(GenericsTest, genericDSLReferenceConsistency) {
-
-//    auto test_glambda = [](auto x, auto y) { return x+y; };
-//    auto test_lambda = [](int x, int y) { return x+y; };
-//    make_dsl_callable_test(test_glambda);
-
     auto test_code_generator = [](auto&& x, auto&& y){
-//        return (x, (x, y));
         return (x, y);
     };
     auto generic_test = make_generic_dsl_fun(test_code_generator);
@@ -295,7 +295,7 @@ TEST_F(GenericsTest, genericDSLReferenceConsistency) {
     auto call_generic_generator = [&](auto&& x, auto&& y){
         return generic_test(x, y);
     };
-    DSLFunction call_generic_fun = make_dsl_fun_from_arg_types<Var<int>, Var<int>>(call_generic_generator);
+    DSLFunction call_generic_fun = make_dsl_fun<Var<int>, Var<int>>(call_generic_generator);
 
     auto dbg_printer1 = [&](const auto& args, const auto& body) {
         std::cerr << std::endl;
@@ -313,7 +313,7 @@ TEST_F(GenericsTest, genericDSLReferenceConsistency) {
     auto& cf1 = call_generic_fun.body.returnee.callee;
     dbg_printer1(cf1.args, cf1.body);
 
-    DSLFunction cf2 = make_dsl_fun_from_arg_types<Var<int>, Var<int>>(test_code_generator);
+    DSLFunction cf2 = make_dsl_fun<Var<int>, Var<int>>(test_code_generator);
     dbg_printer1(cf2.args, cf2.body);
     std::cerr << "...how it must be (same addresses in both lines)." << std::endl;
 
@@ -334,6 +334,7 @@ TEST_F(GenericsTest, genericDSLReferenceConsistency) {
     auto& cf5 = call3.callee;
     dbg_printer1(cf5.args, cf5.body);
 }
+*/
 
 
 TEST_F(GenericsTest, genericDSLFunctions1) {
@@ -366,37 +367,36 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
         };
     };
 
-
-//    constexpr auto dsl_id = make_dsl_fun_from_arg_types< DSLConst<int> >(id_generator);
-    auto dsl_id = make_dsl_fun_from_arg_types< DSLConst<int> >(id_generator);
+    // instantiate some functions
+    auto dsl_id = make_dsl_fun< DSLConst<int> >(id_generator);
     PR_CERR_VAL_TY(dsl_id);
-    auto dsl_fun_max = make_dsl_fun_from_arg_types< Var<int>, Var<int> >(max_code_generator);
+//    auto dsl_fun_max = make_dsl_fun< Var<int>, Var<int> >(max_code_generator);
+    decltype(auto) dsl_fun_max = get_or_make_dsl_fun< Var<int>, Var<int> >(max_code_generator);
     PR_CERR_VAL_TY(dsl_fun_max)
-//    auto ecall2 = generic_dsl_max(Var{10}, Var{2} + Var{3});
-//    PR_CERR_VAL_TY(ecall2)
-    DSLFunction dsl_factorial = make_dsl_fun_from_arg_types< Var<unsigned> >(factorial_gen);
-
-    auto generic_id = make_generic_dsl_fun(id_generator);
-    auto generic_tst = make_generic_dsl_fun(tst_generator);
     auto generic_dsl_max = make_generic_dsl_fun(max_code_generator);
+    DSLFunction dsl_factorial = make_dsl_fun<Var<unsigned> >(factorial_gen);
 
     DSLFunction call_generic_fun{
             "caller_of_generics",
             MakeFunArgs(x, y),
-            generic_dsl_max(x, y) + generic_id(x)
+            generic_dsl_max(x, y) + dsl_id(x)
     };
 
     // specialise generic caller for specific arguments (and correct number of arguments)
-    DSLFunction call_id = make_dsl_fun_from_arg_types<Var<float>>( get_generic_caller(generic_id) );
-    DSLFunction call_max = make_dsl_fun_from_arg_types<Var<int>, Var<int>>( get_generic_caller(generic_dsl_max) );
+    DSLFunction call_max = make_dsl_fun<Var<int>, Var<int>>(get_generic_caller(generic_dsl_max), "call_max");
 
     std::cerr << std::endl << std::endl;
     EXPECT_TRUE(translate_verify(irt, dsl_id));
+    EXPECT_EQ(0, free_repo(dsl_id)) << "dsl fun not from repo can't be deleted from template repo!";
     EXPECT_TRUE(translate_verify(irt, dsl_fun_max));
+    EXPECT_EQ(1, free_repo(dsl_fun_max)) << "but dsl fun from repo can be deleted from template repo!";
+
     EXPECT_TRUE(translate_verify(irt, dsl_factorial));
     EXPECT_TRUE(translate_verify(irt, call_generic_fun));
-    EXPECT_TRUE(translate_verify(irt, call_id));
     EXPECT_TRUE(translate_verify(irt, call_max));
+
+    // try instantiate function with invalid arguments (fail at compile time)
+//    DSLFunction max_for_arrays = make_dsl_fun< Array<Var<int>, 1>, Array<Var<int>, 1> >( max_code_generator );
 }
 
 
@@ -410,17 +410,14 @@ TEST_F(GenericsTest, genericDSLFunctions2) {
         return [&](auto&& x1, auto&&... xs) {
             // Redundant assignments should be optimized out later by LLVm
             return ( (x1 = binary_op(x1, xs)), ... );
-
-//            auto xs_tuple = std::tie(xs...);
-//            Var<unsigned> i{sizeof...(xs)};
         };
     };
 
 //    auto g_reduce_sum = make_generic_dsl_fun(reduce_sum_generator);
-//    DSLFunction call_sum3 = make_dsl_fun_from_arg_types<Var<float>, Var<float>, Var<float>>( get_generic_caller(g_reduce_sum) );
+//    DSLFunction call_sum3 = make_dsl_fun<Var<float>, Var<float>, Var<float>>( get_generic_caller(g_reduce_sum) );
 //    EXPECT_TRUE(translate_verify(irt, call_sum3));
 
-    DSLFunction sum3 = make_dsl_fun_from_arg_types<
+    DSLFunction sum3 = make_dsl_fun<
             Var<float>, Var<float>, Var<int>
     >(reduce_sum_generator);
 
@@ -429,7 +426,7 @@ TEST_F(GenericsTest, genericDSLFunctions2) {
 
     auto add2_gen = [](auto&& x1, auto&& x2) { return x1 + x2; };
     auto sum_reducer_generator_v2 = get_reducer(add2_gen);
-    DSLFunction sum3_v2 = make_dsl_fun_from_arg_types<
+    DSLFunction sum3_v2 = make_dsl_fun<
             Var<float>, Var<float>, Var<int>
     >(sum_reducer_generator_v2);
 
@@ -438,7 +435,7 @@ TEST_F(GenericsTest, genericDSLFunctions2) {
 
     // may not be easily optimised; so might be not quite effective due to extra assignments from generic reducer
     auto max_vararg_generator = get_reducer(max_code_generator);
-    DSLFunction max3 = make_dsl_fun_from_arg_types<
+    DSLFunction max3 = make_dsl_fun<
             Var<float>, Var<float>, Var<float>
     >(max_vararg_generator);
 
