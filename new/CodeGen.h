@@ -87,12 +87,5 @@ private:
     static const llvm::PassRegistry* initPasses();
 };
 
-
-// test: linking pack
-// test: compilation pack
-//  subtests: different targets
-//  subtests: llvm fuzzer?
-// test: symbols pack
-
 }
 

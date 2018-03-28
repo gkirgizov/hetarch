@@ -1,3 +1,16 @@
+
+MACRO(HEADER_DIRS return_list cur_dir)
+#    FILE(GLOB_RECURSE new_list FOLLOW_SYMLINKS RELATIVE ${cur_dir} *.h)
+    FILE(GLOB_RECURSE new_list FOLLOW_SYMLINKS *.h)
+    SET(dir_list "")
+    FOREACH(file_path ${new_list})
+        GET_FILENAME_COMPONENT(dir_path ${file_path} PATH)
+        LIST(APPEND dir_list ${dir_path})
+    ENDFOREACH()
+    LIST(REMOVE_DUPLICATES dir_list)
+    SET(${return_list} ${dir_list})
+ENDMACRO()
+
 #set(llvm_libs_target_x86
 #        LLVMX86Disassembler
 #        LLVMX86AsmParser
@@ -34,12 +47,20 @@ add_executable(gtests2 main.cpp
         )
 target_link_libraries(gtests2 gtest ${llvm_libs_base} ${llvm_libs_more})
 target_compile_options(gtests2 PUBLIC "-fno-rtti")
+#set(STM32F4_INCLUDE_DIRS
+#        "${CMAKE_CURRENT_LIST_DIR}/stm32f4/Drivers/CMSIS/Include"
+#        "${CMAKE_CURRENT_LIST_DIR}/stm32f4/Drivers/CMSIS/Device/ST/STM32F4xx/Include"
+#        )
+#message(STATUS "stm32f4 include dirs: ${STM32F4_INCLUDE_DIRS}")
+#target_include_directories(gtests2 PUBLIC ${STM32F4_INCLUDE_DIRS})
+#target_compile_options(gtests2 PUBLIC "-Wno-register")
+
 
 add_executable(scratch main.cpp
         test_utils.cpp
         scratch_tests.cpp
 #        sfinae_tests.cpp
-        scratch2.cpp
+        pid_ctrl_example.cpp
         )
 target_link_libraries(scratch gtest ${llvm_libs_base})
 target_compile_options(scratch PUBLIC "-fno-rtti")
