@@ -249,8 +249,8 @@ public:
     template<typename DSLGenerator, typename ...Args>
     auto generic_caller(DSLGenerator&& dsl_generator, Args... args) {
         // Make function from generator
-//        DSLFunction dsl_fun = make_dsl_fun_from_arg_types(dsl_generator, dsl_args...);
-        DSLFunction dsl_fun = make_dsl_fun_from_arg_types< to_dsl_t<std::remove_reference_t<decltype(args)>>... >(dsl_generator);
+//        DSLFunction dsl_fun = make_dsl_fun(dsl_generator, dsl_args...);
+        DSLFunction dsl_fun = make_dsl_fun<to_dsl_t<std::remove_reference_t<decltype(args)>>...>(dsl_generator);
 
         // Translate, compile and load it
         IRModule translated = irt.translate(dsl_fun);
@@ -292,7 +292,7 @@ public:
 
     template<typename DSLGen, typename ...Args>
     auto generic_loader(DSLGen&& dsl_gen, Args... args) {
-        DSLFunction dsl_fun = make_dsl_fun_from_arg_types< to_dsl_t<std::remove_reference_t<decltype(args)>>... >(dsl_gen);
+        DSLFunction dsl_fun = make_dsl_fun<to_dsl_t<std::remove_reference_t<decltype(args)>>...>(dsl_gen);
         return simple_loader(dsl_fun, true);
     };
 };
@@ -371,7 +371,7 @@ TEST_F(CodeLoaderTest, callDslFromDsl) {
     auto max_dsl_generator = [](auto&& x, auto&& y) {
         return If(x > y, x, y);
     };
-    DSLFunction dsl_max = make_dsl_fun_from_arg_types<Var<val_t>, Var<val_t>>(max_dsl_generator);
+    DSLFunction dsl_max = make_dsl_fun<Var<val_t>, Var<val_t>>(max_dsl_generator);
 //    auto resident_max = simple_loader(dsl_max);
 
     auto max4_dsl_generator = [&](auto x1, auto x2, auto x3, auto x4) {
@@ -391,13 +391,13 @@ TEST_F(CodeLoaderTest, callResidentFromDsl) {
     auto max_dsl_generator = [](auto&& x, auto&& y) {
         return If(x > y, x, y);
     };
-    DSLFunction dsl_max = make_dsl_fun_from_arg_types<Var<val_t>, Var<val_t>>(max_dsl_generator);
+    DSLFunction dsl_max = make_dsl_fun<Var<val_t>, Var<val_t>>(max_dsl_generator);
     auto resident_max = simple_loader(dsl_max);
 
     auto max4_dsl_generator = [&](auto x1, auto x2, auto x3, auto x4) {
         return resident_max(resident_max(x1, x2), resident_max(x3, x4));
     };
-//    DSLFunction dsl_max4 = make_dsl_fun_from_arg_types<Var<addr_t>, Var<addr_t>, Var<addr_t>, Var<addr_t>>(max4_dsl_generator);
+//    DSLFunction dsl_max4 = make_dsl_fun<Var<addr_t>, Var<addr_t>, Var<addr_t>, Var<addr_t>>(max4_dsl_generator);
 //    auto resident_max4 = simple_loader(dsl_max4);
 
     val_t x1{22}, x2{11}, x3{42}, x4{69};
@@ -412,7 +412,7 @@ TEST_F(CodeLoaderTest, loadAndCall2) {
     auto max_dsl_generator = [](auto&& x, auto&& y) {
         return If(x > y, x, y);
     };
-    DSLFunction dsl_max = make_dsl_fun_from_arg_types<Var<addr_t>, Var<addr_t>>(max_dsl_generator);
+    DSLFunction dsl_max = make_dsl_fun<Var<addr_t>, Var<addr_t>>(max_dsl_generator);
     auto resident_max = simple_loader(dsl_max);
 
     // Call it with some args
@@ -435,7 +435,7 @@ TEST_F(CodeLoaderTest, readGPIO) {
 //    DSLGlobal gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
 //    auto remoteGCR = CodeLoader::getLoadedResident(gcr, gpio_conf_reg_addr, conn, memMgr);
     // variant 2
-    DSLGlobal gcr_ptr{ RawPtr<Var<const volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
+    DSLGlobal gcr_ptr{ RawPtr<Var<volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
     auto remoteGCR = CodeLoader::load(gcr_ptr, conn, memMgr);
 
     std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << remoteGCR.addr << std::dec << std::endl;
@@ -447,7 +447,7 @@ TEST_F(CodeLoaderTest, readGPIO) {
     auto gpio_reader_gen = [&]{
         uint32_t bit = 0x1;
         Array<Var<uint32_t>, 5> reg_data{};
-        RawPtr<Var<uint32_t>> tmp_ptr{};
+        RawPtr<Var<volatile uint32_t>> tmp_ptr{};
         return (
                 tmp_ptr = remoteGCR + DSLConst(0x0c20 >> 2), reg_data[DSLConst(0)] = *tmp_ptr,
                 *tmp_ptr |= DSLConst(bit << 8),              reg_data[DSLConst(1)] = *tmp_ptr,
@@ -505,6 +505,7 @@ typedef struct
 TEST_F(CodeLoaderTest, stm32f4_LED) {
     const auto led_green = GPIO_PIN_13;
     const auto led_red = GPIO_PIN_14;
+    const decltype(led_green) both_leds = led_red | led_green;
 
     const auto gpiog_odr_addr = GPIOG_BASE + offsetof(device::GPIO_TypeDef, ODR);
 //    DSLGlobal { RawPtr<Var<volatile uint32_t>>{gpiog_bsrr, "gpiog_bsrr"} };
@@ -517,12 +518,16 @@ TEST_F(CodeLoaderTest, stm32f4_LED) {
         return (*gpiog_odr_ptr ^= gpio_pin, Unit);
     };
 
+    // try just call with parameter
     auto fr = generic_loader(toggle_gpiog_pin, led_green);
-
-    const decltype(led_green) both_leds = led_red | led_green;
     exec.call(fr, both_leds);
     usleep(1000 * 1000); // sleep for N microseconds
     exec.call(fr, both_leds);
+
+    // try schedule
+    auto toggle_green_led = [&]{ return toggle_gpiog_pin(DSLConst{led_green}); };
+    auto fr2 = generic_loader(toggle_green_led);
+    EXPECT_TRUE(conn.schedule(fr2.callAddr, 2000));
 }
 #endif
 

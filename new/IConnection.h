@@ -21,6 +21,10 @@ public:
     virtual AddrT read(AddrT addr, AddrT size, uint8_t* buf) = 0;
 
     virtual bool call(AddrT addr) = 0;
+
+    virtual bool schedule(AddrT addr, AddrT ms_delay) = 0;
+
+    virtual ~IConnection() = default;
 };
 
 
@@ -127,6 +131,30 @@ public:
                       << std::endl;
         }
         return res != ErrCall;
+    }
+
+    bool schedule(AddrT addr, AddrT ms_delay) override {
+        if constexpr (utils::is_debug) {
+            std::cerr << "conn::schedule:"
+                      << std::hex << " addr 0x" << addr
+                      << std::dec << " ms " << ms_delay
+                      << std::dec << std::endl;
+        }
+
+        std::vector<uint8_t> vec;
+        detail::vecAppend(vec, static_cast<action_int_t>(ActionSchedule));
+        cmd_schedule_t cmd = { addr, ms_delay };
+        detail::vecAppend(vec, cmd);
+
+        tr.send(vec);
+        auto response = tr.recv();
+        auto res = detail::vecRead<cmd_ret_code_t>(vec);
+        if constexpr (utils::is_debug) {
+            std::cerr << "conn::schedule: "
+                      << (res ? "ok." : "error!")
+                      << std::endl;
+        }
+        return res;
     }
 
     AddrT getBuffer(uint8_t idx = 0, AddrT size = 1024) {

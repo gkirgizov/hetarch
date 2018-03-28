@@ -5,9 +5,6 @@
 #include "ht_proto.h"
 
 
-using asio::ip::tcp;
-
-
 namespace hetarch {
 namespace conn {
 
@@ -15,7 +12,7 @@ namespace conn {
 namespace detail {
 
 
-std::size_t readBuffer(tcp::socket &socket, uint8_t* out_buf, std::size_t size) {
+std::size_t readBuffer(asio::ip::tcp::socket &socket, uint8_t* out_buf, std::size_t size) {
     const std::size_t buf_size = 512;
     size_t collected = 0;
     std::vector<uint8_t> buf(std::min(buf_size, size));
@@ -56,7 +53,7 @@ std::size_t readBuffer(tcp::socket &socket, uint8_t* out_buf, std::size_t size) 
 }
 
 
-std::vector<uint8_t> readBuffer(tcp::socket &socket) {
+std::vector<uint8_t> readBuffer(asio::ip::tcp::socket &socket) {
     size_t expected = 0;
     std::vector<uint8_t> collected;
     std::vector<uint8_t> buf;
@@ -116,7 +113,7 @@ std::vector<uint8_t> readBuffer(tcp::socket &socket) {
     return collected;
 }
 
-std::size_t writeBuffer(tcp::socket &socket, const uint8_t* buf, std::size_t size) {
+std::size_t writeBuffer(asio::ip::tcp::socket &socket, const uint8_t* buf, std::size_t size) {
     std::vector<uint8_t> dataToSend;
 
     msg_header_t cmd_header = { static_cast<addr_t>(size) };

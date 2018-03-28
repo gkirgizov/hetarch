@@ -19,6 +19,7 @@ typedef enum {
     ActionWrite,
     ActionCall,
     ActionCall2,
+    ActionSchedule,
     ActionAddrMmap = 21
 } action_t;
 
@@ -64,6 +65,11 @@ typedef struct {
     addr_t x1;
     addr_t x2;
 } cmd_call2_t;
+
+typedef struct {
+    addr_t addr;
+    uint32_t ms_delay;
+} cmd_schedule_t;
 
 typedef struct {
     addr_t addr;
