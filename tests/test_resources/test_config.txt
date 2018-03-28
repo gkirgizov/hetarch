@@ -1,7 +1,15 @@
-armv7a-unknown-linux-gnu
-192.168.0.102
-13334
+thumbv7em-none-eabi
+cortex-m4
+none
+/dev/ttyACM0
 
 x86_64-unknown-linux-gnu
+generic
 localhost
 13334
+
+armv7a-unknown-linux-gnu
+generic
+192.168.0.103
+13334
+
