@@ -414,10 +414,10 @@ private:
         // todo: failing at assert(NameRef.find_first_of(0) == StringRef::npos && "Null bytes are not allowed in names");
 //        arg->setName(name);
 
-        if constexpr (is_byref_v<TdArg>) {
+//        if constexpr (is_byref_v<TdArg>) {
             // todo: get sizeof in target platform
-            arg->addAttr(llvm::Attribute::getWithDereferenceableBytes(context, sizeof(i_t<TdArg>)));
-        }
+//            arg->addAttr(llvm::Attribute::getWithDereferenceableBytes(context, sizeof(i_t<TdArg>)));
+//        }
         // Now allocate space on stack for argument and store actual Value arg represents (as Clang does)
         auto arg_addr = allocate(arg->getType(), dsl_arg.name());
         cur_builder->CreateStore(arg, arg_addr, dsl_arg.volatile_q);
@@ -438,7 +438,7 @@ public:
     void accept(const IfExpr<TdCond, TdThen, TdElse> &e) {
         llvm::BasicBlock* true_block = llvm::BasicBlock::Create(context, "true_block", frame->fun);
         llvm::BasicBlock* false_block = llvm::BasicBlock::Create(context, "false_block", frame->fun);
-        llvm::BasicBlock* after_block = llvm::BasicBlock::Create(context, "", frame->fun);
+        llvm::BasicBlock* after_block = llvm::BasicBlock::Create(context, "after_if", frame->fun);
 
         // Create temp value to hold result of the whole expr depending on branch
         using T = typename IfExpr<TdCond, TdThen, TdElse>::type;
@@ -468,7 +468,12 @@ public:
     void accept(const WhileExpr<TdCond, TdBody> &e) {
         llvm::BasicBlock* cond_block = llvm::BasicBlock::Create(context, "cond_block", frame->fun);
         llvm::BasicBlock* loop_block = llvm::BasicBlock::Create(context, "loop_block", frame->fun);
-        llvm::BasicBlock* after_block = llvm::BasicBlock::Create(context, "", frame->fun);
+        llvm::BasicBlock* after_block = llvm::BasicBlock::Create(context, "after_loop", frame->fun);
+
+        // Even if loop isn't run it will return sane (default) value
+        using T = typename WhileExpr<TdCond, TdBody>::type;
+        auto default_res = llvm_map.get_const(T{});
+        auto result_var = allocate(llvm_map.get_type<T>(), default_res, false, "loop_res");
 
         cur_builder->CreateBr(cond_block);
         cur_builder->SetInsertPoint(cond_block);
@@ -478,11 +483,12 @@ public:
 
         cur_builder->SetInsertPoint(loop_block);
         e.body_expr.toIR(*this);
-        llvm::Value* res = pop_val();
+        cur_builder->CreateStore(pop_val(), result_var);
         cur_builder->CreateBr(cond_block);
 
         cur_builder->SetInsertPoint(after_block);
-        push_val(res);
+        llvm::Value* result = cur_builder->CreateLoad(result_var);
+        push_val(result);
     }
 
     template<typename Td>
@@ -585,7 +591,7 @@ private:
     template<typename TdArg, typename ArgExpr>
     llvm::Value* eval_func_arg(const ArgExpr& e) {
         e.toIR(*this);
-        if constexpr (is_byval_v<TdArg>) {
+        if constexpr (!is_dsl_ptr_v<TdArg>) {
             return pop_val();
         } else if constexpr (is_val_v<ArgExpr>) {
             return pop_addr().first;
