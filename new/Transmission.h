@@ -26,6 +26,8 @@ public:
     inline AddrT send(const std::array<uint8_t, N>& buf) {
         return sendImpl(buf.data(), static_cast<AddrT>(buf.size()));
     };
+
+    virtual ~ITransmission() = default;
 };
 
 
