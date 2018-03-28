@@ -5,7 +5,7 @@
 #include <boost/format.hpp>
 
 #include "../new/conn/IConnection.h"
-#include "../new/MemoryManager.h"
+#include "../new/MemManager.h"
 
 
 namespace hetarch {

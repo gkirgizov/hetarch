@@ -4,7 +4,7 @@
 #include <string.h>
 #include <sys/mman.h>
 
-#include "Transmission.h"
+#include "ConnImplBase.h"
 #include "ht_proto.h"
 #include "../utils.h"
 

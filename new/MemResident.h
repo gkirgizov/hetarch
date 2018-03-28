@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include "MemoryManager.h"
+#include "MemManager.h"
 
 namespace hetarch {
 

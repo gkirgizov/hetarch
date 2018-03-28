@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "../new/MemoryManager.h"
+#include "../new/MemManager.h"
 #include "../new/MemResident.h"
 //
 #include "mocks.h"

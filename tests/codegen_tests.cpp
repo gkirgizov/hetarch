@@ -13,9 +13,9 @@
 #include "../new/supportingClasses.h"
 #include "../new/CodeGen.h"
 #include "../new/CodeLoader.h"
-#include "../new/MemoryManager.h"
+#include "../new/MemManager.h"
 #include "../new/Executor.h"
-#include "../new/conn/TCPConnection.h"
+#include "../new/conn/TCPConnImpl.h"
 #include "../new/conn/SerialConnImpl.h"
 
 #include "../new/dsl.h"

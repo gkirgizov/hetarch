@@ -3,7 +3,7 @@
 #STRING(REPLACE "/M-fno-rtti" "" TMP_FLAGS ${TMP_FLAGS})
 #set_source_files_properties(localLoader.cpp COMPILE_FLAGS ${TMP_FLAGS})
 add_executable(localLoader localLoader.cpp
-        ../new/conn/TCPConnection.cpp ../new/conn/conn_utils.h)
+        ../new/conn/TCPConnImpl.cpp ../new/conn/conn_utils.h)
 target_link_libraries(localLoader ${CMAKE_THREAD_LIBS_INIT})
 #set_target_properties(localLoader.cpp PROPERTIES COMPILE_FLAGS ${BASE_CXX_FLAGS} )
 

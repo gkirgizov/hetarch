@@ -9,7 +9,7 @@
 #include <iostream>
 #include <string>
 
-#include "Transmission.h"
+#include "ConnImplBase.h"
 #include "ht_proto.h"
 
 #define passert(boolean, error_str) \

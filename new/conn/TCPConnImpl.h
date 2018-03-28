@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <asio.hpp>
 
-#include "Transmission.h"
+#include "ConnImplBase.h"
 #include "conn_utils.h"
 #include "../utils.h"
 #include "../addr_typedef.h"

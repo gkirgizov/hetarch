@@ -10,7 +10,7 @@
 #include <asio.hpp>
 #include <cxxopts.hpp>
 
-#include "../new/conn/TCPConnection.h"
+#include "../new/conn/TCPConnImpl.h"
 #include "../new/conn/conn_utils.h"
 #include "../new/conn/ht_proto.h"
 

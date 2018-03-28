@@ -6,7 +6,7 @@
 
 #include "CodeLoader.h"
 #include "conn/IConnection.h"
-#include "MemoryManager.h"
+#include "MemManager.h"
 #include "dsl/dsl_type_traits.h"
 #include "dsl/dsl_base.h"
 #include "dsl/dsl_meta.h"

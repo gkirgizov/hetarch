@@ -4,7 +4,7 @@
 
 #include "supportingClasses.h"
 #include "conn/IConnection.h"
-#include "MemoryManager.h"
+#include "MemManager.h"
 #include "MemResident.h"
 #include "CodeGen.h"
 

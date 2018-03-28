@@ -195,7 +195,7 @@ target_sources(hetarch_trik
 add_library(temp_target
         tests/test_code/test_code.cpp
         new/conn/IConnection.h
-        new/MemoryManager.h
+        new/MemManager.h
         new/MemResident.h
         new/supportingClasses.h
         new/CodeLoader.h
@@ -221,10 +221,10 @@ add_library(temp_target
         new/dsl/value.h
         new/Executor.h
         new/addr_typedef.h
-        new/conn/TCPConnection.h
-        new/conn/TCPConnection.cpp
+        new/conn/TCPConnImpl.h
+        new/conn/TCPConnImpl.cpp
         new/conn/SerialConnImpl.h
-        new/conn/Transmission.h
+        new/conn/ConnImplBase.h
         new/dsl/cast.h
         new/dsl/to_dsl_trait.h)
 
