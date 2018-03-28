@@ -19,9 +19,8 @@ namespace hetarch {
 namespace conn {
 
 
-/// Virtual Com Port Connection
 template<typename AddrT>
-class VCPConnection : public ITransmission<AddrT> {
+class SerialConnImpl: public ConnImplBase<AddrT> {
     int fd = -1;
 
 	static int init(const char* device, speed_t baud_rate = B115200) {
@@ -51,10 +50,10 @@ class VCPConnection : public ITransmission<AddrT> {
     }
 
 public:
-    explicit VCPConnection(const char* device, speed_t baud_rate = B115200)
+    explicit SerialConnImpl(const char* device, speed_t baud_rate = B115200)
 			: fd{init(device, baud_rate)} {}
 
-    ~VCPConnection() {
+    ~SerialConnImpl() {
 		if (fd > 0) {
 			tcdrain(fd);
 			close(fd);

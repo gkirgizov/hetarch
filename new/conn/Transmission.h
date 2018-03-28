@@ -8,7 +8,7 @@ namespace conn {
 
 
 template<typename AddrT>
-class ITransmission {
+class ConnImplBase {
 //    virtual AddrT recvImpl(uint8_t* buf) = 0;
     virtual AddrT sendImpl(const uint8_t* buf, AddrT size) = 0;
 
@@ -27,7 +27,7 @@ public:
         return sendImpl(buf.data(), static_cast<AddrT>(buf.size()));
     };
 
-    virtual ~ITransmission() = default;
+    virtual ~ConnImplBase() = default;
 };
 
 

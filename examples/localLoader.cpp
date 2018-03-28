@@ -58,7 +58,7 @@ void assertMemAccess(ExecutableBuffer& execBuf, addr_t addr, addr_t size = 0) {
     assert(addr + size <= buf_addr + buf_size);
 }
 
-bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
+bool handleRequest(TCPConnImpl<addr_t>& tr, ExecutableBuffer &execBuf) {
     auto collected = tr.recv();
 
     if (!collected.size()) {
@@ -215,7 +215,7 @@ bool handleRequest(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
     return true;
 }
 
-void handleClientConnection(TCPTrans<addr_t>& tr, ExecutableBuffer &execBuf) {
+void handleClientConnection(TCPConnImpl<addr_t>& tr, ExecutableBuffer &execBuf) {
     try {
         while (handleRequest(tr, execBuf));
     }
@@ -238,7 +238,7 @@ void runServer(ExecutableBuffer *buf, uint16_t port) {
         {
             tcp::socket socket{io_service};
             acceptor.accept(socket);
-            TCPTrans<addr_t> tr{std::move(socket)};
+            TCPConnImpl<addr_t> tr{std::move(socket)};
             handleClientConnection(tr, *buf);
         }
     }

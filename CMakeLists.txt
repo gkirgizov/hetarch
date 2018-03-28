@@ -223,7 +223,7 @@ add_library(temp_target
         new/addr_typedef.h
         new/conn/TCPConnection.h
         new/conn/TCPConnection.cpp
-        new/conn/VCPConnection.h
+        new/conn/SerialConnImpl.h
         new/conn/Transmission.h
         new/dsl/cast.h
         new/dsl/to_dsl_trait.h)

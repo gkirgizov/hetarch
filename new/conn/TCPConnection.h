@@ -24,7 +24,7 @@ std::size_t writeBuffer(asio::ip::tcp::socket &socket, const uint8_t* buf, std::
 
 
 template<typename AddrT = addr_t>
-class TCPTrans: public ITransmission<AddrT> {
+class TCPConnImpl : public ConnImplBase<AddrT> {
     asio::ip::tcp::socket socket;
 
     static auto get_socket(const std::string &host, uint16_t port) {
@@ -40,8 +40,8 @@ class TCPTrans: public ITransmission<AddrT> {
     }
 
 public:
-    TCPTrans(const std::string &host, uint16_t port) : socket{get_socket(host, port)} {}
-    explicit TCPTrans(asio::ip::tcp::socket socket) : socket{std::move(socket)} {}
+    TCPConnImpl(const std::string &host, uint16_t port) : socket{get_socket(host, port)} {}
+    explicit TCPConnImpl(asio::ip::tcp::socket socket) : socket{std::move(socket)} {}
 
     void close() {
         socket.shutdown(asio::ip::tcp::socket::shutdown_both);

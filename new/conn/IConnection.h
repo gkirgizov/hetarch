@@ -29,10 +29,10 @@ public:
 
 
 template<typename AddrT>
-class CmdProtocol : public IConnection<AddrT> {
-    ITransmission<AddrT>& tr;
+class Connection : public IConnection<AddrT> {
+    ConnImplBase<AddrT>& tr;
 public:
-    explicit CmdProtocol(ITransmission<AddrT>& tr) : tr{tr} {}
+    explicit Connection(ConnImplBase<AddrT>& tr) : tr{tr} {}
 
     bool echo(AddrT size, const uint8_t* in_buf, uint8_t* out_buf) {
         if constexpr (utils::is_debug) {

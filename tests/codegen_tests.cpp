@@ -16,7 +16,7 @@
 #include "../new/MemoryManager.h"
 #include "../new/Executor.h"
 #include "../new/conn/TCPConnection.h"
-#include "../new/conn/VCPConnection.h"
+#include "../new/conn/SerialConnImpl.h"
 
 #include "../new/dsl.h"
 
@@ -200,9 +200,9 @@ public:
             , irt{config.is_thumb}
             , ctx{irt.getContext()}
 #ifdef HT_ENABLE_STM32
-            , tr{new conn::VCPConnection<addr_t>{config.port.c_str()}}
+            , tr{new conn::SerialConnImpl<addr_t>{config.port.c_str()}}
 #else
-            , tr{new conn::TCPTrans<addr_t>{ config.host, static_cast<uint16_t>(std::stoul(config.port)) }}
+            , tr{new conn::TCPConnImpl<addr_t>{ config.host, static_cast<uint16_t>(std::stoul(config.port)) }}
 #endif
             , conn{*tr}
             , echo_pretest{conn.echo("give me echo")}
@@ -230,8 +230,8 @@ public:
     IRTranslator irt;
     LLVMContext& ctx;
 
-    std::unique_ptr< conn::ITransmission<addr_t> > tr;
-    conn::CmdProtocol<addr_t> conn;
+    std::unique_ptr< conn::ConnImplBase<addr_t> > tr;
+    conn::Connection<addr_t> conn;
     const bool echo_pretest;
 
     const MemRegion<addr_t> all_mem;
