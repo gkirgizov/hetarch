@@ -15,6 +15,8 @@
 #include "../new/CodeLoader.h"
 #include "../new/MemManager.h"
 #include "../new/Executor.h"
+#include "../new/conn/IConnection.h"
+#include "../new/conn/PosixConn.h"
 #include "../new/conn/TCPConnImpl.h"
 #include "../new/conn/SerialConnImpl.h"
 
@@ -226,11 +228,10 @@ public:
             , irt{config.is_thumb}
             , ctx{irt.getContext()}
 #ifdef HT_ENABLE_STM32
-            , tr{new conn::SerialConnImpl<addr_t>{config.port.c_str()}}
+            , conn{new conn::SerialConnImpl<addr_t>{config.port.c_str()}}
 #else
-            , tr{new conn::TCPConnImpl<addr_t>{ config.host, static_cast<uint16_t>(std::stoul(config.port)) }}
+            , conn{new conn::TCPConnImpl<addr_t>{ config.host, static_cast<uint16_t>(std::stoul(config.port)) }}
 #endif
-            , conn{*tr}
             , echo_pretest{conn.echo("give me echo")}
             , all_mem{conn.getBuffer(0), 1024, mem::MemType::ReadWrite}
             , memMgr{all_mem}
@@ -256,8 +257,7 @@ public:
     IRTranslator irt;
     LLVMContext& ctx;
 
-    std::unique_ptr< conn::ConnImplBase<addr_t> > tr;
-    conn::Connection<addr_t> conn;
+    conn::PosixConn<addr_t> conn;
     const bool echo_pretest;
 
     const MemRegion<addr_t> all_mem;

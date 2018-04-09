@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <string.h>
-#include <sys/mman.h>
+#include <memory>
 
 #include "ConnImplBase.h"
 #include "ht_proto.h"
@@ -24,15 +24,20 @@ public:
 
     virtual bool schedule(AddrT addr, AddrT ms_delay) = 0;
 
+    // todo: change interface
+    virtual AddrT getBuffer(uint8_t idx = 0, AddrT size = 1024) = 0;
+
     virtual ~IConnection() = default;
 };
 
 
 template<typename AddrT>
 class Connection : public IConnection<AddrT> {
-    ConnImplBase<AddrT>& tr;
+protected:
+    std::unique_ptr< ConnImplBase<AddrT> > tr;
 public:
-    explicit Connection(ConnImplBase<AddrT>& tr) : tr{tr} {}
+    explicit Connection(std::unique_ptr< ConnImplBase<AddrT> > tr) : tr{std::move(tr)} {}
+    explicit Connection(ConnImplBase<AddrT> *tr) : tr{tr} {}
 
     bool echo(AddrT size, const uint8_t* in_buf, uint8_t* out_buf) {
         if constexpr (utils::is_debug) {
@@ -45,12 +50,12 @@ public:
         detail::vecAppend(vec, static_cast<action_int_t>(ActionEcho));
         vec.insert(vec.end(), in_buf, in_buf + size);
 
-        tr.send(vec);
-        auto response = tr.recv();
+        tr->send(vec);
+        auto response = tr->recv();
         assert(response.size() == size);
         memcpy(out_buf, response.data(), size);
 
-//        tr.recv(size, out_buf);
+//        tr->recv(size, out_buf);
         return strncmp((const char*)in_buf, (const char*)out_buf, size) == 0;
     }
     bool echo(const char* msg) {
@@ -76,8 +81,8 @@ public:
         detail::vecAppend(vec, cmd);
         vec.insert(vec.end(), buf, buf + size);
 
-        tr.send(vec);
-        auto response = tr.recv();
+        tr->send(vec);
+        auto response = tr->recv();
         auto written = detail::vecRead<AddrT>(response);
         if constexpr (utils::is_debug) {
             std::cerr << "conn::write:" << " returned: written " << written << std::endl;
@@ -98,8 +103,8 @@ public:
         cmd_read_t cmd = { addr, size };
         detail::vecAppend(vec, cmd);
 
-        tr.send(vec);
-        auto response = tr.recv();
+        tr->send(vec);
+        auto response = tr->recv();
         if constexpr (utils::is_debug) {
             std::cerr << "conn::read:"
                       << " got response: size " << response.size()
@@ -122,8 +127,8 @@ public:
         cmd_call_t cmd = { addr };
         detail::vecAppend(vec, cmd);
 
-        tr.send(vec);
-        auto response = tr.recv();
+        tr->send(vec);
+        auto response = tr->recv();
         auto res = detail::vecRead<cmd_ret_code_t>(vec);
         if constexpr (utils::is_debug) {
             std::cerr << "conn::call: "
@@ -146,8 +151,8 @@ public:
         cmd_schedule_t cmd = { addr, ms_delay };
         detail::vecAppend(vec, cmd);
 
-        tr.send(vec);
-        auto response = tr.recv();
+        tr->send(vec);
+        auto response = tr->recv();
         auto res = detail::vecRead<cmd_ret_code_t>(vec);
         if constexpr (utils::is_debug) {
             std::cerr << "conn::schedule: "
@@ -157,7 +162,7 @@ public:
         return res;
     }
 
-    AddrT getBuffer(uint8_t idx = 0, AddrT size = 1024) {
+    AddrT getBuffer(uint8_t idx = 0, AddrT size = 1024) override {
         if constexpr (utils::is_debug) {
             std::cerr << "conn::getBuffer:"
                       << " idx " << static_cast<unsigned>(idx)
@@ -170,8 +175,8 @@ public:
         cmd_get_buffer_t cmd = { idx, size };
         detail::vecAppend(vec, cmd);
 
-        tr.send(vec);
-        auto response = tr.recv();
+        tr->send(vec);
+        auto response = tr->recv();
         auto addr = detail::vecRead<AddrT>(response);
         if constexpr (utils::is_debug) {
             std::cerr << std::hex << " got addr 0x" << addr
@@ -179,30 +184,6 @@ public:
                       << std::dec << std::endl;
         }
         return addr;
-    }
-
-    AddrT mmap(AddrT addr, AddrT prot = PROT_READ | PROT_WRITE) {
-        if constexpr (utils::is_debug) {
-            std::cerr << "conn::mmap:" << std::hex << " addr 0x" << addr;
-        }
-
-        std::vector<uint8_t> vec;
-        detail::vecAppend(vec, static_cast<action_int_t>(ActionAddrMmap));
-        cmd_mmap_t cmd = { addr, prot };
-        detail::vecAppend(vec, cmd);
-
-        tr.send(vec);
-        auto response = tr.recv();
-        auto mmapped = detail::vecRead(response);
-
-        if constexpr (utils::is_debug) {
-            std::cerr << std::hex << " mmapped to addr 0x" << mmapped;
-            if (!mmapped) { std::cerr << " (failed) "; }
-            std::cerr << std::dec << std::endl;
-        }
-
-        return mmapped;
-
     }
 
     AddrT call2(AddrT addr, AddrT x1, AddrT x2) {
@@ -218,8 +199,8 @@ public:
         cmd_call2_t cmd = { addr, x1, x2 };
         detail::vecAppend(vec, cmd);
 
-        tr.send(vec);
-        auto response = tr.recv();
+        tr->send(vec);
+        auto response = tr->recv();
         auto res = detail::vecRead<AddrT>(response);
         if constexpr (utils::is_debug) {
             std::cerr << "conn::call2: returned: " << std::dec << res << std::endl;

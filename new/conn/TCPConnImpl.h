@@ -28,15 +28,15 @@ class TCPConnImpl : public ConnImplBase<AddrT> {
     asio::ip::tcp::socket socket;
 
     static auto get_socket(const std::string &host, uint16_t port) {
-        asio::io_service io_service;
+        auto io_service = new asio::io_service(); // socket takes ownership
 
-        asio::ip::tcp::resolver resolver(io_service);
+        asio::ip::tcp::resolver resolver(*io_service);
         asio::ip::tcp::resolver::query query(host, std::to_string(port));
         asio::ip::tcp::resolver::iterator endpoint_iterator = resolver.resolve(query);
 
-        asio::ip::tcp::socket socket{io_service};
+        asio::ip::tcp::socket socket{*io_service};
         asio::connect(socket, endpoint_iterator);
-        return socket;
+        return std::move(socket);
     }
 
 public:
