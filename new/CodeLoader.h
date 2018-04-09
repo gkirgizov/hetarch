@@ -29,7 +29,7 @@ public:
                                                mem::MemType memType,
                                                dsl::IRTranslator& irt,
                                                const CodeGen& cg,
-                                               const dsl::DSLGlobal<Td>& g) {
+                                               const dsl::Global<Td>& g) {
 
         IRModule<Td> g_module = irt.translate(g);
         std::cerr << "DUMPING g_module:" << std::endl;
@@ -88,7 +88,7 @@ public:
     /// Return ResidentGlobal residing at addr for global g; don't actually load anything.
     /// It is a fabric for ResidentGlobals.
     template<typename AddrT, typename Td>
-    inline static auto getLoadedResident(const dsl::DSLGlobal<Td>& g,
+    inline static auto getLoadedResident(const dsl::Global<Td>& g,
                                          AddrT addr,
                                          conn::IConnection<AddrT> &conn,
                                          mem::MemManager<AddrT> &memManager,
@@ -104,7 +104,7 @@ public:
 
     /// Try load global g at specified addr.
     template<typename AddrT, typename Td>
-    static auto load(const dsl::DSLGlobal<Td>& g,
+    static auto load(const dsl::Global<Td>& g,
                      AddrT addr,
                      conn::IConnection<AddrT> &conn,
                      mem::MemManager<AddrT> &memManager,
@@ -130,7 +130,7 @@ public:
 
     /// Load global g at some addr.
     template<typename AddrT, typename Td>
-    static auto load(const dsl::DSLGlobal<Td>& g,
+    static auto load(const dsl::Global<Td>& g,
                      conn::IConnection<AddrT> &conn,
                      mem::MemManager<AddrT> &memManager,
                      mem::MemType memType = mem::MemType::ReadWrite)
@@ -180,7 +180,7 @@ public:
     };
 
     template<typename AddrT, typename Td, bool is_const>
-    inline static auto getResident(const dsl::RawPtr<Td, is_const>& g,
+    inline static auto getResident(const dsl::Ptr<Td, is_const>& g,
                                    conn::IConnection<AddrT> &conn,
                                    mem::MemManager<AddrT> &memManager,
                                    mem::MemRegion<AddrT> memRegion,

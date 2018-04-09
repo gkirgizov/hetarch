@@ -14,7 +14,7 @@ namespace dsl {
 using dsl::f_t; // by some reasons CLion can't resolve it automatically.
 
 
-template<typename, typename...> class DSLFunction;
+template<typename, typename...> class Function;
 
 template<typename TdCallable, typename... ArgExprs>
 struct ECall : Expr<typename std::remove_reference_t<TdCallable>::ret_t> {
@@ -31,13 +31,7 @@ struct ECall : Expr<typename std::remove_reference_t<TdCallable>::ret_t> {
     IR_TRANSLATABLE
 };
 
-template<typename TdCallable, typename... ArgExprs>
-constexpr auto makeCall(const TdCallable& callable, ArgExprs... args) {
-    return ECall<TdCallable, ArgExprs...>{callable, args...};
-};
-
-
-// Almost anyway need to explicitly specify return type TdRet
+// todo: Almost anyway need to explicitly specify return type TdRet
 //  otherwise only some kind of return type deduction magic depending on exit condition (if there is some...)
 template<typename TdRet, typename ...TdArgs>
 struct Recurse : Expr<f_t<TdRet>> {
@@ -48,7 +42,7 @@ struct Recurse : Expr<f_t<TdRet>> {
 
 
 template<typename TdCallable, typename TdRet, typename ...TdArgs>
-struct DSLCallable : CallableBase {
+struct Callable : CallableBase {
     static_assert(is_val_v<TdRet, TdArgs...>);
 
     using dsl_ret_t = TdRet;
@@ -76,8 +70,7 @@ struct DSLCallable : CallableBase {
         static_assert(is_ev_v<ArgExprs...>, "Expected DSL types for DSL function call!");
         static_assert(validateArgs<f_t<ArgExprs>...>(), "Invalid argument types for function call!");
 
-//        return ECall<TdCallable, ArgExprs...>(
-        return makeCall(
+        return ECall(
                 static_cast<const TdCallable&>(*this),
                 args...
         );
@@ -113,8 +106,8 @@ auto MakeFunArgs(const Tds&... args) {
 
 
 template<typename TdBody, typename... TdArgs>
-struct DSLFunction : Named
-                   , DSLCallable<DSLFunction<TdBody, TdArgs...>, param_for_arg_t<TdBody>, TdArgs...>
+struct Function : Named
+                , Callable<Function<TdBody, TdArgs...>, param_for_arg_t<TdBody>, TdArgs...>
 {
     static_assert((is_val_v<TdArgs> && ...), "Formal parameters must be Values (derived from ValueBase)!");
 
@@ -125,9 +118,9 @@ struct DSLFunction : Named
 //    const funargs_t args;
     const ReturnImpl<TdBody> body;
 
-    constexpr DSLFunction(std::string_view name, TdBody body)
+    constexpr Function(std::string_view name, TdBody body)
             : Named{name}, args{}, body{body} {}
-    constexpr DSLFunction(std::string_view name, funargs_t args, TdBody body)
+    constexpr Function(std::string_view name, funargs_t args, TdBody body)
             : Named{name}, args{args}, body{body} {}
 
     template<typename BodyGenerator
@@ -135,7 +128,7 @@ struct DSLFunction : Named
                     std::is_invocable_v<BodyGenerator, TdArgs...>
             >
     >
-    constexpr DSLFunction(std::string_view name, funargs_t args, BodyGenerator&& body_builder)
+    constexpr Function(std::string_view name, funargs_t args, BodyGenerator&& body_builder)
             : Named{name}
             , args{args}
             , body(std::apply(std::forward<BodyGenerator>(body_builder), this->args))
@@ -150,7 +143,7 @@ struct DSLFunction : Named
 
 template<typename BodyGenerator, typename ...TdArgs>
 struct build_dsl_fun_type {
-    using type = DSLFunction< std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
+    using type = Function< std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
 };
 template<typename BodyGenerator, typename ...ArgExprs>
 struct build_dsl_fun_type_from_args {
@@ -159,9 +152,9 @@ struct build_dsl_fun_type_from_args {
 
 // Explicit deduction guide
 template<typename BodyGenerator, typename ...TdArgs>
-DSLFunction(std::string_view, std::tuple<TdArgs...>, BodyGenerator&&) ->
+Function(std::string_view, std::tuple<TdArgs...>, BodyGenerator&&) ->
 //typename build_dsl_fun_type<BodyGenerator, TdArgs...>::type;
-DSLFunction< std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
+Function< std::invoke_result_t<BodyGenerator, TdArgs...>, TdArgs...>;
 
 }
 }

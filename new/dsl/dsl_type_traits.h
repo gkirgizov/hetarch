@@ -109,9 +109,9 @@ using get_base_t = typename get_base<Td, TdChild>::type;
 //> {};
 
 
-template<typename T, typename ...Tds>
-struct is_same_raw : public std::conditional_t<
-        (... && std::is_same_v<T, i_t<Tds>>),
+template<typename Td, typename ...Tds>
+struct is_same_raw : std::conditional_t<
+        (... && std::is_same_v<f_t<Td>, f_t<Tds>>),
         std::true_type,
         std::false_type
 > {};
@@ -119,16 +119,16 @@ template<typename T, typename ...Tds> inline constexpr bool is_same_raw_v = is_s
 
 
 template<typename>
-struct is_std_array : public std::false_type {};
+struct is_std_array : std::false_type {};
 template<typename T, std::size_t N>
-struct is_std_array<std::array<T, N>> : public std::true_type {};
+struct is_std_array<std::array<T, N>> : std::true_type {};
 template<typename Arr>
 inline constexpr bool is_std_array_v = is_std_array<Arr>::value;
 
 template<typename>
-struct is_std_tuple : public std::false_type {};
+struct is_std_tuple : std::false_type {};
 template<typename ...Ts>
-struct is_std_tuple<std::tuple<Ts...>> : public std::true_type {};
+struct is_std_tuple<std::tuple<Ts...>> : std::true_type {};
 template<typename ...Ts>
 inline constexpr bool is_std_tuple_v = is_std_tuple<Ts...>::value;
 

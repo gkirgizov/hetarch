@@ -68,7 +68,7 @@ typedef struct {
 
 typedef struct {
     addr_t addr;
-    uint32_t ms_delay;
+    addr_t ms_delay;
 } cmd_schedule_t;
 
 typedef struct {

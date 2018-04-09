@@ -16,7 +16,6 @@ using dsl::remove_cvref_t;
 
 template<typename Tw, typename T, bool is_const> struct Value;
 
-// todo: do implicit cast when not exact type match?
 template< typename TdLhs
         , typename TdRhs
         , typename = typename std::enable_if_t< is_val_v<TdLhs> >
@@ -39,7 +38,7 @@ struct EAssign : get_base_t< TdLhs, EAssign<TdLhs, TdRhs> > {
 template< typename Td
         , typename = typename std::enable_if_t< is_val_v<Td> >
 >
-struct ETakeAddr: public Expr<f_t<Td>*> {
+struct ETakeAddr: Expr<f_t<Td>*> {
     const Td pointee;
     explicit constexpr ETakeAddr(Td pointee) : pointee{pointee} {}
     IR_TRANSLATABLE
@@ -56,6 +55,7 @@ struct Value : ValueBase {
     using this_t = Value<Tw, T, is_const>;
     using type = std::conditional_t<is_const, std::add_const_t<T>, T>;
 //    static const bool const_q = is_const;
+//    static const bool volatile_q = is_volatile;
 
     constexpr Value() = default;
     constexpr Value(this_t&&) = default;

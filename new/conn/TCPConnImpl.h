@@ -42,6 +42,7 @@ class TCPConnImpl : public ConnImplBase<AddrT> {
 public:
     TCPConnImpl(const std::string &host, uint16_t port) : socket{get_socket(host, port)} {}
     explicit TCPConnImpl(asio::ip::tcp::socket socket) : socket{std::move(socket)} {}
+    ~TCPConnImpl() { close(); }
 
     void close() {
         socket.shutdown(asio::ip::tcp::socket::shutdown_both);

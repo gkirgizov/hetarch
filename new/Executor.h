@@ -66,7 +66,7 @@ public:
         f.sendArgs(std::forward<Args>(args)...);
 
         // Translate, compile, load and call it
-        dsl::DSLFunction dummy_caller = f.getCaller();
+        dsl::Function dummy_caller = f.getCaller();
         IRModule translated = irt.translate(dummy_caller);
 
 #ifdef DEBUG

@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include "../conn/IConnection.h"
 #include "../MemResident.h"
 #include "dsl_type_traits.h"
@@ -29,9 +28,11 @@ public:
             , addr{memRegion.start}
     {}
 
-    // todo: better make static_assert for sane error msg at compile error
-    // todo: or allow writing with warning (because is_const is for in-DSL interface, i.e. for type safety)
-    inline std::enable_if_t<!is_const> write(const value_type& val) {
+    inline void write(const value_type& val) {
+        // todo: or allow writing with warning? or remove is_const altogether? --better don't.
+        //  (because is_const is for in-DSL interface, i.e. for type safety)
+        //  in this case don't inline it with initial_value in IRTranslator!
+        static_assert(!is_const, "Const values are not writable!");
         conn.write(addr, sizeof(value_type), utils::toBytes(val));
     };
 

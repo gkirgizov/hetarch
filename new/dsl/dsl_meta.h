@@ -22,7 +22,7 @@ auto make_dsl_fun(DSLGen &&dsl_gen, const std::string &name = "dsl_generic") {
     static_assert(std::is_invocable_v<DSLGen, ArgExprs...>, "DSL Generator cannot be invoked with provided arguments!");
 
     using formal_params_t = std::tuple< param_for_arg_t<ArgExprs>... >;
-    return DSLFunction{
+    return Function{
             name,
             formal_params_t{},
             std::forward<DSLGen>(dsl_gen)
@@ -31,7 +31,7 @@ auto make_dsl_fun(DSLGen &&dsl_gen, const std::string &name = "dsl_generic") {
 
 // Overload with type deduction for ArgExprs
 template<typename ...ArgExprs, typename DSLGen>
-constexpr auto make_dsl_fun(DSLGen &&dsl_gen, ArgExprs...){
+auto make_dsl_fun(DSLGen &&dsl_gen, ArgExprs...){
     return make_dsl_fun<ArgExprs...>(std::forward<DSLGen>(dsl_gen));
 };
 
@@ -52,8 +52,8 @@ static std::unordered_map<fun_id, callable_ptr> dsl_fun_instantiated{};
 }
 
 template<typename TdBody, typename... TdArgs>
-inline auto free_repo(const DSLFunction<TdBody, TdArgs...> &f) {
-    using TdCallable = DSLFunction<TdBody, TdArgs...>;
+inline auto free_repo(const Function<TdBody, TdArgs...> &f) {
+    using TdCallable = Function<TdBody, TdArgs...>;
     constexpr auto fun_id = get_fun_id<TdCallable>();
     return dsl_fun_instantiated.erase(fun_id);
 }
@@ -71,13 +71,13 @@ const auto& get_or_make_dsl_fun(DSLGen &&dsl_gen, const std::string &name = "dsl
     auto instantiated = dsl_fun_instantiated.find(fun_id);
     if (instantiated == std::end(dsl_fun_instantiated)) {
         using formal_params_t = std::tuple< param_for_arg_t<ArgExprs>... >;
-        CallableBase* fun_ptr = new DSLFunction{
+        CallableBase* fun_ptr = new Function{
                         name,
                         formal_params_t{},
                         std::forward<DSLGen>(dsl_gen)
         };
         auto inserted = dsl_fun_instantiated.emplace(fun_id, fun_ptr);
-        assert(inserted.second && "Error when storing instantiated Generic DSLFunction!");
+        assert(inserted.second && "Error when storing instantiated Generic Function!");
         return static_cast<const TdCallable &>(*fun_ptr);
     }
     return static_cast<const TdCallable &>(*instantiated->second);
@@ -85,13 +85,13 @@ const auto& get_or_make_dsl_fun(DSLGen &&dsl_gen, const std::string &name = "dsl
 
 
 template<typename DSLGen>
-auto make_generic_dsl_fun(DSLGen &&dsl_generator, const std::string &name = "dsl_generic") {
-    // Return generic lambda which returns ECall to DSLFunction instantiated in-place
+auto make_generic_dsl_fun(DSLGen &&dsl_gen, const std::string &name = "dsl_generic") {
+    // Return generic lambda which returns ECall to Function instantiated in-place
     return [&](auto&&... args){
-        return makeCall(
-                get_or_make_dsl_fun<decltype(args)...>(dsl_generator, name),
+        return ECall{
+                get_or_make_dsl_fun<decltype(args)...>(dsl_gen, name),
                 std::forward<decltype(args)>(args)...
-        );
+        };
     };
 }
 

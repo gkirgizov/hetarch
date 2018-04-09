@@ -17,11 +17,11 @@ using dsl::remove_cvref_t;
 
 template<typename Td
         , typename = typename std::enable_if_t< is_val_v<Td> >>
-struct DSLGlobal : ValueBase {
+struct Global : ValueBase {
     const Td x;
-    explicit DSLGlobal() = default;
-    explicit constexpr DSLGlobal(Td x) : x{x} {}
-//    explicit constexpr DSLGlobal(f_t<Td> x_init) : x{x_init} {}
+    explicit Global() = default;
+    explicit constexpr Global(Td x) : x{x} {}
+//    explicit constexpr Global(f_t<Td> x_init) : x{x_init} {}
     IR_TRANSLATABLE
 };
 

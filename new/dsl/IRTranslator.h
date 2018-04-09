@@ -170,7 +170,7 @@ public: // Values
         push_val(llvm_map.get_const(var.initial_val()));
     }
     template<typename T>
-    void accept(const DSLConst<T> &var) {
+    void accept(const Lit<T> &var) {
         push_val(llvm_map.get_const(var.val));
     }
 
@@ -198,11 +198,11 @@ public: // Values
     };
 
     template<typename Td, bool is_const>
-    void accept(const RawPtr<Td, is_const>& ptr) {
+    void accept(const Ptr<Td, is_const>& ptr) {
         llvm::Value* ptr_val = nullptr;
         if (ptr.initialised()) {
             using addr_t = HETARCH_TARGET_ADDRT;
-            using ptr_t = f_t<RawPtr<Td, is_const>>;
+            using ptr_t = f_t<Ptr<Td, is_const>>;
 
 //            auto ptr_val_raw = reinterpret_cast<ptr_t>(ptr.initial_val());
 //            auto ptr_val = llvm_map.get_const(ptr_val_raw);
@@ -267,7 +267,7 @@ public: // dsl functions & residents
 
     // todo: remove
     template<typename Td>
-    auto translate(const DSLGlobal<Td>& g) {
+    auto translate(const Global<Td>& g) {
         const auto g_name = std::string(g.x.name());
         const auto moduleName = "module_for_global_" + g_name;
         auto g_module = new llvm::Module(moduleName, context);
@@ -332,14 +332,14 @@ public: // dsl functions & residents
     };
 
     template<typename TdBody, typename... TdArgs>
-    auto translate(const DSLFunction<TdBody, TdArgs...> &fun) {
+    auto translate(const Function<TdBody, TdArgs...> &fun) {
         const auto moduleName = "module_" + std::string(fun.name());
         cur_module = std::make_unique<llvm::Module>(moduleName, context);
         fun.toIR(*this);
 
         llvm::Module* m = cur_module.release();
         clear();
-        using fun_t = DSLFunction<TdBody, TdArgs...>;
+        using fun_t = Function<TdBody, TdArgs...>;
         using TdRet = typename fun_t::dsl_ret_t;
         return IRModule<TdRet, TdArgs...>{m, fun.name().data()};
     }
@@ -350,12 +350,12 @@ public: // dsl functions & residents
     }
 
     template<typename TdBody, typename... TdArgs>
-    void accept(const DSLFunction<TdBody, TdArgs...> &dslFun) {
+    void accept(const Function<TdBody, TdArgs...> &dslFun) {
         std::string funcName{dslFun.name()};
 
         // Define function
         // ExternalLinkage is to be able to call the func outside the module it resides in
-        using fun_t = DSLFunction<TdBody, TdArgs...>;
+        using fun_t = Function<TdBody, TdArgs...>;
         using ret_t = typename fun_t::ret_t;
         using args_t = typename fun_t::args_t;
         llvm::Function *fun = llvm::Function::Create(
@@ -391,7 +391,7 @@ public: // dsl functions & residents
 private:
     template<typename TdBody, typename... TdArgs
             , typename Inds = std::index_sequence_for<TdArgs...>>
-    void handle_args(const DSLFunction<TdBody, TdArgs...> &dslFun, llvm::Function *fun) {
+    void handle_args(const Function<TdBody, TdArgs...> &dslFun, llvm::Function *fun) {
         // Build mapping from llvm::Argument to dslFun.args using indices
         std::array<llvm::Argument*, sizeof...(TdArgs)> args;
         for(llvm::Argument* arg_ptr = fun->arg_begin(); arg_ptr != fun->arg_end(); ++arg_ptr) {
@@ -401,7 +401,7 @@ private:
     }
 
     template<typename TdBody, typename ...TdArgs, std::size_t ...I>
-    void handle_args_impl(const DSLFunction<TdBody, TdArgs...> &dslFun,
+    void handle_args_impl(const Function<TdBody, TdArgs...> &dslFun,
                         std::array<llvm::Argument*, sizeof...(TdArgs)> &args,
                         std::index_sequence<I...>) {
         // Call handle_arg for each pair of llvm::Argument and arg from dslFun.args
@@ -558,11 +558,11 @@ public:
     void accept(const Recurse<TdRet, TdArgs...>& e) {
         std::cerr << "not implemented." << std::endl;
 
-/*        using fun_t = decltype(frame->dsl_fun); // todo: no way to get full DSLFunction type now
+/*        using fun_t = decltype(frame->dsl_fun); // todo: no way to get full Function type now
         static_assert(std::is_invocable_v<fun_t, TdArgs...>,
-                      "Arguments type mismatch between DSLFunction and Recurse!");
+                      "Arguments type mismatch between Function and Recurse!");
         static_assert(std::is_same_v< f_t<std::invoke_result_t<fun_t, TdArgs...>>, f_t<TdRet> >,
-                      "Return type mismatch between DSLFunction and Recurse!");
+                      "Return type mismatch between Function and Recurse!");
 
         llvm::CallInst* inst = cur_builder->CreateCall(
                 frame->fun,

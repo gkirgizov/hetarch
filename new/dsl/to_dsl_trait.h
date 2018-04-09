@@ -27,7 +27,7 @@ template< typename T > struct to_dsl<T, typename std::enable_if_t<
 template< typename T > struct to_dsl<T, typename std::enable_if_t<
         std::is_pointer_v<T> >>
 {
-    using type = RawPtr< to_dsl_t< std::remove_pointer_t<T> >
+    using type = Ptr< to_dsl_t< std::remove_pointer_t<T> >
                        , std::is_const_v<T>
     >;
 };

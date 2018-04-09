@@ -2,8 +2,9 @@
 
 #include <cstdint>
 
+#include "../new/dsl.h"
 #include "../new/dsl/IRTranslator.h"
-#include "../new/dsl/dsl_meta.h"
+//#include "../new/dsl/switch.h"
 
 #include <string_view>
 #include "../new/utils.h"
@@ -27,8 +28,8 @@ struct IRTranslatorTest: public ::testing::Test {
 
 
 template<typename TdBody, typename... Args>
-bool translate_verify(IRTranslator& irt, const DSLFunction<TdBody, Args...> &f) {
-    std::cerr << "Translating DSLFunction: " << f.name() << std::endl;
+bool translate_verify(IRTranslator& irt, const Function<TdBody, Args...> &f) {
+    std::cerr << "Translating Function: " << f.name() << std::endl;
     auto module = irt.translate(f);
 
     bool verified_ok = utils::verify_module(module);
@@ -39,31 +40,31 @@ bool translate_verify(IRTranslator& irt, const DSLFunction<TdBody, Args...> &f) 
 
 
 TEST_F(IRTranslatorTest, compileDSLCommon) {
-    DSLFunction empty_test(
+    Function empty_test(
             "empty",
             VoidExpr{}
     );
 
-    DSLFunction pass_through(
+    Function pass_through(
             "pass_through",
             MakeFunArgs(tmp),
             (tmp, tmp)
     );
 
-    DSLFunction simple_assign_test(
+    Function simple_assign_test(
             "swap",
             MakeFunArgs(x, y),
             (tmp = x, x = y, y = tmp, Unit)
     );
 
-    DSLFunction call_test(
+    Function call_test(
             "call_thing",
             MakeFunArgs(x),
             (tmp = pass_through(x), tmp)
     );
 
-    RawPtr<Var<int>> xi_ptr{};
-    DSLFunction invalid_call_test(
+    Ptr<Var<int>> xi_ptr{};
+    Function invalid_call_test(
             "invalid_call",
             MakeFunArgs(),
             (
@@ -84,7 +85,7 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
     Var xf{2.0}, yf{4.0};
     Var<const int32_t> cxi{1}, cyi{3};
 
-    DSLFunction simple_ops_test(
+    Function simple_ops_test(
             "simple_ops",
             MakeFunArgs(x, y),
             (
@@ -93,7 +94,7 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
             )
     );
 
-    DSLFunction assign_ops_test(
+    Function assign_ops_test(
             "assign_ops",
             MakeFunArgs(x, y),
             (
@@ -102,7 +103,7 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
             )
     );
 
-    DSLFunction cmp_test(
+    Function cmp_test(
             "cmp_test",
             MakeFunArgs(x, y),
             (
@@ -113,7 +114,7 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
             )
     );
 
-    DSLFunction assign_test(
+    Function assign_test(
             "assign_test",
             MakeFunArgs(x, y),
             (
@@ -124,10 +125,31 @@ TEST_F(IRTranslatorTest, compileDSLOperations) {
             )
     );
 
+    // division and remainder (not modulo)
+    Function div_rem_test(
+            "div_rem",
+            MakeFunArgs(),
+            (
+                            xi / yi, xi % yi,
+                            xui / yui, xui % yui,
+                            xui / yi, xui % yi,
+                            xi / yui, xi % yui,
+
+                            xf / yf, xf % yf,
+                            xf / yi, xf % yi,
+                            xi / yf, xi % yf,
+                            xf / yui, xf % yui,
+                            xui / yf, xui % yf,
+
+                            Unit
+            )
+    );
+
     EXPECT_TRUE(translate_verify(irt, simple_ops_test));
     EXPECT_TRUE(translate_verify(irt, assign_ops_test));
     EXPECT_TRUE(translate_verify(irt, cmp_test));
     EXPECT_TRUE(translate_verify(irt, assign_test));
+    EXPECT_TRUE(translate_verify(irt, div_rem_test));
 }
 
 TEST_F(IRTranslatorTest, compilePtr) {
@@ -136,11 +158,11 @@ TEST_F(IRTranslatorTest, compilePtr) {
 //    Ptr p_xi{xi};
 //    Ptr p_yi{yi};
 //    Ptr pp_xi{p_xi};
-    RawPtr<decltype(xi)> p_xi{};
-    RawPtr<decltype(yi)> p_yi{};
-    RawPtr<decltype(p_xi)> pp_xi{};
+    Ptr<decltype(xi)> p_xi{};
+    Ptr<decltype(yi)> p_yi{};
+    Ptr<decltype(p_xi)> pp_xi{};
 
-    DSLFunction ptr_test(
+    Function ptr_test(
             "ptr_test",
             MakeFunArgs(yi),
             (
@@ -155,16 +177,16 @@ TEST_F(IRTranslatorTest, compilePtr) {
             )
     );
 
-    DSLFunction ptr_arith_test(
+    Function ptr_arith_test(
             "ptr_arithmetic",
             MakeFunArgs(p_yi, pp_xi),
             (
                     p_yi = xi.takeAddr(),
 //                    p_yi == p_xi,
-                    p_yi = p_xi + DSLConst(5),
-                    p_yi += DSLConst(5),
-                    p_yi = p_xi - DSLConst(5),
-                    p_yi -= DSLConst(5),
+                    p_yi = p_xi + Lit(5),
+                    p_yi += Lit(5),
+                    p_yi = p_xi - Lit(5),
+                    p_yi -= Lit(5),
                     ++p_yi, --p_yi,
                     Unit
             )
@@ -172,14 +194,14 @@ TEST_F(IRTranslatorTest, compilePtr) {
 
 //    static_assert( std::is_convertible_v< uint16_t*, uint32_t* > );
 
-    RawPtr<Var<volatile uint32_t>> rp_vui{0x20cff, "rp_vui"};
-    RawPtr<Var<uint32_t>> rp_vui2{};
-    DSLFunction raw_ptr_arith_test(
+    Ptr<Var<volatile uint32_t>> rp_vui{0x20cff, "rp_vui"};
+    Ptr<Var<uint32_t>> rp_vui2{};
+    Function raw_ptr_arith_test(
             "raw_ptr_arithmetic",
             MakeFunArgs(rp_vui2),
             (
-                    *rp_vui |= DSLConst(1u),
-                    xi = *(rp_vui + DSLConst(3)),
+                    *rp_vui |= Lit(1u),
+                    xi = *(rp_vui + Lit(3)),
                     Unit
             )
     );
@@ -193,14 +215,14 @@ TEST_F(IRTranslatorTest, compileDSLArray) {
     std::array arr_init = {1, 2, 3, 5};
     Array<Var<int>, 4> arr{arr_init};
 
-    DSLFunction array_access_test(
+    Function array_access_test(
             "try_arr",
             MakeFunArgs(x, y), (
                 tmp = arr[x] + arr[y]
             , tmp)
     );
 
-    DSLFunction array_assign_test(
+    Function array_assign_test(
             "try_arr",
             MakeFunArgs(x, y),
             (arr[x] = arr[y]
@@ -209,17 +231,17 @@ TEST_F(IRTranslatorTest, compileDSLArray) {
 
     std::array arr2_init = {0, 22, 33, 55};
     Array<Var<int>, 4> arr2{arr2_init};
-    DSLFunction array_assign2_test(
+    Function array_assign2_test(
             "array_assign2",
             MakeFunArgs(),
             (arr = arr2
             , Unit)
     );
 
-    DSLFunction array_return_test(
+    Function array_return_test(
             "array_return",
             MakeFunArgs(arr),
-            (arr2[DSLConst(1)] = arr[DSLConst(0)], arr2)
+            (arr2[Lit(1)] = arr[Lit(0)], arr2)
     );
 
     EXPECT_TRUE(translate_verify(irt, array_access_test));
@@ -233,14 +255,14 @@ TEST_F(IRTranslatorTest, compileDSLControlFlow) {
     Var<const int> zero{0};
     Var<const int> one{1};
 
-    DSLFunction if_else_test(
+    Function if_else_test(
             "max",
             MakeFunArgs(x, y),
             (tmp = If(cond, x, y),
             tmp)
     );
 
-    DSLFunction while_test(
+    Function while_test(
             "count",
             MakeFunArgs(x, y),
             (While(x == zero,
@@ -248,7 +270,7 @@ TEST_F(IRTranslatorTest, compileDSLControlFlow) {
             ), Unit)
     );
 
-    DSLFunction loop_not_run_test(
+    Function loop_not_run_test(
             "",
             MakeFunArgs(x),
             While(one == zero, x + one)
@@ -268,12 +290,10 @@ struct GenericsTest: public ::testing::Test {
 
 };
 
-//auto id_generator = [](auto&& x) { return x; };
-//auto id_generator = [](auto&& x) -> decltype(auto) { return x; };
-auto id_generator = [](const auto& x) -> decltype(auto) { return x; };
+auto id_generator = [](auto x) { return x; };
+//auto id_generator = [](auto x) -> decltype(auto) { return x; };
 
-auto max_code_generator = [](auto&& x, auto&& y) {
-//        auto&& c = x > y; // goes out of scope
+auto max_gen = [](auto&& x, auto&& y) {
     return If(x > y, x, y);
 };
 
@@ -295,7 +315,7 @@ TEST_F(GenericsTest, genericDSLReferenceConsistency) {
     auto call_generic_generator = [&](auto&& x, auto&& y){
         return generic_test(x, y);
     };
-    DSLFunction call_generic_fun = make_dsl_fun<Var<int>, Var<int>>(call_generic_generator);
+    Function call_generic_fun = make_dsl_fun<Var<int>, Var<int>>(call_generic_generator);
 
     auto dbg_printer1 = [&](const auto& args, const auto& body) {
         std::cerr << std::endl;
@@ -313,7 +333,7 @@ TEST_F(GenericsTest, genericDSLReferenceConsistency) {
     auto& cf1 = call_generic_fun.body.returnee.callee;
     dbg_printer1(cf1.args, cf1.body);
 
-    DSLFunction cf2 = make_dsl_fun<Var<int>, Var<int>>(test_code_generator);
+    Function cf2 = make_dsl_fun<Var<int>, Var<int>>(test_code_generator);
     dbg_printer1(cf2.args, cf2.body);
     std::cerr << "...how it must be (same addresses in both lines)." << std::endl;
 
@@ -322,8 +342,8 @@ TEST_F(GenericsTest, genericDSLReferenceConsistency) {
     dbg_printer1(cf3.args, cf3.body);
 
     // TODO: HERE IS THE PROBLEM --
-    //  when moving DSLFunction its 'args' are copied/moved whatever;
-    //  the problem is when DSLFunction OWNS its args (i.e. stores by value; not by ref)
+    //  when moving Function its 'args' are copied/moved whatever;
+    //  the problem is when Function OWNS its args (i.e. stores by value; not by ref)
     //      check this.
     //  but body still refers to the old 'args'
 //    ECall call2 = makeCall(std::move(cf2), x, y);
@@ -339,51 +359,59 @@ TEST_F(GenericsTest, genericDSLReferenceConsistency) {
 
 TEST_F(GenericsTest, genericDSLFunctions1) {
 
-    auto tst_generator = [](auto&& x) {
-        return If(!x, DSLConst(false), DSLConst(true));
+    auto tst_generator = [](auto x) {
+        return If(!x, Lit(false), Lit(true));
     };
 
-    auto factorial_gen = [&](auto&& n){
+    auto factorial_gen = [](auto n){
         Var<int> res{1};
-        return (While(
-                n > DSLConst(0u),
-                (res = res * n, n = n - DSLConst(1u))
-        ), res);
+        return (
+                While(n > Lit(0), (
+                    res *= n,
+                    n -= Lit(1)
+                )),
+                res
+        );
     };
 
-    auto dsl_metagenerator = [](bool need_complex_logic) {
-        return [=](auto&& dsl_var1, Var<int> dsl_var2) {
+    auto complex_code = [](Ptr<Var<uint32_t>> ptr){
+        Var<uint32_t> tmp;
+        return tmp = *ptr &= ~(*++ptr ^ Lit(1 << 8));
+    };
+
+    auto dsl_metagen = [](bool need_complex_logic) {
+        return [=](auto x, auto y) {
             if (need_complex_logic) {
-
-                auto e = If(dsl_var1 == DSLConst(0),
-                            dsl_var1 = dsl_var1 - DSLConst(1),
-                            (dsl_var2 = dsl_var1, dsl_var2)
+                return While(x != Lit(0), (
+                                 x = x - Lit(1),
+                                 y += x
+                                 // ...
+                             )
                 );
-                return e;
-
             } else {
-                return DSLConst(42);
+                return Lit(42);
             }
         };
     };
 
-    // instantiate some functions
-    auto dsl_id = make_dsl_fun< DSLConst<int> >(id_generator);
+    // instantiate some functions in a usual way
+    auto dsl_id = make_dsl_fun< Lit<int> >(id_generator);
     PR_CERR_VAL_TY(dsl_id);
-//    auto dsl_fun_max = make_dsl_fun< Var<int>, Var<int> >(max_code_generator);
-    decltype(auto) dsl_fun_max = get_or_make_dsl_fun< Var<int>, Var<int> >(max_code_generator);
-    PR_CERR_VAL_TY(dsl_fun_max)
-    auto generic_dsl_max = make_generic_dsl_fun(max_code_generator);
-    DSLFunction dsl_factorial = make_dsl_fun<Var<unsigned> >(factorial_gen);
+    Function dsl_factorial = make_dsl_fun< Var<unsigned> >(factorial_gen);
+    Function code = make_dsl_fun< Ptr<Var<uint32_t>> >(complex_code);
+//    auto dsl_fun_max = make_dsl_fun< Var<int>, Var<int> >(max_gen);
+    auto& dsl_fun_max = get_or_make_dsl_fun< Var<int>, Var<int> >(max_gen);
 
-    DSLFunction call_generic_fun{
+    // try generic functions
+    auto generic_dsl_max = make_generic_dsl_fun(max_gen);
+    Function call_generic_fun{
             "caller_of_generics",
             MakeFunArgs(x, y),
             generic_dsl_max(x, y) + dsl_id(x)
     };
 
     // specialise generic caller for specific arguments (and correct number of arguments)
-    DSLFunction call_max = make_dsl_fun<Var<int>, Var<int>>(get_generic_caller(generic_dsl_max), "call_max");
+    Function call_max = make_dsl_fun<Var<int>, Var<int>>(get_generic_caller(generic_dsl_max), "call_max");
 
     std::cerr << std::endl << std::endl;
     EXPECT_TRUE(translate_verify(irt, dsl_id));
@@ -392,52 +420,65 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
     EXPECT_EQ(1, free_repo(dsl_fun_max)) << "but dsl fun from repo can be deleted from template repo!";
 
     EXPECT_TRUE(translate_verify(irt, dsl_factorial));
+    EXPECT_TRUE(translate_verify(irt, code));
     EXPECT_TRUE(translate_verify(irt, call_generic_fun));
     EXPECT_TRUE(translate_verify(irt, call_max));
 
     // try instantiate function with invalid arguments (fail at compile time)
-//    DSLFunction max_for_arrays = make_dsl_fun< Array<Var<int>, 1>, Array<Var<int>, 1> >( max_code_generator );
+//    Function max_for_arrays = make_dsl_fun< Array<Var<int>, 1>, Array<Var<int>, 1> >( max_gen );
 }
 
 
 TEST_F(GenericsTest, genericDSLFunctions2) {
-    auto reduce_sum_generator = [&](auto&& ...xs) {
+    auto reduce_sum_gen = [&](auto ...xs) {
+        // Using C++17 fold expression
         return (... + xs);
     };
 
-    // Reduces arbitrrary expressions, not just of one type
-    auto get_reducer = [&](auto&& binary_op) {
-        return [&](auto&& x1, auto&&... xs) {
-            // Redundant assignments should be optimized out later by LLVm
+    // Reduces arbitrary expressions (e.g. other generators)
+    auto get_reducer = [](const auto& binary_op) {
+        return [&](auto x1, auto... xs) {
+            // Using C++17 fold expression
             return ( (x1 = binary_op(x1, xs)), ... );
+            // Redundant assignments will be optimized out later LLVM
         };
     };
 
-//    auto g_reduce_sum = make_generic_dsl_fun(reduce_sum_generator);
-//    DSLFunction call_sum3 = make_dsl_fun<Var<float>, Var<float>, Var<float>>( get_generic_caller(g_reduce_sum) );
-//    EXPECT_TRUE(translate_verify(irt, call_sum3));
-
-    DSLFunction sum3 = make_dsl_fun<
+    Function sum3 = make_dsl_fun<
             Var<float>, Var<float>, Var<int>
-    >(reduce_sum_generator);
+    >(reduce_sum_gen);
 
     EXPECT_TRUE(translate_verify(irt, sum3));
 
 
     auto add2_gen = [](auto&& x1, auto&& x2) { return x1 + x2; };
     auto sum_reducer_generator_v2 = get_reducer(add2_gen);
-    DSLFunction sum3_v2 = make_dsl_fun<
+    Function sum3_v2 = make_dsl_fun<
             Var<float>, Var<float>, Var<int>
     >(sum_reducer_generator_v2);
 
     EXPECT_TRUE(translate_verify(irt, sum3_v2));
 
 
-    // may not be easily optimised; so might be not quite effective due to extra assignments from generic reducer
-    auto max_vararg_generator = get_reducer(max_code_generator);
-    DSLFunction max3 = make_dsl_fun<
+    // todo: check: may not be easily optimised; so might be not quite effective due to extra assignments from generic reducer
+    auto max_vararg_gen = get_reducer(max_gen);
+    Function max3 = make_dsl_fun<
             Var<float>, Var<float>, Var<float>
-    >(max_vararg_generator);
+    >(max_vararg_gen);
 
     EXPECT_TRUE(translate_verify(irt, max3));
+
+    auto generic_max = make_generic_dsl_fun(max_gen);
+    // Will instantiate 2 max functions: for int and for float
+    auto max4_gen = [&](auto x1, auto x2, auto x3, auto x4) {
+        return generic_max(
+                generic_max(x1, x2),
+                Cast<Var<float>>(generic_max(x3, x4))
+        );
+    };
+    Function max4 = make_dsl_fun<
+            Var<float>, Var<float>, Var<int>, Var<int>
+    >(max4_gen);
+
+    EXPECT_TRUE(translate_verify(irt, max4));
 }

@@ -32,10 +32,10 @@ namespace hetarch {
 
 class CodeGen {
     using CGOptLvl = llvm::CodeGenOpt::Level;
-    using FloatABI = llvm::FloatABI::ABIType;
 public:
     using llvm_obj_t = llvm::object::OwningBinary<llvm::object::ObjectFile>;
     using OptLvl = llvm::PassBuilder::OptimizationLevel;
+    using FloatABI = llvm::FloatABI::ABIType;
 
     CodeGen(const std::string& targetName,
             const std::string& cpu = "generic",

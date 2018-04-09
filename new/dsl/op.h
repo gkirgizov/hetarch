@@ -1,6 +1,7 @@
 #pragma once
 
-#include <llvm/IR/Instruction.h>
+//#include <llvm/IR/Instruction.h>
+#include <llvm/IR/InstrTypes.h>
 
 #include "dsl_base.h"
 #include "dsl_type_traits.h"
@@ -20,7 +21,7 @@ using OtherOps = llvm::Instruction::OtherOps;
 using Predicate = llvm::CmpInst::Predicate;
 
 
-template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
+template<BinOps bOp, typename TdLhs, typename TdRhs
         , typename = typename std::enable_if_t< is_ev_v<TdLhs, TdRhs> >
 >
 struct EBinOp : Expr<f_t<TdLhs>> {
@@ -30,8 +31,8 @@ struct EBinOp : Expr<f_t<TdLhs>> {
     IR_TRANSLATABLE
 };
 
-template<BinOps bOp, typename TdLhs, typename TdRhs = TdLhs
-        , typename = typename std::enable_if_t< is_same_raw_v<bool, TdLhs, TdRhs> >
+template<BinOps bOp, typename TdLhs, typename TdRhs
+        , typename = typename std::enable_if_t< is_same_raw_v<Expr<bool>, TdLhs, TdRhs> >
 >
 struct EBinOpLogical : EBinOp<bOp, TdLhs, TdRhs> {
     using EBinOp<bOp, TdLhs, TdRhs>::EBinOp;
@@ -79,7 +80,7 @@ using EBinICmp = EBinCmp<OtherOps::ICmp, P, TdLhs, TdRhs>;
 template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >> \
 constexpr auto operator SYM (T1 lhs) { \
     using t1 = i_t<T1>; \
-    using const_t = DSLConst<t1>; \
+    using const_t = Lit<t1>; \
     constexpr bool is_fp = std::is_floating_point_v<t1>; \
     return EBinOp<(is_fp ? BinOps::F##OP: BinOps:: OP), const_t, T1>{ \
             const_t{0}, \
@@ -158,11 +159,29 @@ constexpr auto operator SYM (T1 lhs, T2 rhs) { \
             cast_t{lhs}, \
             rhs \
         }; \
-    } else { \
+    } else if constexpr (!std::is_unsigned_v<t1> && std::is_unsigned_v<t2>) { \
         using cast_t = ECast<T1, T2>; \
         return EBinOp<BinOps:: S_OP , T1, cast_t>{ \
             lhs, \
             cast_t{rhs} \
+        }; \
+    } else if constexpr (std::is_unsigned_v<t1> && !std::is_unsigned_v<t2>) { \
+        using cast_t = ECast<T2, T1>; \
+        return EBinOp<BinOps:: S_OP , cast_t, T2>{ \
+            cast_t{lhs}, \
+            rhs \
+        }; \
+    } else if constexpr (sizeof(t1) >= sizeof(t2)) { \
+        using cast_t = ECast<T1, T2>; \
+        return EBinOp<BinOps:: U_OP , T1, cast_t>{ \
+            lhs, \
+            cast_t{rhs} \
+        }; \
+    } else { \
+        using cast_t = ECast<T2, T1>; \
+        return EBinOp<BinOps:: U_OP , cast_t, T2>{ \
+            cast_t{lhs}, \
+            rhs \
         }; \
     } \
 }
@@ -172,8 +191,8 @@ ADDITIVE_OP(+, FAdd, Add)
 ADDITIVE_OP(-, FSub, Sub)
 MULTIPLICATIVE_OP(*, FMul, Mul, Mul)
 // todo: ensure these operations
-//MULTIPLICATIVE_OP(/, FDiv, SDiv, UDiv)
-//MULTIPLICATIVE_OP(%, FRem, SRem, URem)
+MULTIPLICATIVE_OP(/, FDiv, SDiv, UDiv)
+MULTIPLICATIVE_OP(%, FRem, SRem, URem)
 
 
 #define BITWISE_OP(SYM, OP) \
@@ -215,7 +234,7 @@ template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >>
 constexpr auto operator~ (T1 x) {
     using t1 = f_t<T1>;
     static_assert(std::is_arithmetic_v<t1>, "Bitwise negation expects arithmetic type!");
-    using zero_t = DSLConst<i_t<T1>>;
+    using zero_t = Lit<i_t<T1>>;
     if constexpr (std::is_integral_v<t1>) {
         return EBinOp<BinOps::Sub, zero_t, T1>{ zero_t{0}, x };
     } else if constexpr (std::is_floating_point_v<f_t<T1>>) {
@@ -227,7 +246,7 @@ constexpr auto operator~ (T1 x) {
 /// Logical Not
 template<typename T1, typename = typename std::enable_if_t< is_ev_v<T1> >>
 constexpr auto operator!(T1 lhs) {
-    using const_t = DSLConst<bool>;
+    using const_t = Lit<bool>;
     return EBinOpLogical<BinOps::Xor, bool_cast<T1>, const_t>{
             bool_cast<T1>{lhs},
             const_t{true}

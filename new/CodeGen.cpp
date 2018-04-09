@@ -229,12 +229,12 @@ void CodeGen::runPassesImpl(llvm::Module& module, llvm::TargetMachine* tm) const
     }
 
 //    llvm::ModulePassManager mpm = builder.buildModuleSimplificationPipeline(optLvl, utils::is_debug); // can be run repeatedly
-//    llvm::ModulePassManager mpm = builder.buildModuleOptimizationPipeline(optLvl, utils::is_debug); // run once
+    llvm::ModulePassManager mpm = builder.buildModuleOptimizationPipeline(optLvl, utils::is_debug); // run once
 //    llvm::ModulePassManager mpm = builder.buildPerModuleDefaultPipeline(optLvl, utils::is_debug); // suitable default
 
     // Register other required analyses
 //    mam.registerPass([&] { return llvm::InnerAnalysisManagerProxy<decltype(mam), llvm::Module>(mam); });
-//    llvm::PreservedAnalyses mpreserved = mpm.run(module, mam);
+    llvm::PreservedAnalyses mpreserved = mpm.run(module, mam);
 }
 
 

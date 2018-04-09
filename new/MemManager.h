@@ -51,12 +51,9 @@ inline void printMemRegion(std::ostream &stream, const MemRegion<AddrT>& mr, Mem
 template<typename AddrT>
 class MemManager {
 
-    using void_ptr = void *;
     // As we allocate memory on the different machine,
-    // ptr type on 'master' machine (void_ptr) must allow
-    // to address its (different machine's) memory.
-    // So, this assert states exactly this.
-    static_assert(sizeof(void_ptr) >= sizeof(AddrT));
+    // 'master' machine must allow to address all its memory.
+    static_assert(sizeof(std::size_t) >= sizeof(AddrT));
 public:
     const AddrT defaultAlignment;
 

@@ -24,18 +24,18 @@ inline void toIR(IRTranslator &irTranslator) const { toIRImpl(*this, irTranslato
 
 struct DSLBase {};
 
-struct ESBase : public DSLBase {}; // Expression or Statement
+struct ESBase : DSLBase {}; // Expression or Statement
 
-struct ExprBase : public ESBase {};
+struct ExprBase : ESBase {};
 
 template<typename T>
-struct Expr : public ExprBase { using type = T; };
+struct Expr : ExprBase { using type = T; };
 
 namespace {
     std::size_t val_counter{0};
 }
 
-struct ValueBase : public DSLBase {
+struct ValueBase : DSLBase {
     using iid_t = std::size_t;
     const iid_t iid;
 
@@ -46,30 +46,32 @@ struct ValueBase : public DSLBase {
     }
 };
 
-struct CallableBase : public DSLBase {
+struct CallableBase : DSLBase {
     CallableBase() = default;
 //    CallableBase(const CallableBase &) = delete;
     CallableBase(CallableBase &&) = default;
 
-    virtual ~CallableBase() = default;
+    virtual ~CallableBase() = default; // it's needed
 };
 
-struct VoidExpr : public ValueBase {
+struct VoidExpr : ValueBase {
     using type = void;
     IR_TRANSLATABLE
 };
 const VoidExpr Unit{};
 
 
-// todo: temp
-template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
-struct DSLConst : public Expr<T> {
+// Literal
+template<typename T>
+struct Lit : Expr<T> {
+// todo: move in appropriate place -- avoid link problems due to to_dsl_t use
+//    static_assert(!std::is_void_v< to_dsl_t<T> >, "This type can't be translated to DSL type system!");
+    static_assert(std::is_scalar_v<T>, "This type can't be translated to DSL type system!");
     const T val;
-    constexpr DSLConst(T val) : val{val} {}
+    constexpr Lit(T val) : val{val} {}
     IR_TRANSLATABLE
 };
-//template<typename T, typename = typename std::enable_if_t< std::is_arithmetic_v<T> >>
-//constexpr auto operator"" _dsl (T val) { return DSLConst<T>{val}; };
+
 
 #define MEMBER_ASSIGN_OP(TD, SYM) \
 template<typename T2> \
@@ -78,9 +80,9 @@ constexpr auto operator SYM##= (T2 rhs) const { \
 }
 
 #define MEMBER_XX_OP(TD, X) \
-constexpr auto operator X##X () { return this->assign(static_cast<const TD &>(*this) X DSLConst{1}); }
+constexpr auto operator X##X () { return this->assign(static_cast<const TD &>(*this) X Lit{1}); }
 // unclear what to do with postfix version
-//constexpr auto operator X##X (int) { return this->assign(static_cast<const TD &>(*this) X DSLConst{1}); } \
+//constexpr auto operator X##X (int) { return this->assign(static_cast<const TD &>(*this) X Lit{1}); } \
 
 
 class Named {

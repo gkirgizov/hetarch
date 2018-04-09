@@ -52,7 +52,7 @@ public:
     using element_t = f_t<TdPointee>;
     using dsl_element_t = remove_cvref_t<TdPointee>;
     static const bool const_q = is_const;
-    static const bool volatile_q = is_const; // todo: tmp
+    static const bool volatile_q = false; // todo: tmp
     static const bool elt_const_q = dsl_element_t::const_q;
     static const bool elt_volatile_q = dsl_element_t::volatile_q;
 
@@ -77,14 +77,14 @@ public:
 
 
 template<typename Td, bool is_const = false>
-struct RawPtr: PtrBase< RawPtr<Td, is_const>, Td, is_const >
+struct Ptr : PtrBase< Ptr<Td, is_const>, Td, is_const >
 {
     using type = f_t<Td>*;
-    using this_t = RawPtr<Td, is_const>;
+    using this_t = Ptr<Td, is_const>;
     using Value<this_t, type, is_const>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
-    constexpr RawPtr(this_t&&) = default;
-    constexpr RawPtr(const this_t&) = default;
+    constexpr Ptr(this_t&&) = default;
+    constexpr Ptr(const this_t&) = default;
 
     using PtrBase< this_t, Td, is_const >::PtrBase;
 
