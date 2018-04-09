@@ -11,21 +11,6 @@ MACRO(HEADER_DIRS return_list cur_dir)
     SET(${return_list} ${dir_list})
 ENDMACRO()
 
-#set(llvm_libs_target_x86
-#        LLVMX86Disassembler
-#        LLVMX86AsmParser
-#        LLVMX86AsmPrinter
-#        LLVMX86CodeGen
-#        LLVMX86Info
-#        )
-#set(llvm_libs_target_arm
-#        LLVMARMDisassembler
-#        LLVMARMAsmParser
-#        LLVMARMAsmPrinter
-#        LLVMARMCodeGen
-#        LLVMARMInfo
-#        )
-
 
 add_definitions(-DTESTS_RES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test_resources/")
 
@@ -43,7 +28,6 @@ add_executable(gtests2 main.cpp
         mocks.h
         mem_tests.cpp
         codegen_tests.cpp
-#        sfinae_tests.cpp
         )
 target_link_libraries(gtests2 gtest ${llvm_libs_base} ${llvm_libs_more})
 target_compile_options(gtests2 PUBLIC "-fno-rtti")
@@ -59,8 +43,11 @@ target_compile_options(gtests2 PUBLIC "-fno-rtti")
 add_executable(scratch main.cpp
         test_utils.cpp
         scratch_tests.cpp
-#        sfinae_tests.cpp
-        pid_ctrl_example.cpp
         )
 target_link_libraries(scratch gtest ${llvm_libs_base})
 target_compile_options(scratch PUBLIC "-fno-rtti")
+
+
+add_executable(dsl_examples examples/dsl_examples.cpp)
+target_link_libraries(dsl_examples ${llvm_libs_base})
+target_compile_options(dsl_examples PUBLIC "-fno-rtti")

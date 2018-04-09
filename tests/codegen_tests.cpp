@@ -41,30 +41,56 @@ string ir1{ress + "part1.ll"};
 string ir2{ress + "part2.ll"};
 
 
+namespace {
+
 struct cg_config {
     std::string triple;
     std::string cpu;
+    std::string fpu;
     std::string host;
     std::string port;
+
+    CodeGen::FloatABI float_abi;
     bool is_thumb;
 };
 
+CodeGen::FloatABI determine_float_abi(std::string spec) {
+    if (spec.find("hard") != std::string::npos) {
+        return CodeGen::FloatABI::Hard;
+    } else if (spec.find("soft") != std::string::npos) {
+        return CodeGen::FloatABI::Soft;
+    } else {
+        return CodeGen::FloatABI::Default;
+    }
+}
+
+bool is_thumb(const std::string& triple) {
+    return (triple.find("arm") != std::string::npos ||
+            triple.find("thumb") != std::string::npos) ;
+}
+
 cg_config read_config() {
     std::ifstream test_config{ress + "test_config.txt"};
-    cg_config cfg;
 
-    test_config >> cfg.triple >> cfg.cpu >> cfg.host >> cfg.port;
-    if (cfg.triple.find("arm") != std::string::npos || cfg.triple.find("thumb") != std::string::npos) {
-        cfg.is_thumb = true;
-    }
+    cg_config cfg;
+    std::string float_abi;
+
+    test_config >> cfg.triple >> cfg.cpu >> cfg.fpu >> float_abi >> cfg.host >> cfg.port;
+    cfg.is_thumb = is_thumb(cfg.triple);
+    cfg.float_abi = determine_float_abi(float_abi);
+
     std::cerr << "Tests: using"
               << ": host: " << cfg.host
               << "; port: " << cfg.port
               << "; triple: " << cfg.triple
               << "; cpu: " << cfg.cpu
+              << "; fpu: " << cfg.fpu
+              << "; float_abi: " << cfg.float_abi
               << "; is_thumb: " << cfg.is_thumb
               << std::endl;
     return cfg;
+}
+
 }
 
 
@@ -93,7 +119,7 @@ class CodeGenTest : public ::testing::Test {
 public:
     explicit CodeGenTest()
             : config{read_config()}
-            , codeGen(config.triple, config.cpu)
+            , codeGen(config.triple, config.cpu, config.fpu, config.float_abi)
 //            , codeGen("x86_64-unknown-linux-gnu")
             , optLvl{CodeGen::OptLvl::O0}
             , main_entry{utils::loadModule(main_entry_ll, ctx), "main"}
@@ -196,7 +222,7 @@ class CodeLoaderTest : public ::testing::Test {
 public:
     explicit CodeLoaderTest()
             : config{read_config()}
-            , codeGen(config.triple)
+            , codeGen(config.triple, config.cpu, config.fpu, config.float_abi)
             , irt{config.is_thumb}
             , ctx{irt.getContext()}
 #ifdef HT_ENABLE_STM32
@@ -249,8 +275,8 @@ public:
     template<typename DSLGenerator, typename ...Args>
     auto generic_caller(DSLGenerator&& dsl_generator, Args... args) {
         // Make function from generator
-//        DSLFunction dsl_fun = make_dsl_fun(dsl_generator, dsl_args...);
-        DSLFunction dsl_fun = make_dsl_fun<to_dsl_t<std::remove_reference_t<decltype(args)>>...>(dsl_generator);
+//        dsl::Function dsl_fun = make_dsl_fun(dsl_generator, dsl_args...);
+        dsl::Function dsl_fun = make_dsl_fun<to_dsl_t<std::remove_reference_t<decltype(args)>>...>(dsl_generator);
 
         // Translate, compile and load it
         IRModule translated = irt.translate(dsl_fun);
@@ -276,15 +302,22 @@ public:
     };
 
     template<typename DSLFun>
-    auto simple_loader(DSLFun&& dsl_fun, bool dump = false) {
+    auto simple_loader(DSLFun&& dsl_fun, CodeGen::OptLvl optLvl = CodeGen::OptLvl::O0, bool dump = false) {
         IRModule translated = irt.translate(dsl_fun);
 
         bool verified_ok = utils::verify_module(translated);
         EXPECT_TRUE(verified_ok) << "failed verify with fun: " << dsl_fun.name() << std::endl;
-        if (dump) { translated.get().dump(); }
 
-        auto optLvl = CodeGen::OptLvl::O0; // don't need it here
+        if (dump) {
+            std::cerr << std::endl << "Initial generated IR before any passes:" << std::endl;
+            translated.get().dump();
+        }
         ObjCode compiled = codeGen.compile(translated, optLvl);
+        if (dump && optLvl) {
+            std::cerr << std::endl << "IR after codeGen.compile with OptLvl=" << optLvl << ":" << std::endl;
+            translated.get().dump();
+        }
+
         ResidentObjCode resident_fun = CodeLoader::load(conn, memMgr, mem::MemType::ReadWrite,
                                                         irt, codeGen, compiled);
         return resident_fun;
@@ -292,8 +325,8 @@ public:
 
     template<typename DSLGen, typename ...Args>
     auto generic_loader(DSLGen&& dsl_gen, Args... args) {
-        DSLFunction dsl_fun = make_dsl_fun<to_dsl_t<std::remove_reference_t<decltype(args)>>...>(dsl_gen);
-        return simple_loader(dsl_fun, true);
+        dsl::Function dsl_fun = make_dsl_fun<to_dsl_t<std::remove_reference_t<decltype(args)>>...>(dsl_gen);
+        return simple_loader(dsl_fun, CodeGen::OptLvl::O0, true);
     };
 };
 
@@ -326,7 +359,7 @@ TEST_F(CodeLoaderTest, loadGlobal) {
                             << std::endl;
 
         auto mr = r.memRegion();
-        std::cerr << "loaded DSLGlobal: ";
+        std::cerr << "loaded Global: ";
         mem::printMemRegion(std::cerr, mr);
         EXPECT_TRUE(mr.size > 0);
 
@@ -338,11 +371,11 @@ TEST_F(CodeLoaderTest, loadGlobal) {
         EXPECT_TRUE((loaded == orig) || !g.x.initialised());
     };
 
-    load_tester( DSLGlobal{Var<int16_t>{42}} );
-    load_tester( DSLGlobal{Var<int64_t>{53, "g1"}} );
-    load_tester( DSLGlobal{Var<float>{3.1415, ""}} );
-    load_tester( DSLGlobal{Var<double>{69e-69, "gd2"}} );
-    load_tester( DSLGlobal{Array<Var<int>, 3>{ {1, 2, 3} }} );
+    load_tester( Global{Var<int16_t>{42}} );
+    load_tester( Global{Var<int64_t>{53, "g1"}} );
+    load_tester( Global{Var<float>{3.1415, ""}} );
+    load_tester( Global{Var<double>{69e-69, "gd2"}} );
+    load_tester( Global{Array<Var<int>, 3>{ {1, 2, 3} }} );
 }
 
 TEST_F(CodeLoaderTest, loadAndCall) {
@@ -355,8 +388,8 @@ TEST_F(CodeLoaderTest, loadAndCall) {
     auto factorial_gen = [&](auto&& n){
         Var<int> res{1};
         return (While(
-                n > DSLConst(0u),
-                (res = res * n, n = n - DSLConst(1u))
+                n > Lit(0u),
+                (res = res * n, n = n - Lit(1u))
         ), res);
     };
     auto remoteRes = generic_caller(factorial_gen, 5u);
@@ -371,7 +404,7 @@ TEST_F(CodeLoaderTest, callDslFromDsl) {
     auto max_dsl_generator = [](auto&& x, auto&& y) {
         return If(x > y, x, y);
     };
-    DSLFunction dsl_max = make_dsl_fun<Var<val_t>, Var<val_t>>(max_dsl_generator);
+    dsl::Function dsl_max = make_dsl_fun<Var<val_t>, Var<val_t>>(max_dsl_generator);
 //    auto resident_max = simple_loader(dsl_max);
 
     auto max4_dsl_generator = [&](auto x1, auto x2, auto x3, auto x4) {
@@ -391,13 +424,13 @@ TEST_F(CodeLoaderTest, callResidentFromDsl) {
     auto max_dsl_generator = [](auto&& x, auto&& y) {
         return If(x > y, x, y);
     };
-    DSLFunction dsl_max = make_dsl_fun<Var<val_t>, Var<val_t>>(max_dsl_generator);
+    dsl::Function dsl_max = make_dsl_fun<Var<val_t>, Var<val_t>>(max_dsl_generator);
     auto resident_max = simple_loader(dsl_max);
 
     auto max4_dsl_generator = [&](auto x1, auto x2, auto x3, auto x4) {
         return resident_max(resident_max(x1, x2), resident_max(x3, x4));
     };
-//    DSLFunction dsl_max4 = make_dsl_fun<Var<addr_t>, Var<addr_t>, Var<addr_t>, Var<addr_t>>(max4_dsl_generator);
+//    dsl::Function dsl_max4 = make_dsl_fun<Var<addr_t>, Var<addr_t>, Var<addr_t>, Var<addr_t>>(max4_dsl_generator);
 //    auto resident_max4 = simple_loader(dsl_max4);
 
     val_t x1{22}, x2{11}, x3{42}, x4{69};
@@ -412,7 +445,7 @@ TEST_F(CodeLoaderTest, loadAndCall2) {
     auto max_dsl_generator = [](auto&& x, auto&& y) {
         return If(x > y, x, y);
     };
-    DSLFunction dsl_max = make_dsl_fun<Var<addr_t>, Var<addr_t>>(max_dsl_generator);
+    dsl::Function dsl_max = make_dsl_fun<Var<addr_t>, Var<addr_t>>(max_dsl_generator);
     auto resident_max = simple_loader(dsl_max);
 
     // Call it with some args
@@ -432,28 +465,28 @@ TEST_F(CodeLoaderTest, readGPIO) {
 
     // Create global volatile val at specified addr
     // variant 1
-//    DSLGlobal gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
+//    Global gcr{ Var<const volatile addr_t>{0, "gpio_conf_reg"} };
 //    auto remoteGCR = CodeLoader::getLoadedResident(gcr, gpio_conf_reg_addr, conn, memMgr);
     // variant 2
-    DSLGlobal gcr_ptr{ RawPtr<Var<volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
+    Global gcr_ptr{ Ptr<Var<volatile uint32_t>>{gpio_conf_reg_addr, "gpio_conf_reg"} };
     auto remoteGCR = CodeLoader::load(gcr_ptr, conn, memMgr);
 
     std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << remoteGCR.addr << std::dec << std::endl;
 
 //    auto gpio_reader_gen = [&]{
-//        return *(remoteGCR + DSLConst(0x0c20 >> 2));
+//        return *(remoteGCR + Lit(0x0c20 >> 2));
 //    };
 
     auto gpio_reader_gen = [&]{
         uint32_t bit = 0x1;
         Array<Var<uint32_t>, 5> reg_data{};
-        RawPtr<Var<volatile uint32_t>> tmp_ptr{};
+        Ptr<Var<volatile uint32_t>> tmp_ptr{};
         return (
-                tmp_ptr = remoteGCR + DSLConst(0x0c20 >> 2), reg_data[DSLConst(0)] = *tmp_ptr,
-                *tmp_ptr |= DSLConst(bit << 8),              reg_data[DSLConst(1)] = *tmp_ptr,
-                tmp_ptr = remoteGCR + DSLConst(0x0c24 >> 2),
-                *tmp_ptr |= DSLConst(bit << 2),              reg_data[DSLConst(2)] = *tmp_ptr,
-                *tmp_ptr &= ~DSLConst(bit << 2),             reg_data[DSLConst(3)] = *tmp_ptr,
+                tmp_ptr = remoteGCR + Lit(0x0c20 >> 2), reg_data[Lit(0)] = *tmp_ptr,
+                *tmp_ptr |= Lit(bit << 8),              reg_data[Lit(1)] = *tmp_ptr,
+                tmp_ptr = remoteGCR + Lit(0x0c24 >> 2),
+                *tmp_ptr |= Lit(bit << 2),              reg_data[Lit(2)] = *tmp_ptr,
+                *tmp_ptr &= ~Lit(bit << 2),             reg_data[Lit(3)] = *tmp_ptr,
                 reg_data
         );
     };
@@ -508,8 +541,8 @@ TEST_F(CodeLoaderTest, stm32f4_LED) {
     const decltype(led_green) both_leds = led_red | led_green;
 
     const auto gpiog_odr_addr = GPIOG_BASE + offsetof(device::GPIO_TypeDef, ODR);
-//    DSLGlobal { RawPtr<Var<volatile uint32_t>>{gpiog_bsrr, "gpiog_bsrr"} };
-//    DSLGlobal { to_dsl_t<volatile uint32_t *> {gpiog_bsrr} };
+//    Global { Ptr<Var<volatile uint32_t>>{gpiog_bsrr, "gpiog_bsrr"} };
+//    Global { to_dsl_t<volatile uint32_t *> {gpiog_bsrr} };
 //    auto r = CodeLoader::load(gpiog_bsrr, conn, memMgr);
 //    std::cerr << "codegen_test: loaded remote at: 0x" << std::hex << r.addr << std::dec << std::endl;
 
@@ -525,11 +558,71 @@ TEST_F(CodeLoaderTest, stm32f4_LED) {
     exec.call(fr, both_leds);
 
     // try schedule
-    auto toggle_green_led = [&]{ return toggle_gpiog_pin(DSLConst{led_green}); };
+    auto toggle_green_led = [&]{ return toggle_gpiog_pin(Lit{led_green}); };
     auto fr2 = generic_loader(toggle_green_led);
     EXPECT_TRUE(conn.schedule(fr2.callAddr, 2000));
 }
 #endif
 
 // todo: various kinds of symbol conflicts related tests
+TEST_F(CodeLoaderTest, pid_ctrl) {
+    typedef int32_t ctrl_t;
+    typedef float coef_t;
+
+    Lit<ctrl_t> sp{42}; // Setpoint
+    const ctrl_t ms_delay = 100; // Control cycle duration in ms
+    Lit<float> dt{ms_delay / 1000.0};
+
+/*    // Ziegler-Nichols method
+    auto compute_coefs = [](float Ku, float Tu){
+        return std::tuple{
+                static_cast<int32_t>( 0.6*Ku ),
+                static_cast<int32_t>( 1.2*Ku/Tu ),
+                ( 3*Ku*Tu/40 )
+        };
+    };
+
+    // Case 2: some, let's say, optimized coefficients
+    auto coefs = compute_coefs(5, 1);
+    auto Kp = Lit{std::get<0>(coefs)};
+    auto Ki = Lit{std::get<1>(coefs)};
+    auto Kd = Lit{std::get<2>(coefs)};
+    std::cerr << "Got coefficients:\n"
+              << "Kp=" << Kp.val << " (type=" << utils::type_name<decltype(Kp)>() << ")\n"
+              << "Ki=" << Ki.val << " (type=" << utils::type_name<decltype(Ki)>() << ")\n"
+              << "Kd=" << Kd.val << " (type=" << utils::type_name<decltype(Kd)>() << ")\n"
+              << std::endl;*/
+
+
+    auto perr = CodeLoader::load(Global{ Var<ctrl_t>{0, "perr"} }, conn, memMgr);
+    auto ierr = CodeLoader::load(Global{ Var<ctrl_t>{0, "ierr"} }, conn, memMgr);
+
+    auto pid_ctrl = [&](Var<ctrl_t> pv){
+        Lit<float> Kp{4};
+        Lit<float> Ki{6};
+        Lit<float> Kd{0.5};
+
+        // Local variables
+        // pv -- process variable
+        // cv -- control variable
+//        Var<ctrl_t> pv(0, "pv"), cv(0, "cv"), prev_perr(0, "prev_err"), derr(0, "derr");
+        Var<ctrl_t> cv(0, "cv"), prev_perr(0, "prev_err"), derr(0, "derr");
+
+        // read_pv and write_cv are some dsl generators
+        //  that perform actual input/output
+        return (
+//                pv = read_pv(),
+                prev_perr = perr,
+                perr = sp - pv,
+                ierr += perr,
+                derr = perr - prev_perr,
+                cv = Kp*perr + Kd*derr/dt + Ki*ierr*dt,
+//                write_cv(cv)
+                cv
+        );
+    };
+
+    auto opt_pid_ctrl = make_dsl_fun<Var<ctrl_t>>(pid_ctrl);
+    auto r = simple_loader(opt_pid_ctrl, CodeGen::OptLvl::O2, true);
+}
 
