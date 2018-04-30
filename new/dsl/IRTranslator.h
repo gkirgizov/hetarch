@@ -238,6 +238,21 @@ public: // Values
         push_addr(pointee_addr, e.ptr.elt_volatile_q);
     }
 
+    template<bool is_const, bool is_volatile, typename ...Tds>
+    void accept(const xStruct<is_const, is_volatile, Tds...>& s) {
+        auto init_val = s.initialised() ? llvm_map.get_const(s.initial_val()) : nullptr;
+        accept_value(s, init_val);
+    };
+
+    template<typename TdStruct, std::size_t I>
+    void accept(const EStructAccess<TdStruct, I>& e) {
+        e.s.toIR(*this);
+        auto str_addr = pop_addr().first;
+        auto str_type = llvm_map.get_type<f_t<TdStruct>>();
+        auto elt_addr = cur_builder->CreateStructGEP(str_type, str_addr, I);
+        push_addr(elt_addr, TdStruct::template elt_volatile_q<I>);
+    };
+
 private:
 //    template<typename T>
 //    inline llvm::AllocaInst* allocate(const std::string_view& name = "") {

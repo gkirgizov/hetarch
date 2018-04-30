@@ -3,6 +3,7 @@
 #include "var.h"
 #include "ptr.h"
 #include "array.h"
+#include "struct.h"
 
 
 namespace hetarch {
@@ -24,6 +25,7 @@ template< typename T > struct to_dsl<T, typename std::enable_if_t<
         std::is_arithmetic_v<T> >>
 { using type = Var<T>; };
 
+/*
 template< typename T > struct to_dsl<T, typename std::enable_if_t<
         std::is_pointer_v<T> >>
 {
@@ -40,7 +42,22 @@ template< typename T > struct to_dsl<T, typename std::enable_if_t<
                       , std::is_const_v<T>
     >;
 };
+ */
 
+template<typename T>
+struct to_dsl< T* > {
+    using type = Ptr< to_dsl_t<T> >;
+};
+
+template<typename T, std::size_t N>
+struct to_dsl< std::array<T, N> > {
+    using type = Array< to_dsl_t<T>, N >;
+};
+
+template<typename ...Ts>
+struct to_dsl< std::tuple<Ts...> > {
+    using type = Struct< to_dsl_t<Ts>... >;
+};
 
 // Map arbitrary DSL type to DSL Value type
 template<typename TdExpr> using param_for_arg_t = typename to_dsl< f_t<TdExpr> >::type;

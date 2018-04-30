@@ -8,7 +8,7 @@
 #include "dsl/var.h"
 #include "dsl/ptr.h"
 #include "dsl/array.h"
-//#include "dsl/struct.h"
+#include "dsl/struct.h"
 #include "dsl/fun.h"
 #include "dsl/ResidentObjCode.h"
 #include "dsl/sequence.h"

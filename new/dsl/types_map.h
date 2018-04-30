@@ -79,6 +79,11 @@ class LLVMMapper {
     }
 
     using addr_t = HETARCH_TARGET_ADDRT;
+
+    template<typename Tuple, std::size_t ...I>
+    inline llvm::StructType* get_struct_type(std::index_sequence<I...>) {
+        return llvm::StructType::get( get_type< std::tuple_element_t<I, Tuple> >()... );
+    };
 public:
     explicit LLVMMapper(llvm::LLVMContext& C) : type_map{get_type_map(C)} {}
 
@@ -95,7 +100,9 @@ public:
         } else if constexpr (std::is_pointer_v<T>) {
             return get_type<std::remove_pointer_t<T>>()->getPointerTo();
         } else if constexpr (dsl::is_std_array_v<T>) {
-            return llvm::ArrayType::get(get_type<typename T::value_type>(), std::tuple_size<T>::value);
+            return llvm::ArrayType::get(get_type<typename T::value_type>(), std::tuple_size_v<T>);
+        } else if constexpr (dsl::is_std_tuple_v<T>) {
+            return get_struct_type<T>( std::make_index_sequence< std::tuple_size_v<T> >{} );
         } else {
 //            static_assert(false, "Unknown type provided!");
             static_assert(T::fail_compile, "Unknown type provided!");
@@ -156,16 +163,32 @@ public:
         return llvm::cast<llvm::PointerType>(llvm_addr_val);
     }*/
 
-    template<typename T, std::size_t N, typename = typename std::enable_if_t<std::is_arithmetic_v<T>>>
-//    auto get_const(const T (&arr)[N]) {
+    template<typename T, std::size_t N>
     auto get_const(const std::array<T, N> &arr) {
         // todo ensure it works when vals are out of scope after return
         std::array<llvm::Constant*, N> vals;
         for (auto i = 0; i < N; ++i) {
             vals[i] = get_const(arr[i]);
         }
-        return llvm::ConstantArray::get(get_type<std::array<T, N>>(), llvm::ArrayRef<llvm::Constant*>{vals});
+        return llvm::ConstantArray::get(
+                get_type<std::array<T, N>>(),
+                llvm::ArrayRef<llvm::Constant*>{vals}
+        );
     };
+
+    template<typename ...Ts>
+    auto get_const(const std::tuple<Ts...> &tpl) {
+        // need this to "unpack" the tuple
+        return std::apply(
+                [this](const Ts&... elems){
+                    return llvm::ConstantStruct::get(
+                            get_type<std::tuple<Ts...>>(),
+                            get_const(elems)...
+                    );
+                },
+                tpl
+        );
+    }
 
 };
 

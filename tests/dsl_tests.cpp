@@ -244,10 +244,68 @@ TEST_F(IRTranslatorTest, compileDSLArray) {
             (arr2[Lit(1)] = arr[Lit(0)], arr2)
     );
 
+//    std::array< std::array<int, 3>, 2 > nested_init = {{{10, 20, 30}, {11, 22, 33}}};
+//    Array<Array<Var<int>, 3>, 2> nested{nested_init};
+    Array<Array<Var<int>, 3>, 2> nested{{ {{10, 20, 30}, {11, 22, 33}} }};
+    Function array_nested_test(
+            "array_nested",
+            MakeFunArgs(nested),
+            (tmp = nested[Lit(1)][Lit(2)], tmp)
+    );
+
     EXPECT_TRUE(translate_verify(irt, array_access_test));
     EXPECT_TRUE(translate_verify(irt, array_assign_test));
     EXPECT_TRUE(translate_verify(irt, array_assign2_test));
     EXPECT_TRUE(translate_verify(irt, array_return_test));
+    EXPECT_TRUE(translate_verify(irt, array_nested_test));
+}
+
+TEST_F(IRTranslatorTest, compileDSLStruct) {
+    std::tuple s1_init = {1, 2, 3.14159, true};
+    std::tuple s2_init = {-11, -22, -2.742, false};
+
+    using StructT = Struct< Var<int>, Var<int>, Var<double>, Var<bool> >;
+    StructT s{s1_init};
+    StructT s2{s2_init};
+
+    Function struct_access_test(
+            "try_struct",
+            MakeFunArgs(x, y), (
+                    tmp = s.get<0>()
+            , tmp)
+    );
+
+    Function struct_assign_test(
+            "try_struct",
+            MakeFunArgs(x, y),
+            (s.get<0>() = s.get<1>(), Unit)
+    );
+
+    Function struct_assign2_test(
+            "struct_assign2",
+            MakeFunArgs(),
+            (s = s2, Unit)
+    );
+
+    Function struct_return_test(
+            "struct_return",
+            MakeFunArgs(s),
+            (s, s)
+    );
+
+    using StructComplexT = Struct< Var<bool>, Struct< Var<int>, Var<double> >, Array< Var<int>, 3 > >;
+    StructComplexT s3{ {false, {42, 69.69}, {-11, -22, -33}} };
+    Function struct_complex_test(
+            "struct_complex",
+            MakeFunArgs(s3),
+            (tmp = s3.get<1>().get<0>(), tmp)
+    );
+
+    EXPECT_TRUE(translate_verify(irt, struct_access_test));
+    EXPECT_TRUE(translate_verify(irt, struct_assign_test));
+    EXPECT_TRUE(translate_verify(irt, struct_assign2_test));
+    EXPECT_TRUE(translate_verify(irt, struct_return_test));
+    EXPECT_TRUE(translate_verify(irt, struct_complex_test));
 }
 
 TEST_F(IRTranslatorTest, compileDSLControlFlow) {

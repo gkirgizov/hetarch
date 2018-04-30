@@ -82,8 +82,18 @@ template<typename ...Tds> inline constexpr bool is_unit_v = is_unit<Tds...>::val
 
 // Accessors for aggregate types (Ptr, Array, Struct)
 
-template<typename Td> struct get_dsl_element { using type = typename std::remove_reference_t<Td>::dsl_element_t; };
+template<typename Td>
+struct get_dsl_element {
+    using type = typename std::remove_reference_t<Td>::dsl_element_t;
+};
 template<typename Td> using get_dsl_element_t = typename get_dsl_element<Td>::type;
+
+// todo: specialisation for struct
+//template<typename Td, std::size_t I>
+//struct get_dsl_element<Td> {
+//    using type = typename std::remove_reference_t<Td>::template dsl_element_t<I>;
+//};
+//template<typename Td, std::size_t I> using get_dsl_element_t = typename get_dsl_element<Td, I>::type;
 
 template<typename Td> struct get_element { using type = typename std::remove_reference_t<Td>::element_t; };
 template<typename Td> using get_element_t = typename get_element<Td>::type;
