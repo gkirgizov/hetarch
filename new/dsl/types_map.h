@@ -12,6 +12,7 @@
 #include "llvm/Support/Casting.h"
 
 #include "../dsl/dsl_type_traits.h"
+#include "../util_type_traits.h"
 
 
 namespace hetarch {
@@ -99,9 +100,9 @@ public:
             return get_type<std::remove_reference_t<T>>()->getPointerTo();
         } else if constexpr (std::is_pointer_v<T>) {
             return get_type<std::remove_pointer_t<T>>()->getPointerTo();
-        } else if constexpr (dsl::is_std_array_v<T>) {
+        } else if constexpr (utils::is_std_array_v<T>) {
             return llvm::ArrayType::get(get_type<typename T::value_type>(), std::tuple_size_v<T>);
-        } else if constexpr (dsl::is_std_tuple_v<T>) {
+        } else if constexpr (utils::is_std_tuple_v<T>) {
             return get_struct_type<T>( std::make_index_sequence< std::tuple_size_v<T> >{} );
         } else {
 //            static_assert(false, "Unknown type provided!");
@@ -129,7 +130,7 @@ public:
 
     template<typename RetT, typename ArgsTuple
             , typename Inds = std::make_index_sequence<std::tuple_size_v<ArgsTuple>>
-            , typename = typename std::enable_if_t<dsl::is_std_tuple_v<ArgsTuple>> >
+            , typename = typename std::enable_if_t<utils::is_std_tuple_v<ArgsTuple>> >
     inline llvm::FunctionType* get_func_type(bool isVarArg = false) {
         return llvm::FunctionType::get(
                 get_type<RetT>(), get_func_args_type<ArgsTuple>(Inds{}), isVarArg

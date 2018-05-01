@@ -33,13 +33,15 @@ public:
         //  (because is_const is for in-DSL interface, i.e. for type safety)
         //  in this case don't inline it with initial_value in IRTranslator!
         static_assert(!is_const, "Const values are not writable!");
-        conn.write(addr, sizeof(value_type), utils::toBytes(val));
+        unsigned char bytes[sizeof(value_type)];
+        utils::toBytes(val, bytes);
+        conn.write(addr, sizeof(value_type), bytes);
     };
 
     value_type read() {
         unsigned char bytes[sizeof(value_type)];
         conn.read(addr, sizeof(value_type), bytes);
-        return utils::fromBytes<value_type>(bytes); // copy-construct from reference
+        return utils::fromBytes<value_type>(bytes);
     }
 };
 

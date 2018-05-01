@@ -118,7 +118,9 @@ public:
         if (actualMemRegion.size >= size) {
             if (g.x.initialised()) {
                 // todo: endianness?
-                conn.write(actualMemRegion.start, size, utils::toBytes(g.x.initial_val()));
+                unsigned char bytes[size];
+                utils::toBytes(g.x.initial_val(), bytes);
+                conn.write(actualMemRegion.start, size, bytes);
             }
             return getResident(g.x, conn, memManager, actualMemRegion, true);
 
@@ -143,7 +145,9 @@ public:
         if (memRegion.size >= size) {
             if (g.x.initialised()) {
                 // todo: endianness?
-                conn.write(memRegion.start, size, utils::toBytes(g.x.initial_val()));
+                unsigned char bytes[size];
+                utils::toBytes(g.x.initial_val(), bytes);
+                conn.write(memRegion.start, size, bytes);
             }
             return getResident(g.x, conn, memManager, memRegion, true);
 

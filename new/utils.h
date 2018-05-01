@@ -2,6 +2,8 @@
 
 #include <string_view>
 
+#include "util_type_traits.h"
+
 
 // from here: http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/p0426r1.html
 // Simple constexpr char trait
@@ -52,23 +54,74 @@ inline constexpr auto make_bsv(const CharT* s) noexcept {
 //    return std::string_view{s, ce_char_trait::length(s)};
 //}
 
+
 namespace hetarch {
 namespace utils {
 
+
 using CharT = unsigned char;
 
-template<typename T>
-inline const CharT* toBytes(const T &x) {
-    if constexpr (std::is_standard_layout_v<T>) {
-        return reinterpret_cast<const CharT*>(&x);
-    }
+/*template<typename T, typename = typename std::enable_if_t< std::is_standard_layout_v<T> >>
+inline const CharT* toBytes(const T &x) { return reinterpret_cast<const CharT*>(&x); }*/
+
+template<typename T, typename = typename std::enable_if_t< std::is_standard_layout_v<T> >>
+inline std::size_t toBytes(const T &x, CharT* buffer) {
+    memcpy(buffer, reinterpret_cast<const CharT*>(&x), sizeof(T));
+    return sizeof(T);
 }
 
-template<typename T>
-inline const T& fromBytes(const CharT* bytes) {
-    if constexpr (std::is_standard_layout_v<T>) {
-        return *reinterpret_cast<const T*>(bytes);
-    }
+// std::tuple is not standart_layout, hence special handling
+template<typename ...Ts>
+inline std::size_t toBytes(const std::tuple<Ts...> &x, CharT* buffer) {
+    std::size_t offset = 0;
+
+    // std::apply to unpack the tuple
+    std::apply([&](const auto&... val){
+        // it is recursive procedure for case of nested aggregate types
+        // dummy array is to use parameter pack expansion through initiliazer list
+        std::array dummy = {(
+                offset += toBytes(val, buffer + offset)
+        )... }; // expand parameter pack in initializer list
+    }, x); // unpack tuple
+
+    // total used size (sizeof(tuple)) is different from sum of sizes of constituent types, that 'offset' value holds
+    //  it's for consistency with 'fromBytes' procedure (see for more details)
+//    return offset;
+    return sizeof(std::tuple<Ts...>);
+}
+
+template<typename T, typename = typename std::enable_if_t< std::is_standard_layout_v<T> >>
+inline T fromBytes(const CharT* bytes) {
+    return *reinterpret_cast<const T*>(bytes);
+//    static_assert(T::assert_failure && "Cannot deserialize to this type from bytes!");
+}
+
+// forward declaration
+template<typename ...Ts> static const std::tuple<Ts...> tupleFromBytes(const CharT* bytes);
+
+// Helper function to work with fromBytes<std::tuple<Ts...>>
+template<typename Tuple, typename = typename std::enable_if_t< is_std_tuple_v<Tuple> >>
+const auto fromBytes(const CharT* bytes) {
+    return std::apply([&](auto... I){
+        return tupleFromBytes< std::tuple_element_t<I, Tuple>... >(bytes);
+    }, std::make_index_sequence< std::tuple_size_v<Tuple> >{});
+};
+
+// std::tuple is not standart_layout, hence special handling
+// values are assumed to be packed in bytes in strict order as <Ts...>
+template<typename ...Ts>
+const std::tuple<Ts...> tupleFromBytes(const CharT* bytes) {
+    std::size_t offset = 0;
+    auto get_offset = [&](std::size_t size) {
+        auto old_offset = offset;
+        offset += size;
+        return old_offset;
+    };
+    // note: if Ts includes tuple, then actually less bytes will be read than sizeof(tuple)
+    //  because tuple is not standart_layout type
+    // Although it's possible to avoid this waste of memory
+    //  if use own 'sizeof' that will go 'inside' the non-standard_layout types (i.e. tuple)
+    return { fromBytes( bytes + get_offset(sizeof(Ts)) )... };
 }
 
 
