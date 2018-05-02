@@ -97,20 +97,22 @@ inline T fromBytes(const CharT* bytes) {
 }
 
 // forward declaration
-template<typename ...Ts> static const std::tuple<Ts...> tupleFromBytes(const CharT* bytes);
+template<typename Tuple, std::size_t ...I>
+static Tuple tupleFromBytesHelper(const CharT* bytes, std::index_sequence<I...>);
 
 // Helper function to work with fromBytes<std::tuple<Ts...>>
-template<typename Tuple, typename = typename std::enable_if_t< is_std_tuple_v<Tuple> >>
-const auto fromBytes(const CharT* bytes) {
-    return std::apply([&](auto... I){
-        return tupleFromBytes< std::tuple_element_t<I, Tuple>... >(bytes);
-    }, std::make_index_sequence< std::tuple_size_v<Tuple> >{});
+//template<typename Tuple, typename = typename std::enable_if_t< is_std_tuple_v<Tuple>, std::true_type >>
+//inline Tuple fromBytes(const CharT* bytes) {
+template<typename Tuple>
+inline std::enable_if_t< is_std_tuple_v<Tuple>, Tuple > fromBytes(const CharT* bytes) {
+    return tupleFromBytesHelper<Tuple>( bytes, std::make_index_sequence< std::tuple_size_v<Tuple> >{} );
 };
+
 
 // std::tuple is not standart_layout, hence special handling
 // values are assumed to be packed in bytes in strict order as <Ts...>
 template<typename ...Ts>
-const std::tuple<Ts...> tupleFromBytes(const CharT* bytes) {
+static std::tuple<Ts...> tupleFromBytes(const CharT* bytes) {
     std::size_t offset = 0;
     auto get_offset = [&](std::size_t size) {
         auto old_offset = offset;
@@ -121,7 +123,12 @@ const std::tuple<Ts...> tupleFromBytes(const CharT* bytes) {
     //  because tuple is not standart_layout type
     // Although it's possible to avoid this waste of memory
     //  if use own 'sizeof' that will go 'inside' the non-standard_layout types (i.e. tuple)
-    return { fromBytes( bytes + get_offset(sizeof(Ts)) )... };
+    return { fromBytes<Ts>( bytes + get_offset(sizeof(Ts)) )... };
+}
+
+template<typename Tuple, std::size_t ...I>
+static inline Tuple tupleFromBytesHelper(const CharT* bytes, std::index_sequence<I...>) {
+    return tupleFromBytes< std::tuple_element_t<I, Tuple>... >(bytes);
 }
 
 
