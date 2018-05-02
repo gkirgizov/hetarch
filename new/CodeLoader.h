@@ -19,8 +19,6 @@
 namespace hetarch {
 
 class CodeLoader {
-    using content_t = llvm::StringRef;
-
 public:
 
     /*    template<typename AddrT, typename Td>
@@ -196,6 +194,19 @@ public:
         };
     }
 
+    template<typename AddrT, bool is_const, bool is_volatile, typename ...Tds>
+    inline static auto getResident(const dsl::xStruct<is_const, is_volatile, Tds...>& g,
+                                   conn::IConnection<AddrT> &conn,
+                                   mem::MemManager<AddrT> &memManager,
+                                   mem::MemRegion<AddrT> memRegion,
+                                   bool unloadable = true)
+    {
+        return dsl::xResidentStruct<AddrT, false, is_volatile, Tds...>{
+                conn, memManager, memRegion, unloadable,
+                g.initial_val(), g.name()
+        };
+    }
+
     template<typename AddrT, typename TdRet, typename... TdArgs>
     static auto load(conn::IConnection<AddrT>& conn,
                      mem::MemManager<AddrT>& memManager,
@@ -294,7 +305,9 @@ public:
                               const ObjCode<RetT, Args...>& objCode);
 
 
+    using content_t = llvm::StringRef;
 private:
+
     template<typename RetT, typename... Args>
     static content_t getContents(const ObjCode<RetT, Args...> &objCode) {
         // strip ObjCode from all extra things and

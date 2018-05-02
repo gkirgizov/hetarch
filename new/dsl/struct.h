@@ -143,5 +143,41 @@ template<typename ...Tds> using cStruct  = xStruct<true,  false, Tds...>;
 template<typename ...Tds> using vStruct  = xStruct<false, true,  Tds...>;
 template<typename ...Tds> using cvStruct = xStruct<true,  true,  Tds...>;
 
+
+template< typename AddrT
+        , bool is_const, bool is_volatile, typename ...Tds >
+struct xResidentStruct
+        : StructBase< xResidentStruct< AddrT, is_const, is_volatile, Tds... >
+                                            , is_const, is_volatile, Tds... >
+        , ResidentGlobal< AddrT
+                        , struct_impl_t<Tds...>
+                        , is_const >
+{
+    using type = struct_impl_t<Tds...>;
+    using this_t = xResidentStruct<AddrT, is_const, is_volatile, Tds...>;
+    using Value<this_t, type, is_const>::operator=;
+    constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
+    constexpr xResidentStruct(this_t&&) = default;
+    constexpr xResidentStruct(const this_t&) = default;
+
+//    using StructBase< this_t, is_const, is_volatile, Tds... >::StructBase;
+    constexpr xResidentStruct(
+            conn::IConnection<AddrT>& conn,
+            mem::MemManager<AddrT>& memMgr, mem::MemRegion<AddrT> memRegion, bool unloadable,
+            const type& value = type{},
+            const std::string_view &name = ""
+    )
+            : ResidentGlobal<AddrT, type, is_const>{conn, memMgr, memRegion, unloadable}
+            , StructBase<this_t, is_const, is_volatile, Tds...>{value, name} // note: always initialised
+    {}
+
+    IR_TRANSLATABLE
+};
+
+template<typename AddrT, typename ...Tds> using ResidentStruct   = xResidentStruct<AddrT, false, false, Tds...>;
+template<typename AddrT, typename ...Tds> using cResidentStruct  = xResidentStruct<AddrT, true,  false, Tds...>;
+template<typename AddrT, typename ...Tds> using vResidentStruct  = xResidentStruct<AddrT, false, true,  Tds...>;
+template<typename AddrT, typename ...Tds> using cvResidentStruct = xResidentStruct<AddrT, true,  true,  Tds...>;
+
 }
 }

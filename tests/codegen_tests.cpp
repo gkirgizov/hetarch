@@ -216,6 +216,14 @@ std::string to_string(const std::array<T, N>& x) {
     return s;
 }
 
+template<typename ...Ts>
+std::string to_string(const std::tuple<Ts...>& x) {
+    return std::apply([&](const auto& ...item){
+        std::string s = ( "{"s + ... + (utils::to_string(item) + ", ") );
+        return s.replace(s.length() - 2, 2, "}");
+    }, x);
+}
+
 }
 }
 
@@ -371,11 +379,17 @@ TEST_F(CodeLoaderTest, loadGlobal) {
         EXPECT_TRUE((loaded == orig) || !g.x.initialised());
     };
 
-    load_tester( Global{Var<int16_t>{42}} );
-    load_tester( Global{Var<int64_t>{53, "g1"}} );
-    load_tester( Global{Var<float>{3.1415, ""}} );
-    load_tester( Global{Var<double>{69e-69, "gd2"}} );
-    load_tester( Global{Array<Var<int>, 3>{ {1, 2, 3} }} );
+    load_tester(Global{ Var<int16_t>{42} });
+    load_tester(Global{ Var<int64_t>{53, "g1"} });
+    load_tester(Global{ Var<float>{3.1415, ""} });
+    load_tester(Global{ Var<double>{69e-69, "gd2"} });
+    load_tester(Global{ Array<Var<int>, 3>{ {1, 2, 3} } });
+    load_tester(Global{ Struct<Var<short>, Var<float>, Var<long>>{ {-42, 2.74, 33333} } });
+    // nested types
+    using ArrayNestedT = Array<Array<Var<int>, 3>, 2>;
+    load_tester(Global{ ArrayNestedT{{ {{10, 20, 30}, {11, 22, 33}} }} });
+    using StructComplexT = Struct< Var<bool>, Struct< Var<int>, Var<double> >, Array< Var<int>, 3 > >;
+    load_tester(Global{ StructComplexT{ {false, {42, 69.69}, {-11, -22, -33}} } });
 }
 
 TEST_F(CodeLoaderTest, loadAndCall) {
