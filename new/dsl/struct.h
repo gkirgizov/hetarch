@@ -41,29 +41,6 @@ struct EStructAccess : get_base_t<
 };
 
 
-
-
-
-template<typename Td, std::size_t N, char name_[N]>
-struct FieldImpl {
-    using type = f_t<Td>;
-    using dsl_type = Td;
-    static constexpr const std::string_view id{name_};
-};
-
-//template<typename Td, std::size_t N>
-//constexpr auto Field(const char (&id)[N]) {
-//    return FieldImpl<Td, N, id>{};
-//};
-//constexpr auto field = Field<unsigned>("lala1");
-
-template< bool is_const, bool is_volatile
-        , template<typename Td, int N, char name[N]> typename ...Fields>
-struct StructX {};
-
-
-
-
 template<typename TdStruct, bool is_const, bool is_volatile, typename ...Tds>
 struct StructBase : Value< TdStruct
                          , struct_impl_t<Tds...>
