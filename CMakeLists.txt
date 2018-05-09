@@ -27,16 +27,27 @@ if(MY_HOST MATCHES ARM)
     set(CMAKE_SYSTEM_PROCESSOR arm)
     set(CMAKE_SYSTEM_NAME Linux)
 
+    set(BIN_DIR /usr/bin)
     set(GCC_PREFIX ${TARGET_TRIPLE}-)
-    set(CMAKE_C_COMPILER ${GCC_PREFIX}gcc)
-    set(CMAKE_CXX_COMPILER ${GCC_PREFIX}g++)
-#    set(CMAKE_ASM_COMPILER ${GCC_PREFIX}as)
+    set(CMAKE_C_COMPILER ${BIN_DIR}/${GCC_PREFIX}gcc)
+    set(CMAKE_CXX_COMPILER ${BIN_DIR}/${GCC_PREFIX}g++)
+#    set(CMAKE_ASM_COMPILER ${BIN_DIR}/${GCC_PREFIX}as)
 
     # Compiler target options
     set(SYSROOT /usr/${TARGET_TRIPLE})
     set(GCC_FLAGS "-march=armv7-a -mfloat-abi=hard -mfpu=neon-vfpv4 --sysroot=${SYSROOT}")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${GCC_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GCC_FLAGS}")
+
+    # asio & boost
+    include_directories(libs/include)
+    # build/link gtest
+    if(NOT CMAKE_BUILD_TYPE MATCHES Release)
+        # todo: move to tests/CMakeLists.txt?
+        set(GTEST_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../googletest/googletest)
+        set(GTEST_BIN ${CMAKE_CURRENT_SOURCE_DIR}/../googletest/googletest/googletest-build)
+        add_subdirectory(${GTEST_SRC} ${GTEST_BIN} EXCLUDE_FROM_ALL)
+    endif()
 else()
 endif()
 
@@ -64,10 +75,15 @@ else()
     #set(TARGET_TRIPLE x86_64-unknown-linux-gnu)
 endif()
 
+
+## Adjust for your use case -- provide LLVM for chosen architecture
+
 set(BASE_DIR /home/hades/projects)
 #set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
 #find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
+# By default TARGET_TRIPLE is an empty string
 set(LLVM_INSTALL_DIR ${BASE_DIR}/llvms/llvm_50/install_dir_${TARGET_TRIPLE}_${CMAKE_BUILD_TYPE})
+
 
 set(LLVM_DIR ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
 find_package(LLVM 5.0 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
@@ -92,14 +108,15 @@ add_definitions(${LLVM_DEFINITIONS})
 
 ### END LLVM CONFIG ###
 
-# todo: what is it for?
+# todo: what is it for? it's from old system.
 execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE_DIR}/examples/memmap.def "${MY_ADDR_BITS}"
         RESULT_VARIABLE cmd_result)
 #message(STATUS ${CMAKE_SOURCE_DIR}/compileMemMapDef.sh " " ${cmd_result})
 
 find_package(Threads)
 
-# Set some compiler flags & change linker
+
+## Set some compiler flags & change linker
 
 message(STATUS "using compiler: ${CMAKE_CXX_COMPILER_ID}")
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -114,10 +131,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive ${LD_OPT}")
 #set(BASE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive -fuse-ld=${MY_LD}")
 #set(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} -fno-rtti")
 
-#llvm_map_components_to_libnames(llvm_libs1 support core
-#        irreader option scalaropts target mc ${MY_LLVM_COMPONENTS}
-#        transformutils)
 
+## Old targets
 
 include_directories(include)
 

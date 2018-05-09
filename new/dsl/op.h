@@ -49,8 +49,8 @@ struct EBinPtrOp : get_base_t< TdPtr, EBinPtrOp<Op, TdPtr, Td> >
     using this_t = EBinPtrOp<Op, TdPtr, Td>;
     using Value<this_t, type, std::remove_reference_t<TdPtr>::const_q>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
-    constexpr EBinPtrOp(this_t&&) = default;
-    constexpr EBinPtrOp(const this_t&) = default;
+//    constexpr EBinPtrOp(this_t&&) = default;
+//    constexpr EBinPtrOp(const this_t&) = default;
 
     const TdPtr ptr;
     const Td operand;

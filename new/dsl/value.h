@@ -25,8 +25,8 @@ struct EAssign : get_base_t< TdLhs, EAssign<TdLhs, TdRhs> > {
     using this_t = EAssign<TdLhs, TdRhs>;
     using Value<this_t, type, TdLhs::const_q>::operator=;
     constexpr auto operator=(const this_t& rhs) const { return this->assign(rhs); };
-    constexpr EAssign(this_t&&) = default;
-    constexpr EAssign(const this_t&) = default;
+//    constexpr EAssign(this_t&&) = default;
+//    constexpr EAssign(const this_t&) = default;
 
     const TdLhs lhs;
     const TdRhs rhs;

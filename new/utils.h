@@ -49,6 +49,11 @@ inline constexpr auto make_bsv(const CharT* s) noexcept {
     return std::basic_string_view{s, ce_char_trait<CharT>::length(s)};
 }
 
+//namespace {
+//using my_string_view = std::basic_string_view<char, ce_char_trait<char>>;
+//}
+
+
 //using make_sv = make_bsv<char>;
 //inline constexpr auto make_sv(const char* s) noexcept {
 //    return std::string_view{s, ce_char_trait::length(s)};
@@ -152,11 +157,15 @@ constexpr std::string_view type_name() {
     return string_view(p.data() + 50, p.size() - 50 - 1); // for clang 5, supposedly?
 //    return string_view(p.data() + 34, p.size() - 34 - 1); // original
 #elif defined(__GNUC__)
-    string_view p = __PRETTY_FUNCTION__;
+//    string_view p = __PRETTY_FUNCTION__;
+    // workaround when std::char_traits isn't constexpr!
+    string_view p = make_bsv( __PRETTY_FUNCTION__ );
 #  if __cplusplus < 201402
     return string_view(p.data() + 36, p.size() - 36 - 1);
 #  else
-    return string_view(p.data() + 65, p.find(';', 65) - 65);
+//    return string_view(p.data() + 65, p.find(';', 65) - 65);
+    // manual length calculation for case when string_view::find is not constexpr (e.g. gcc 7.2.0?)
+    return string_view(p.data() + 65, p.size() - 65 - 50);
 //    return string_view(p.data() + 49, p.find(';', 49) - 49); // original
 #  endif
 #elif defined(_MSC_VER)
