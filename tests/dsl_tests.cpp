@@ -437,21 +437,6 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
         return tmp = *ptr &= ~(*++ptr ^ Lit(1 << 8));
     };
 
-    auto dsl_metagen = [](bool need_complex_logic) {
-        return [=](auto x, auto y) {
-            if (need_complex_logic) {
-                return While(x != Lit(0), (
-                                 x = x - Lit(1),
-                                 y += x
-                                 // ...
-                             )
-                );
-            } else {
-                return Lit(42);
-            }
-        };
-    };
-
     // instantiate some functions in a usual way
     auto dsl_id = make_dsl_fun< Lit<int> >(id_generator);
     PR_CERR_VAL_TY(dsl_id);
@@ -469,7 +454,8 @@ TEST_F(GenericsTest, genericDSLFunctions1) {
     };
 
     // specialise generic caller for specific arguments (and correct number of arguments)
-    Function call_max = make_dsl_fun<Var<int>, Var<int>>(get_generic_caller(generic_dsl_max), "call_max");
+//    Function call_max = make_dsl_fun<Var<int>, Var<int>>(get_generic_caller(generic_dsl_max), "call_max"); // fails!
+    Function call_max = make_dsl_fun<Var<int>, Var<int>>(get_generic_caller(generic_dsl_max));
 
     std::cerr << std::endl << std::endl;
     EXPECT_TRUE(translate_verify(irt, dsl_id));
