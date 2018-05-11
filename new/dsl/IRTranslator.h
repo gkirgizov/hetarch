@@ -29,6 +29,7 @@
 #include "array.h"
 #include "fun.h"
 #include "ResidentObjCode.h"
+#include "logging.h"
 
 
 namespace hetarch {
@@ -172,6 +173,29 @@ public: // Values
     template<typename T>
     void accept(const Lit<T> &var) {
         push_val(llvm_map.get_const(var.val));
+    }
+    // todo: Converts string literal to char ptr
+    void accept(const StrLit &str) {
+        auto char_array = llvm::ConstantDataArray::getString(context, str.c_str, true);
+
+        llvm::GlobalVariable* gvar_array__str = new llvm::GlobalVariable(
+                *cur_module, // Module
+                char_array->getType(), // Type
+                true, //isConstant
+                llvm::GlobalValue::PrivateLinkage, // Linkage
+                char_array, // Initializer
+                ".str" // Name
+        );
+        gvar_array__str->setAlignment(1);
+
+        auto t = llvm_map.get_type<int>();
+        auto idx = llvm::ConstantInt::get(t, 0);
+        auto char_ptr = llvm::ConstantExpr::getInBoundsGetElementPtr(
+                char_array->getType()->getScalarType(),
+                gvar_array__str,
+                llvm::ArrayRef<llvm::Constant*>{{idx, idx}}
+        );
+        push_val(char_ptr);
     }
 
 
@@ -533,7 +557,7 @@ public:
 
     template<typename TdCallable, typename... ArgExprs>
     void accept(const ECall<TdCallable, ArgExprs...> &e
-            , std::enable_if_t< !is_dsl_loaded_callable_v<TdCallable>, std::false_type> = std::false_type{}) {
+            , std::enable_if_t< !is_resident_v< remove_cvref_t<TdCallable> >, std::false_type> = std::false_type{}) {
         // If dsl func is not defined (i.e. not translated)
         if (defined_funcs.find(&e.callee) == std::end(defined_funcs)) {
             e.callee.toIR(*this);
@@ -550,7 +574,7 @@ public:
 
     template<typename TdCallable, typename... ArgExprs>
     void accept(const ECall<TdCallable, ArgExprs...>& e
-        , std::enable_if_t< is_dsl_loaded_callable_v<TdCallable>, std::true_type> = std::true_type{}) {
+            , std::enable_if_t< is_resident_v< remove_cvref_t<TdCallable> >, std::true_type> = std::true_type{}) {
         using fun_t = std::remove_reference_t<TdCallable>;
         using ret_t = typename fun_t::ret_t;
         using args_t = typename fun_t::args_t;

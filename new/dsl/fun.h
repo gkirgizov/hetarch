@@ -20,11 +20,14 @@ template<typename TdCallable, typename... ArgExprs>
 struct ECall : Expr<typename std::remove_reference_t<TdCallable>::ret_t> {
     using fun_t = std::remove_reference_t<TdCallable>;
 
-    const TdCallable& callee;
+//    const TdCallable& callee;
+    TdCallable callee;
     const std::tuple<ArgExprs...> args;
 
-    explicit constexpr ECall(const TdCallable& callee, ArgExprs... args)
-            : callee{callee}
+//    explicit constexpr ECall(const TdCallable& callee, ArgExprs... args)
+    explicit constexpr ECall(TdCallable&& callee, ArgExprs... args)
+//            : callee{callee}
+            : callee{std::forward<TdCallable>(callee)}
             , args{args...}
     {}
 
@@ -70,10 +73,10 @@ struct Callable : CallableBase {
         static_assert(is_ev_v<ArgExprs...>, "Expected DSL types for DSL function call!");
         static_assert(validateArgs<f_t<ArgExprs>...>(), "Invalid argument types for function call!");
 
-        return ECall(
+        return ECall<const TdCallable&, ArgExprs...>{
                 static_cast<const TdCallable&>(*this),
                 args...
-        );
+        };
     }
     template<typename... ArgExprs>
     inline constexpr auto operator()(ArgExprs... args) const { return this->call(args...); }

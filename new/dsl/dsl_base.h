@@ -49,7 +49,7 @@ struct ValueBase : DSLBase {
 struct CallableBase : DSLBase {
     CallableBase() = default;
 //    CallableBase(const CallableBase &) = delete;
-    CallableBase(CallableBase &&) = default;
+//    CallableBase(CallableBase &&) = default;
 
     virtual ~CallableBase() = default; // it's needed
 };
@@ -69,6 +69,14 @@ struct Lit : Expr<T> {
     static_assert(std::is_scalar_v<T>, "This type can't be translated to DSL type system!");
     const T val;
     constexpr Lit(T val) : val{val} {}
+    IR_TRANSLATABLE
+};
+
+
+// todo: enforce only literals? enforce that it is c_str ?
+struct StrLit : Expr<char*> {
+    const char* c_str;
+    constexpr StrLit(const char* c_str) : c_str{c_str} {}
     IR_TRANSLATABLE
 };
 

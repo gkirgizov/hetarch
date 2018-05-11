@@ -87,11 +87,17 @@ const auto& get_or_make_dsl_fun(DSLGen &&dsl_gen, const std::string &name = "dsl
 template<typename DSLGen>
 auto make_generic_dsl_fun(DSLGen &&dsl_gen, const std::string &name = "dsl_generic") {
     // Return generic lambda which returns ECall to Function instantiated in-place
-    return [&](auto&&... args){
-        return ECall{
-                get_or_make_dsl_fun<decltype(args)...>(dsl_gen, name),
-                std::forward<decltype(args)>(args)...
+    return [&](auto... args){
+        const auto& fun_ref = get_or_make_dsl_fun<decltype(args)...>(dsl_gen, name);
+        return ECall<decltype(fun_ref), decltype(args)...>{
+                fun_ref,
+                args...
         };
+
+//        return ECall{
+//                get_or_make_dsl_fun<decltype(args)...>(dsl_gen, name),
+//                args...
+//        };
     };
 }
 

@@ -241,7 +241,7 @@ add_library(temp_target
         new/conn/SerialConnImpl.h
         new/conn/ConnImplBase.h
         new/dsl/cast.h
-        new/dsl/to_dsl_trait.h new/Pipeline.h new/conn/PosixConn.h new/util_type_traits.h)
+        new/dsl/to_dsl_trait.h new/Pipeline.h new/conn/PosixConn.h new/util_type_traits.h new/dsl/logging.h)
 
 
 add_subdirectory(examples)

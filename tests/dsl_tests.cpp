@@ -5,6 +5,7 @@
 #include "../new/dsl.h"
 #include "../new/dsl/IRTranslator.h"
 //#include "../new/dsl/switch.h"
+#include "../new/dsl/logging.h"
 
 #include <string_view>
 #include "../new/utils.h"
@@ -526,3 +527,19 @@ TEST_F(GenericsTest, genericDSLFunctions2) {
 
     EXPECT_TRUE(translate_verify(irt, max4));
 }
+
+
+TEST_F(IRTranslatorTest, compileDSLAuxFuns) {
+    auto log = make_log_fun(42424242); // call addr of the fun
+
+    Function call_log(
+            "call_log",
+            MakeFunArgs(tmp),
+//            ( tmp, Unit )
+            ( log(StrLit{"let's try log! %i"}, tmp), Unit )
+    );
+
+    EXPECT_TRUE(translate_verify(irt, call_log));
+}
+
+

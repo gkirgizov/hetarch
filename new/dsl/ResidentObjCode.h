@@ -100,15 +100,15 @@ private:
 };
 
 
-template<typename AddrT, typename TdRet, typename... ArgExprs>
-using ECallLoaded = ECall<ResidentObjCode<AddrT, TdRet, param_for_arg_t<ArgExprs>...>, ArgExprs...>;
+//template<typename AddrT, typename TdRet, typename... ArgExprs>
+//using ECallLoaded = ECall<ResidentObjCode<AddrT, TdRet, param_for_arg_t<ArgExprs>...>, ArgExprs...>;
 
 template<typename>
-struct is_dsl_loaded_callable : std::false_type {};
+struct is_resident: std::false_type {};
 template<typename AddrT, typename TdRet, typename... TdArgs>
-struct is_dsl_loaded_callable<ResidentObjCode<AddrT, TdRet, TdArgs...>> : std::true_type {};
+struct is_resident< ResidentObjCode<AddrT, TdRet, TdArgs...> > : std::true_type {};
 template<typename T>
-inline constexpr bool is_dsl_loaded_callable_v = is_dsl_loaded_callable<T>::value;
+inline constexpr bool is_resident_v = is_resident<T>::value;
 
 
 }
