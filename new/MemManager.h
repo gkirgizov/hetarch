@@ -135,7 +135,7 @@ namespace mem_mgr_impl {
 
 struct cmp_size_less {
     template<typename AddrT>
-    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
+    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) const {
         // small to big: best fit
         return a.size < b.size;
     }
@@ -143,7 +143,7 @@ struct cmp_size_less {
 
 struct cmp_size_more {
     template<typename AddrT>
-    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
+    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) const {
         // big to small: worst fit
         return a.size > b.size;
     }
@@ -151,7 +151,7 @@ struct cmp_size_more {
 
 struct cmp_start_less {
     template<typename AddrT>
-    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) {
+    bool operator()(const MemRegion<AddrT> &a, const MemRegion<AddrT> &b) const {
         // natural ordering
         return a.start < b.start;
     }
