@@ -37,7 +37,7 @@ add_executable(codegen_tests main.cpp
         mocks.h
         mem_tests.cpp
         codegen_tests.cpp
-        )
+        ../new/conn/ht_proto.c)
 target_link_libraries(codegen_tests gtest ${llvm_libs_base} ${llvm_libs_more})
 target_compile_options(codegen_tests PUBLIC "-fno-rtti")
 #set(STM32F4_INCLUDE_DIRS

@@ -6,10 +6,10 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "../addr_typedef.h"
 
 
-//typedef uint16_t addr_t; // temp
 typedef uint8_t action_int_t;
 
 typedef enum {
@@ -23,9 +23,19 @@ typedef enum {
     ActionAddrMmap = 21
 } action_t;
 
+
+// bytes are supported on any platform (as opposed to single uint32_t)
+typedef uint8_t magic_t[4];
+static const magic_t magic = { 0xDA, 0xDA, 0xDA, 0xDA };
+
 typedef struct {
+    magic_t magic;
     addr_t size;
 } msg_header_t;
+
+msg_header_t get_msg_header(addr_t size);
+bool check_magic(const msg_header_t* header);
+
 
 typedef enum {
     ErrRead = -1,

@@ -92,6 +92,8 @@ std::vector<uint8_t> readBuffer(asio::ip::tcp::socket &socket) {
             assert(len >= sizeof(msg_header_t));
 
             auto cmd_header = vecRead<msg_header_t>(buf);
+            if (!check_magic(&cmd_header)) break; // got some noise..
+
             beg += sizeof(cmd_header);
             len -= sizeof(cmd_header);
             expected = cmd_header.size;
@@ -116,7 +118,7 @@ std::vector<uint8_t> readBuffer(asio::ip::tcp::socket &socket) {
 std::size_t writeBuffer(asio::ip::tcp::socket &socket, const uint8_t* buf, std::size_t size) {
     std::vector<uint8_t> dataToSend;
 
-    msg_header_t cmd_header = { static_cast<addr_t>(size) };
+    msg_header_t cmd_header = get_msg_header(static_cast<addr_t>(size));
     detail::vecAppend(dataToSend, cmd_header);
     dataToSend.insert(dataToSend.end(), buf, buf + size);
 

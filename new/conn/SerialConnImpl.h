@@ -66,8 +66,10 @@ public:
         passert(header_read >= 0, "msg header read failed");
         assert(header_read == sizeof(msg_header_t));
         msg_header_t header = *reinterpret_cast<msg_header_t*>(msg_header_buf);
+        if (!check_magic(&header)) { // got some noise
+            return {}; // return empty vector
+        }
 
-//        uint8_t out_buf[header.size];
         uint8_t out_buf[512];
         auto n_read = read(fd, out_buf, header.size);
         passert(n_read > 0, "data read failed");
@@ -79,7 +81,7 @@ public:
 
 private:
     inline AddrT sendImpl(const uint8_t* buf, AddrT size) override {
-        msg_header_t cmd_header = { size };
+        msg_header_t cmd_header = get_msg_header(size);
         auto header_written = write(fd, reinterpret_cast<const uint8_t*>(&cmd_header), sizeof(cmd_header));
         passert(header_written >= 0, "msg header write failed");
         assert(header_written == sizeof(cmd_header));
