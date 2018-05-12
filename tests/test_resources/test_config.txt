@@ -1,16 +1,16 @@
+thumbv7em-none-eabi
+cortex-m4
+fpv4-sp-d16
+hard
+none
+/dev/ttyACM0
+
 x86_64-unknown-linux-gnu
 generic
 fpu_none
 hard
 localhost
 13334
-
-armv7em-none-eabi
-cortex-m4
-fpv4-sp-d16
-hard
-none
-/dev/ttyACM0
 
 armv7a-unknown-linux-gnu
 generic

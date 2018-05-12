@@ -67,8 +67,10 @@ CodeGen::FloatABI determine_float_abi(std::string spec) {
 }
 
 bool is_thumb(const std::string& triple) {
-    return (triple.find("arm") != std::string::npos ||
-            triple.find("thumb") != std::string::npos) ;
+    return (
+//            triple.find("arm") != std::string::npos ||
+            triple.find("thumb") != std::string::npos
+    );
 }
 
 cg_config read_config() {
