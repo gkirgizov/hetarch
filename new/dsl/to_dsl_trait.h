@@ -44,6 +44,8 @@ template< typename T > struct to_dsl<T, typename std::enable_if_t<
 };
  */
 
+// todo: make specializations for const types?
+
 template<typename T>
 struct to_dsl< T* > {
     using type = Ptr< to_dsl_t<T> >;
@@ -61,6 +63,18 @@ struct to_dsl< std::tuple<Ts...> > {
 
 // Map arbitrary DSL type to DSL Value type
 template<typename TdExpr> using param_for_arg_t = typename to_dsl< f_t<TdExpr> >::type;
+
+
+// For more convenient type construction
+//  e.g. used in factory functions to allow write Struct<int, Array<float, 3>>
+//  instead of Struct<Var<int>, Array<Var<float>, 3>>
+////  doesn't work for nested types
+////  e.g. Struct<int, std::array<float, 3>> won't be mapped correctly to DSL type
+template<typename T>
+struct to_dsl_maybe {
+    using type = std::conditional_t< is_val_v<T>, T, to_dsl_t<T> >;
+};
+template<typename T> using to_dsl_maybe_t = typename to_dsl_maybe<T>::type;
 
 }
 }
