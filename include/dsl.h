@@ -1,11 +1,18 @@
-#ifndef HETARCH_DSL_H
-#define HETARCH_DSL_H 1
+#pragma once
 
-#include "dsl/base.h"
-#include "dsl/while.h"
-#include "dsl/for.h"
-#include "dsl/if.h"
-#include "dsl/switch.h"
-#include "dsl/logical.h"
-
-#endif
+#include "dsl/dsl_base.h"
+#include "dsl/to_dsl_trait.h"
+#include "dsl/dsl_meta.h"
+#include "dsl/cast.h"
+#include "dsl/op.h"
+#include "dsl/var.h"
+#include "dsl/ptr.h"
+#include "dsl/array.h"
+#include "dsl/struct.h"
+#include "dsl/fun.h"
+#include "dsl/ResidentObjCode.h"
+#include "dsl/sequence.h"
+#include "dsl/if_else.h"
+#include "dsl/loops.h"
+//#include "dsl/switch.h"
+#include "dsl/logging.h"

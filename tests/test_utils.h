@@ -10,7 +10,7 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Object/ObjectFile.h"
 
-#include "../new/supportingClasses.h"
+#include "supportingClasses.h"
 
 
 namespace hetarch {

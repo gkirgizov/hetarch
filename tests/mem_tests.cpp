@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 
-#include "../new/MemManager.h"
-#include "../new/MemResident.h"
+#include "MemManager.h"
+#include "MemResident.h"
 //
 #include "mocks.h"
 

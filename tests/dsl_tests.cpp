@@ -2,13 +2,11 @@
 
 #include <cstdint>
 
-#include "../new/dsl.h"
-#include "../new/dsl/IRTranslator.h"
-//#include "../new/dsl/switch.h"
-#include "../new/dsl/logging.h"
+#include "dsl.h"
+#include "dsl/IRTranslator.h"
 
 #include <string_view>
-#include "../new/utils.h"
+#include "utils.h"
 #include "test_utils.h"
 
 

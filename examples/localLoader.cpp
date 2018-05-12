@@ -10,9 +10,9 @@
 #include <asio.hpp>
 #include <cxxopts.hpp>
 
-#include "../new/conn/TCPConnImpl.h"
-#include "../new/conn/conn_utils.h"
-#include "../new/conn/ht_proto.h"
+#include "conn/TCPConnImpl.h"
+#include "conn/conn_utils.h"
+#include "conn/ht_proto.h"
 
 
 using namespace hetarch::conn;

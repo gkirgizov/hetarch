@@ -31,22 +31,13 @@ target_link_libraries(dsl_tests gtest ${llvm_libs_base})
 target_compile_options(dsl_tests PUBLIC "-fno-rtti")
 
 add_executable(codegen_tests main.cpp
-        ../new/conn/TCPConnImpl.cpp
-        ../new/CodeGen.cpp
         test_utils.cpp
         mocks.h
         mem_tests.cpp
         codegen_tests.cpp
-        ../new/conn/ht_proto.c)
-target_link_libraries(codegen_tests gtest ${llvm_libs_base} ${llvm_libs_more})
+        )
+target_link_libraries(codegen_tests hetarch gtest ${llvm_libs_base} ${llvm_libs_more})
 target_compile_options(codegen_tests PUBLIC "-fno-rtti")
-#set(STM32F4_INCLUDE_DIRS
-#        "${CMAKE_CURRENT_LIST_DIR}/stm32f4/Drivers/CMSIS/Include"
-#        "${CMAKE_CURRENT_LIST_DIR}/stm32f4/Drivers/CMSIS/Device/ST/STM32F4xx/Include"
-#        )
-#message(STATUS "stm32f4 include dirs: ${STM32F4_INCLUDE_DIRS}")
-#target_include_directories(codegen_tests PUBLIC ${STM32F4_INCLUDE_DIRS})
-#target_compile_options(codegen_tests PUBLIC "-Wno-register")
 
 
 add_executable(scratch main.cpp

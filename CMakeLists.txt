@@ -109,8 +109,8 @@ add_definitions(${LLVM_DEFINITIONS})
 ### END LLVM CONFIG ###
 
 # todo: what is it for? it's from old system.
-execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE_DIR}/examples/memmap.def "${MY_ADDR_BITS}"
-        RESULT_VARIABLE cmd_result)
+#execute_process(COMMAND "${CMAKE_SOURCE_DIR}/compileMemMapDef.sh" ${CMAKE_SOURCE_DIR}/examples/memmap.def "${MY_ADDR_BITS}"
+#        RESULT_VARIABLE cmd_result)
 #message(STATUS ${CMAKE_SOURCE_DIR}/compileMemMapDef.sh " " ${cmd_result})
 
 find_package(Threads)
@@ -132,116 +132,61 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive ${LD_OPT}")
 #set(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} -fno-rtti")
 
 
-## Old targets
-
 include_directories(include)
 
-add_library(hetarch SHARED)
+add_library(hetarch STATIC)
 target_sources(hetarch
         PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/base.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/for.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/if.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/logical.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/switch.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/while.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/lib/base.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/conn/ht_proto.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/conn/TCPConnImpl.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/CodeGen.cpp"
 
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/cgImpl.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/lib/cgImpl.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/lib/cg.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/dslutils.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/lib/IRDumper.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/types_map.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/dsl_base.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/to_dsl_trait.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/dsl_type_traits.h"
 
-#        "${CMAKE_CURRENT_SOURCE_DIR}/include/I2CConnection.h"
-#        "${CMAKE_CURRENT_SOURCE_DIR}/include/i2ccommands.h"
-#        "${CMAKE_CURRENT_SOURCE_DIR}/lib/tcpTestConn.cpp"
-#        "${CMAKE_CURRENT_SOURCE_DIR}/include/TCPTestConn.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/IRTranslator.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/ResidentObjCode.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/ResidentGlobal.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/dsl_meta.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/fun.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/sequence.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/if_else.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/loops.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/op.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/var.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/array.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/ptr.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/struct.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/value.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/cast.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl/logging.h"
 
         PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/cg.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/conn.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/IRDumper.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/MemMgr.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/conn/conn_utils.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/conn/ConnImplBase.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/conn/ht_proto.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/conn/IConnection.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/conn/PosixConn.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/conn/SerialConnImpl.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/conn/TCPConnImpl.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/addr_typedef.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/CodeGen.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/CodeLoader.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/Executor.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/MemManager.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/MemResident.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/Pipeline.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/supportingClasses.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/util_type_traits.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/utils.h"
 
         INTERFACE
         "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl.h"
         )
 target_link_libraries(hetarch ${llvm_libs_all})
 target_compile_options(hetarch PUBLIC "-fno-rtti")
-
-
-add_library(hetarchcg SHARED)
-target_sources(hetarchcg
-        PRIVATE
-            "${CMAKE_CURRENT_SOURCE_DIR}/include/cgImpl.h"
-            "${CMAKE_CURRENT_SOURCE_DIR}/lib/cgImpl.cpp"
-            "${CMAKE_CURRENT_SOURCE_DIR}/lib/cg.cpp"
-        PUBLIC
-            "${CMAKE_CURRENT_SOURCE_DIR}/include/cg.h"
-        )
-target_link_libraries(hetarchcg ${llvm_libs_all})
-target_compile_options(hetarchcg PUBLIC "-fno-rtti")
-
-
-add_library(hetarch_trik)
-target_sources(hetarch_trik
-        PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/lib/trikMspI2c.cpp"
-        PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/trikMspI2c.h"
-        )
-
-
-#add_library(hetarch_new_mem)
-#target_sources(hetarch_new_mem
-#        PRIVATE
-#        "${CMAKE_CURRENT_SOURCE_DIR}/new/MemoryManager.cpp"
-#        PUBLIC
-#        "${CMAKE_CURRENT_SOURCE_DIR}/new/MemoryManager.h"
-#        )
-#find_package(Boost REQUIRED)
-#target_link_libraries(hetarch_new_mem )
-#message(STATUS "Found Boost ${Boost_Version}")
-#message(STATUS "Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
-#target_include_directories(hetarch_new_mem PUBLIC new/ ${Boost_INCLUDE_DIRS})
-
-
-add_library(temp_target
-        tests/test_code/test_code.cpp
-        new/conn/IConnection.h
-        new/MemManager.h
-        new/MemResident.h
-        new/supportingClasses.h
-        new/CodeLoader.h
-        new/CodeGen.h
-        new/CodeGen.cpp
-        new/dsl/types_map.h
-        new/dsl/IRTranslator.h
-        new/utils.h
-        new/dsl/dsl_base.h
-        new/dsl/fun.h
-        new/dsl/ResidentObjCode.h
-        new/dsl/ResidentGlobal.h
-        new/dsl/sequence.h
-        new/dsl/if_else.h
-        new/dsl/loops.h
-        new/dsl/op.h
-        new/dsl/var.h
-        new/dsl/dsl_type_traits.h
-        new/dsl/array.h
-        new/dsl/ptr.h
-        new/dsl/dsl_meta.h
-        new/dsl/struct.h
-        new/dsl/value.h
-        new/Executor.h
-        new/addr_typedef.h
-        new/conn/TCPConnImpl.h
-        new/conn/TCPConnImpl.cpp
-        new/conn/SerialConnImpl.h
-        new/conn/ConnImplBase.h
-        new/dsl/cast.h
-        new/dsl/to_dsl_trait.h new/Pipeline.h new/conn/PosixConn.h new/util_type_traits.h new/dsl/logging.h new/conn/ht_proto.c)
 
 
 add_subdirectory(examples)

@@ -4,8 +4,8 @@
 
 #include <boost/format.hpp>
 
-#include "../new/conn/IConnection.h"
-#include "../new/MemManager.h"
+#include "conn/IConnection.h"
+#include "MemManager.h"
 
 
 namespace hetarch {
