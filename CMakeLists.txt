@@ -5,8 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
-### LLVM CONFIG ###
-
 if(${MY_TARGET} MATCHES X86)
     set(TARGET_BITWIDTH 64)
 elseif(${MY_TARGET} MATCHES ARM)
@@ -39,7 +37,7 @@ if(MY_HOST MATCHES ARM)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${GCC_FLAGS}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GCC_FLAGS}")
 
-    # asio & boost
+    # boost is required
     include_directories(libs/include)
     # build/link gtest
     if(NOT CMAKE_BUILD_TYPE MATCHES Release)
@@ -65,26 +63,19 @@ add_definitions(-DHETARCH_TARGET_ADDRT=uint${TARGET_BITWIDTH}_t ${MY_PLAFORM_SPE
 message(STATUS "Building for Host=${MY_HOST}; for Target=${MY_TARGET} (bitwidth: ${TARGET_BITWIDTH})")
 
 
-# Find LLVM
-
 if(CMAKE_BUILD_TYPE MATCHES Release)
 #    find_package(LLVM 5.0 REQUIRED)
 else()
     add_definitions(-DIS_DEBUG)
     set(CMAKE_BUILD_TYPE Debug)
-    #set(TARGET_TRIPLE x86_64-unknown-linux-gnu)
 endif()
 
 
 ## Adjust for your use case -- provide LLVM for chosen architecture
 
 set(BASE_DIR /home/hades/projects)
-#set(LLVM_DIR ${BASE_DIR}/llvm/${MY_LLVM_BUILD_DIR_NAME}/share/llvm/cmake)
-#find_package(LLVM 3.7 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
 # By default TARGET_TRIPLE is an empty string
 set(LLVM_INSTALL_DIR ${BASE_DIR}/llvms/llvm_50/install_dir_${TARGET_TRIPLE}_${CMAKE_BUILD_TYPE})
-
-
 set(LLVM_DIR ${LLVM_INSTALL_DIR}/lib/cmake/llvm)
 find_package(LLVM 5.0 REQUIRED PATHS ${LLVM_DIR} NO_DEFAULT_PATH CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -126,10 +117,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 endif()
 
 # need -fpermissive to allow casts which lose precision
-# need -fno-rtti because of LLVM compiled with -D LLVM_ENABLE_RTTI=OFF
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive ${LD_OPT}")
-#set(BASE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpermissive -fuse-ld=${MY_LD}")
-#set(CMAKE_CXX_FLAGS "${BASE_CXX_FLAGS} -fno-rtti")
 
 
 include_directories(include)
@@ -181,11 +169,10 @@ target_sources(hetarch
         "${CMAKE_CURRENT_SOURCE_DIR}/include/supportingClasses.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/util_type_traits.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/utils.h"
-
-        INTERFACE
         "${CMAKE_CURRENT_SOURCE_DIR}/include/dsl.h"
         )
 target_link_libraries(hetarch ${llvm_libs_all})
+# need -fno-rtti because of LLVM compiled with -D LLVM_ENABLE_RTTI=OFF
 target_compile_options(hetarch PUBLIC "-fno-rtti")
 
 

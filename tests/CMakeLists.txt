@@ -28,7 +28,6 @@ add_executable(dsl_tests main.cpp
         dsl_tests.cpp
         )
 target_link_libraries(dsl_tests gtest ${llvm_libs_base})
-target_compile_options(dsl_tests PUBLIC "-fno-rtti")
 
 add_executable(codegen_tests main.cpp
         test_utils.cpp
@@ -37,7 +36,6 @@ add_executable(codegen_tests main.cpp
         codegen_tests.cpp
         )
 target_link_libraries(codegen_tests hetarch gtest ${llvm_libs_base} ${llvm_libs_more})
-target_compile_options(codegen_tests PUBLIC "-fno-rtti")
 
 
 add_executable(scratch main.cpp
@@ -45,7 +43,6 @@ add_executable(scratch main.cpp
         scratch_tests.cpp
         )
 target_link_libraries(scratch gtest ${llvm_libs_base})
-target_compile_options(scratch PUBLIC "-fno-rtti")
 
 
 add_executable(dsl_examples examples/dsl_examples.cpp)
